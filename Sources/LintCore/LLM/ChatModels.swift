@@ -2,6 +2,7 @@ import Foundation
 
 public enum ProviderKind: String, Codable, CaseIterable, Sendable, Identifiable {
     case openai
+    case localLlama
     case openaiCompatible
     case anthropic
     case gemini
@@ -12,7 +13,8 @@ public enum ProviderKind: String, Codable, CaseIterable, Sendable, Identifiable 
     public var title: String {
         switch self {
         case .openai: "OpenAI"
-        case .openaiCompatible: "OpenAI 相容（本機 Qwen / Ollama / LM Studio）"
+        case .localLlama: "本機 llama.cpp（由 Lint 管理）"
+        case .openaiCompatible: "OpenAI 相容端點（Ollama / LM Studio / 自訂）"
         case .anthropic: "Anthropic"
         case .gemini: "Google Gemini"
         case .chatgptAccount: "ChatGPT（Plus／Pro 登入）"
@@ -25,7 +27,7 @@ public enum ProviderKind: String, Codable, CaseIterable, Sendable, Identifiable 
         switch self {
         case .openai:
             URL(string: "https://api.openai.com/v1")!
-        case .openaiCompatible:
+        case .localLlama, .openaiCompatible:
             URL(string: "http://127.0.0.1:8000/v1")!
         case .anthropic:
             URL(string: "https://api.anthropic.com")!
@@ -39,7 +41,7 @@ public enum ProviderKind: String, Codable, CaseIterable, Sendable, Identifiable 
     public var defaultModel: String {
         switch self {
         case .openai: "gpt-4o"
-        case .openaiCompatible: "Qwen/Qwen2.5-7B-Instruct-GGUF:q4_k_m"
+        case .localLlama, .openaiCompatible: "Qwen/Qwen2.5-7B-Instruct-GGUF:q4_k_m"
         case .anthropic: "claude-3-5-sonnet-latest"
         case .gemini: "gemini-2.0-flash"
         case .chatgptAccount: "gpt-5.6-luna"
@@ -48,7 +50,7 @@ public enum ProviderKind: String, Codable, CaseIterable, Sendable, Identifiable 
 
     public var requiresAPIKey: Bool {
         switch self {
-        case .openaiCompatible, .chatgptAccount:
+        case .localLlama, .openaiCompatible, .chatgptAccount:
             return false
         default:
             return true

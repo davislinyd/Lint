@@ -22,7 +22,7 @@ public struct LLMService: Sendable {
             throw LLMError.emptyAPIKey
         }
         switch config.kind {
-        case .openai, .openaiCompatible:
+        case .openai, .openaiCompatible, .localLlama:
             return OpenAICompatibleProvider(
                 id: config.kind,
                 baseURL: config.baseURL,

@@ -3,7 +3,6 @@ import SwiftUI
 private enum SettingsPane: String, CaseIterable, Identifiable {
     case general
     case model
-    case localServer
     case prompts
     case about
 
@@ -13,7 +12,6 @@ private enum SettingsPane: String, CaseIterable, Identifiable {
         switch self {
         case .general: "一般"
         case .model: "模型"
-        case .localServer: "本機服務"
         case .prompts: "提示詞"
         case .about: "關於"
         }
@@ -23,7 +21,6 @@ private enum SettingsPane: String, CaseIterable, Identifiable {
         switch self {
         case .general: "gearshape"
         case .model: "cpu"
-        case .localServer: "server.rack"
         case .prompts: "text.quote"
         case .about: "info.circle"
         }
@@ -75,7 +72,6 @@ struct SettingsView: View {
         switch selection {
         case .general: GeneralSettingsPane(app: app)
         case .model: ModelSettingsPane(app: app)
-        case .localServer: LocalServerSettingsPane(app: app)
         case .prompts: PromptSettingsPane(app: app)
         case .about: AboutSettingsPane()
         }

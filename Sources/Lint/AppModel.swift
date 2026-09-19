@@ -59,7 +59,7 @@ final class AppModel: NSObject, NSWindowDelegate {
 
     /// First launch / missing binary: offer Homebrew install (never silent).
     func promptInstallLlamaIfNeeded() async {
-        guard settings.localServerAutoStart else { return }
+        guard settings.wantsManagedLocalServer else { return }
         let state = LocalLlamaServerManager.detectBinary(preferred: settings.localServerBinaryPath)
         switch state {
         case .found(let path):

@@ -1,0 +1,15 @@
+.build/
+.swiftpm/
+dist/
+*.xcodeproj/xcuserdata/
+*.xcworkspace/xcuserdata/
+.DS_Store
+.env
+.env.local
+.ai/status.json
+
+.codesign/
+
+# Internal handoff notes (contain personal signing info)
+HANDOFF.md
+docs/DEVLOG.md

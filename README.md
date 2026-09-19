@@ -1,0 +1,121 @@
+# Lint
+
+[English](#english) | [繁體中文](#繁體中文)
+
+---
+
+## English
+
+A macOS menu-bar AI writing assistant. Press a global hotkey to capture the selected text, send it to an LLM, compare the suggestion in a floating panel, then replace or copy it.
+
+### Requirements
+
+- macOS 14+
+- Xcode / Swift 6 toolchain
+- An LLM backend: an OpenAI-compatible endpoint (default `http://127.0.0.1:8000/v1`, e.g. `llama-server`, Ollama, LM Studio), or OpenAI / Anthropic / Gemini
+
+### Run
+
+```sh
+# Optional: store the API key in Keychain (reads the gitignored .env.local)
+# .env.local content: LINT_API_KEY=...
+chmod +x Scripts/*.sh
+./Scripts/seed-keychain.sh
+./Scripts/run-dev.sh
+```
+
+A pencil icon appears in the menu bar.
+
+| Hotkey | Action |
+|--------|--------|
+| `⌥⌘K` | Compact suggestion bubble |
+| `⌥⌘L` | Full two-column panel |
+
+Hotkeys can be rebound in Settings.
+
+### Permissions
+
+System Settings → Privacy & Security → Accessibility → enable **Lint**.
+
+Without permission the app still works, but falls back to simulated ⌘C / ⌘V through the clipboard. Run the signed `dist/Lint.app`; a bare binary does not reliably show up in the Accessibility list. If the system treats a rebuilt app as new, grant the permission again. Use a stable code-signing identity (e.g. Apple Development) to avoid this.
+
+### Settings
+
+- Providers: OpenAI, OpenAI-compatible (Ollama / LM Studio / llama-server), Anthropic, Gemini
+- API keys are stored in Keychain (service `app.lint.assistant`)
+- Default endpoint: `http://127.0.0.1:8000/v1`
+- Ollama: `http://127.0.0.1:11434/v1`; LM Studio: `http://127.0.0.1:1234/v1`
+- Optional: manage a local `llama-server` (start / stop / restart) from Settings
+
+### Writing modes
+
+Proofreading and polishing, formal / concise / professional tone, translation, custom prompt.
+
+### Test
+
+```sh
+swift test
+```
+
+### License
+
+[MIT](./LICENSE)
+
+---
+
+## 繁體中文
+
+macOS 選單列 AI 寫作助手：全域快捷鍵擷取選取文字，送到 LLM，在浮動面板對比後覆蓋或複製。
+
+### 需求
+
+- macOS 14+
+- Xcode / Swift 6 工具鏈
+- LLM 後端：OpenAI 相容 API（預設 `http://127.0.0.1:8000/v1`，例如 `llama-server`、Ollama、LM Studio），或 OpenAI / Anthropic / Gemini
+
+### 啟動
+
+```sh
+# 可選：把 API Key 寫進 Keychain（讀取 gitignored 的 .env.local）
+# .env.local 內容：LINT_API_KEY=...
+chmod +x Scripts/*.sh
+./Scripts/seed-keychain.sh
+./Scripts/run-dev.sh
+```
+
+選單列會出現鉛筆圖示。
+
+| 快捷鍵 | 行為 |
+|--------|------|
+| `⌥⌘K` | 迷你建議浮窗 |
+| `⌥⌘L` | 雙欄全面板 |
+
+快捷鍵可在設定中重新綁定。
+
+### 權限
+
+系統設定 → 隱私權與安全性 → 輔助功能 → 勾選 **Lint**。
+
+未授權時仍可運作，但改走模擬 ⌘C／⌘V 的剪貼簿備援。必須執行簽名過的 `dist/Lint.app`，裸 binary 不會穩定出現在輔助功能列表。重新組包後若系統視為新 App，需再勾選一次；使用固定的程式碼簽署憑證（如 Apple Development）可避免。
+
+### 設定
+
+- Provider：OpenAI、OpenAI 相容（Ollama / LM Studio / llama-server）、Anthropic、Gemini
+- API Key 存在 Keychain（service `app.lint.assistant`）
+- 預設 Endpoint：`http://127.0.0.1:8000/v1`
+- Ollama：`http://127.0.0.1:11434/v1`；LM Studio：`http://127.0.0.1:1234/v1`
+- 可選：在設定中管理本機 `llama-server`（啟動／停止／重啟）
+
+### 寫作模式
+
+文法校對與潤飾、正式／簡潔／專業語氣、翻譯、自訂 Prompt。
+
+### 測試
+
+```sh
+swift test
+```
+
+### 授權
+
+[MIT](./LICENSE)

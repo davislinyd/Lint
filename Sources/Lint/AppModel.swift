@@ -147,12 +147,13 @@ final class AppModel: NSObject, NSWindowDelegate {
     func openSettings() {
         if settingsWindow == nil {
             let window = NSWindow(
-                contentRect: NSRect(x: 0, y: 0, width: 580, height: 520),
+                contentRect: NSRect(x: 0, y: 0, width: 760, height: 560),
                 styleMask: [.titled, .closable, .resizable],
                 backing: .buffered,
                 defer: false
             )
             window.title = "Lint 設定"
+            window.contentMinSize = NSSize(width: 680, height: 460)
             window.isReleasedWhenClosed = false
             window.contentView = NSHostingView(rootView: SettingsView(app: self))
             window.delegate = self

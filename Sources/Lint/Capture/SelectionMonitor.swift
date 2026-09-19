@@ -10,6 +10,7 @@ final class SelectionMonitor {
     private let capture: TextCaptureService
     private let onSuggest: (TextCaptureService.CaptureResult) -> Void
     private let onCleared: () -> Void
+    private let onTyping: () -> Void
     /// While true, ignore input changes (bubble is interacting).
     var isPaused = false
     private var loopTask: Task<Void, Never>?
@@ -29,12 +30,14 @@ final class SelectionMonitor {
         settings: SettingsStore,
         capture: TextCaptureService,
         onSuggest: @escaping (TextCaptureService.CaptureResult) -> Void,
-        onCleared: @escaping () -> Void = {}
+        onCleared: @escaping () -> Void = {},
+        onTyping: @escaping () -> Void = {}
     ) {
         self.settings = settings
         self.capture = capture
         self.onSuggest = onSuggest
         self.onCleared = onCleared
+        self.onTyping = onTyping
     }
 
     func start() {
@@ -141,6 +144,7 @@ final class SelectionMonitor {
             pendingText = trimmed
             pendingSince = now
             pendingResult = peeked
+            onTyping()
         }
     }
 

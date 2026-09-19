@@ -32,6 +32,9 @@ final class AppModel: NSObject, NSWindowDelegate {
                 // Only dismiss the small chip — never the suggestion bubble
                 // (clicking the bubble clears selection and would race Replace).
                 self?.panel.dismissChip()
+            },
+            onTyping: { [weak self] in
+                self?.panel.viewModel.warmUpIfIdle()
             }
         )
         self.selectionMonitor = monitor

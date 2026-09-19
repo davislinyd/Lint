@@ -87,7 +87,7 @@ final class LocalLlamaServerManager {
         }
 
         let port = settings.localServerPort
-        let hf = settings.localServerHFModel.trimmingCharacters(in: .whitespacesAndNewlines)
+        let hf = settings.model.trimmingCharacters(in: .whitespacesAndNewlines)
         var args = [
             "-hf", hf.isEmpty ? SettingsStore.defaultLocalHFModel : hf,
             "--host", "127.0.0.1",

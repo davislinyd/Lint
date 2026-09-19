@@ -17,7 +17,9 @@ final class SettingsStore {
         static let fastMode = "app.lint.fastMode"
         static let localServerAutoStart = "app.lint.localServer.autoStart"
         static let localServerBinaryPath = "app.lint.localServer.binaryPath"
+        /// Legacy: the `-hf` spec now lives in `model(.localLlama)`; only read by the migration.
         static let localServerHFModel = "app.lint.localServer.hfModel"
+        static let migratedLocalLlama = "app.lint.migratedLocalLlama"
         static let localServerPort = "app.lint.localServer.port"
         static let localServerExtraArgs = "app.lint.localServer.extraArgs"
         static let systemPromptOverrides = "app.lint.systemPromptOverrides"
@@ -66,15 +68,12 @@ final class SettingsStore {
     var fastMode: Bool {
         didSet { defaults.set(fastMode, forKey: Keys.fastMode) }
     }
-    /// When using OpenAI-compatible localhost, launch llama-server if nothing is listening.
+    /// With the local llama.cpp provider, launch llama-server if nothing is listening.
     var localServerAutoStart: Bool {
         didSet { defaults.set(localServerAutoStart, forKey: Keys.localServerAutoStart) }
     }
     var localServerBinaryPath: String {
         didSet { defaults.set(localServerBinaryPath, forKey: Keys.localServerBinaryPath) }
-    }
-    var localServerHFModel: String {
-        didSet { defaults.set(localServerHFModel, forKey: Keys.localServerHFModel) }
     }
     var localServerPort: Int {
         didSet { defaults.set(localServerPort, forKey: Keys.localServerPort) }
@@ -97,9 +96,13 @@ final class SettingsStore {
     init(keychain: KeychainStore, defaults: UserDefaults = .standard) {
         self.keychain = keychain
         self.defaults = defaults
-        var kind = ProviderKind(rawValue: defaults.string(forKey: Keys.provider) ?? "") ?? .openaiCompatible
+        if !defaults.bool(forKey: Keys.migratedLocalLlama) {
+            Self.migrateToLocalLlama(defaults)
+            defaults.set(true, forKey: Keys.migratedLocalLlama)
+        }
+        var kind = ProviderKind(rawValue: defaults.string(forKey: Keys.provider) ?? "") ?? .localLlama
         if !kind.isEnabled {
-            kind = .openaiCompatible
+            kind = .localLlama
         }
         providerKind = kind
         customPrompt = defaults.string(forKey: Keys.customPrompt) ?? ""
@@ -136,8 +139,6 @@ final class SettingsStore {
         }
         localServerBinaryPath =
             defaults.string(forKey: Keys.localServerBinaryPath) ?? Self.defaultLocalServerBinary
-        localServerHFModel =
-            defaults.string(forKey: Keys.localServerHFModel) ?? Self.defaultLocalHFModel
         if defaults.object(forKey: Keys.localServerPort) == nil {
             localServerPort = 8000
         } else {
@@ -155,6 +156,25 @@ final class SettingsStore {
             model = ProviderKind.chatgptAccount.defaultModel
         }
         hasStoredKey = false
+    }
+
+    /// Before `.localLlama` existed, "local" meant OpenAI-compatible pointing at our own llama-server port.
+    private static func migrateToLocalLlama(_ defaults: UserDefaults) {
+        let legacy = ProviderKind.openaiCompatible
+        guard (defaults.string(forKey: Keys.provider) ?? legacy.rawValue) == legacy.rawValue else { return }
+        let port = defaults.object(forKey: Keys.localServerPort) == nil
+            ? 8000 : defaults.integer(forKey: Keys.localServerPort)
+        let urlString = defaults.string(forKey: Keys.url(legacy)) ?? legacy.defaultBaseURL.absoluteString
+        guard let url = URL(string: urlString),
+              let host = url.host?.lowercased(),
+              host == "127.0.0.1" || host == "localhost",
+              (url.port ?? 80) == port
+        else { return }
+        defaults.set(ProviderKind.localLlama.rawValue, forKey: Keys.provider)
+        defaults.set(
+            defaults.string(forKey: Keys.localServerHFModel) ?? defaultLocalHFModel,
+            forKey: Keys.model(.localLlama)
+        )
     }
 
     func selectProvider(_ kind: ProviderKind) {
@@ -224,16 +244,17 @@ final class SettingsStore {
         systemPromptOverrides = copy
     }
 
-    /// OpenAI-compatible pointing at this Mac — eligible for managed llama-server.
+    /// Local llama.cpp provider — Lint launches and talks to its own llama-server.
     var wantsManagedLocalServer: Bool {
-        guard providerKind == .openaiCompatible, localServerAutoStart else { return false }
-        let host = baseURLString.lowercased()
-        return host.contains("127.0.0.1") || host.contains("localhost")
+        providerKind == .localLlama && localServerAutoStart
     }
 
     func runtimeConfig() throws -> LLMRuntimeConfig {
         try saveAPIKeyIfNeeded()
-        guard let url = URL(string: baseURLString.trimmingCharacters(in: .whitespacesAndNewlines)),
+        let urlString = providerKind == .localLlama
+            ? "http://127.0.0.1:\(localServerPort)/v1"
+            : baseURLString.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let url = URL(string: urlString),
               url.scheme != nil
         else {
             throw LLMError.invalidURL

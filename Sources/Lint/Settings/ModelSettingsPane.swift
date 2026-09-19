@@ -14,6 +14,9 @@ struct ModelSettingsPane: View {
     var body: some View {
         Form {
             providerSection
+            if app.settings.providerKind == .localLlama {
+                LocalServerSection(app: app)
+            }
             connectionSection
         }
         .formStyle(.grouped)
@@ -42,7 +45,9 @@ struct ModelSettingsPane: View {
                 }
             }
 
-            if usesChatGPTLogin {
+            if app.settings.providerKind == .localLlama {
+                localRows
+            } else if usesChatGPTLogin {
                 chatGPTRows
             } else {
                 endpointRows
@@ -67,6 +72,12 @@ struct ModelSettingsPane: View {
             }
         }
         .sectionNote()
+    }
+
+    @ViewBuilder
+    private var localRows: some View {
+        TextField("模型 (HuggingFace -hf)", text: Bindable(app.settings).model)
+        reasoningPicker
     }
 
     @ViewBuilder

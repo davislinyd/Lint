@@ -1,7 +1,8 @@
 import AppKit
 import SwiftUI
 
-struct LocalServerSettingsPane: View {
+/// Sections shown inside the model pane's Form when the local llama.cpp provider is selected.
+struct LocalServerSection: View {
     var app: AppModel
     @State private var serverStatus: LocalLlamaServerManager.Status = .stopped
     /// Shown instead of `serverStatus` while an action is in flight.
@@ -13,12 +14,11 @@ struct LocalServerSettingsPane: View {
     @State private var showAdvanced = false
 
     var body: some View {
-        Form {
+        Group {
             statusSection
             configSection
             maintenanceSection
         }
-        .formStyle(.grouped)
         .task {
             await refreshLocalServerStatus()
         }
@@ -103,7 +103,6 @@ struct LocalServerSettingsPane: View {
     private var configSection: some View {
         Section {
             TextField("llama-server 路徑", text: Bindable(app.settings).localServerBinaryPath)
-            TextField("HuggingFace 模型 (-hf)", text: Bindable(app.settings).localServerHFModel)
             TextField("埠", value: Bindable(app.settings).localServerPort, format: .number.grouping(.never))
             ExpandableRow(title: "進階：額外參數", isExpanded: $showAdvanced) {
                 CodeEditor(text: Bindable(app.settings).localServerExtraArgs)
@@ -153,7 +152,7 @@ struct LocalServerSettingsPane: View {
     }
 
     private func openModelFolder() {
-        let hf = app.settings.localServerHFModel.trimmingCharacters(in: .whitespacesAndNewlines)
+        let hf = app.settings.model.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let folder = LocalLlamaServerManager.modelFolder(
             hfModel: hf.isEmpty ? SettingsStore.defaultLocalHFModel : hf
         ) else {
@@ -196,10 +195,6 @@ struct LocalServerSettingsPane: View {
         serverMessage = "正在套用目前參數並重新啟動…"
         do {
             try await LocalLlamaServerManager.shared.restart(settings: app.settings)
-            app.settings.baseURLString = "http://127.0.0.1:\(app.settings.localServerPort)/v1"
-            if app.settings.providerKind != .openaiCompatible {
-                app.settings.selectProvider(.openaiCompatible)
-            }
             serverStatus = LocalLlamaServerManager.shared.status
             serverMessage = "已重新啟動，目前參數已生效"
         } catch {
@@ -244,11 +239,6 @@ struct LocalServerSettingsPane: View {
         busyLabel = "啟動中…"
         do {
             let launched = try await LocalLlamaServerManager.shared.start(settings: app.settings)
-            // Keep API endpoint aligned with the managed port.
-            app.settings.baseURLString = "http://127.0.0.1:\(app.settings.localServerPort)/v1"
-            if app.settings.providerKind != .openaiCompatible {
-                app.settings.selectProvider(.openaiCompatible)
-            }
             serverStatus = LocalLlamaServerManager.shared.status
             if launched {
                 serverMessage = "已用目前參數啟動本機 llama-server"

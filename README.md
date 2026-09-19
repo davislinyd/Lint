@@ -48,11 +48,11 @@ Without permission the app still works, but falls back to simulated ⌘C / ⌘V 
 
 ### Settings
 
-- Providers: OpenAI, OpenAI-compatible (Ollama / LM Studio / llama-server), Anthropic, Gemini
+- Providers: local llama.cpp (managed by Lint), OpenAI, OpenAI-compatible endpoint (Ollama / LM Studio / custom), Anthropic, Gemini
 - API keys are stored in Keychain (service `app.lint.assistant`)
 - Default endpoint: `http://127.0.0.1:8000/v1`
 - Ollama: `http://127.0.0.1:11434/v1`; LM Studio: `http://127.0.0.1:1234/v1`
-- Optional: manage a local `llama-server` (start / stop / restart) from Settings
+- Local llama.cpp: pick it as the source in Settings → Model to manage `llama-server` (start / stop / restart, model, port) on the same page
 
 ### Writing modes
 
@@ -114,11 +114,11 @@ chmod +x Scripts/*.sh
 
 ### 設定
 
-- Provider：OpenAI、OpenAI 相容（Ollama / LM Studio / llama-server）、Anthropic、Gemini
+- Provider：本機 llama.cpp（由 Lint 管理）、OpenAI、OpenAI 相容端點（Ollama / LM Studio / 自訂）、Anthropic、Gemini
 - API Key 存在 Keychain（service `app.lint.assistant`）
 - 預設 Endpoint：`http://127.0.0.1:8000/v1`
 - Ollama：`http://127.0.0.1:11434/v1`；LM Studio：`http://127.0.0.1:1234/v1`
-- 可選：在設定中管理本機 `llama-server`（啟動／停止／重啟）
+- 本機 llama.cpp：在「設定 → 模型」選擇該來源，即可在同頁管理 `llama-server`（啟動／停止／重啟、模型、埠）
 
 ### 寫作模式
 

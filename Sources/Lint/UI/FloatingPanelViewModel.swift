@@ -34,6 +34,9 @@ final class FloatingPanelViewModel {
     private var prefetchFinished = false
     private var prefetchError: String?
     private var prefetchAttachedToUI = false
+    /// zh-TW gloss of the finished prefetch, fetched in the background so the bubble opens complete.
+    private var prefetchTranslationTask: Task<Void, Never>?
+    private var prefetchTranslation: String?
     private(set) var isPrefetching = false
     private(set) var isPrefetchReady = false
     /// Called when prefetch state flips (chip label can refresh).
@@ -73,9 +76,43 @@ final class FloatingPanelViewModel {
         }
     }
 
+    private var prefetchSystemPrompt: String {
+        settings.effectiveSystemPrompt(for: settings.lastMode) + "\n回覆只要修正後的全文，不要解釋。"
+    }
+
+    private var lastModelActivity = Date.distantPast
+
+    /// The local model can be paged out while idle, making the next request take seconds
+    /// (seen 4–13 s). Touch it (same system prompt as prefetch, so its KV prefix is cached
+    /// too) as soon as typing starts, so the load overlaps with typing instead of the check.
+    func warmUpIfIdle() {
+        guard settings.wantsManagedLocalServer,
+              Date().timeIntervalSince(lastModelActivity) > 60 else { return }
+        lastModelActivity = Date()
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                try await self.ensureLocalServerIfNeeded()
+                let config = try self.settings.runtimeConfig()
+                let request = ChatRequest(
+                    model: config.model,
+                    systemPrompt: self.prefetchSystemPrompt,
+                    userText: "hi",
+                    maxTokens: 1,
+                    reasoningEffort: .low,
+                    fastMode: self.settings.fastMode
+                )
+                for try await _ in try self.llm.stream(config: config, request: request) {}
+            } catch {}
+        }
+    }
+
     func cancelPrefetch() {
         prefetchTask?.cancel()
         prefetchTask = nil
+        prefetchTranslationTask?.cancel()
+        prefetchTranslationTask = nil
+        prefetchTranslation = nil
         isPrefetching = false
         isPrefetchReady = false
         prefetchSourceText = nil
@@ -105,7 +142,13 @@ final class FloatingPanelViewModel {
                 isPrefetching = false
                 onPrefetchStateChange?()
                 if prefetchError == nil, !resultText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    scheduleTranslationOfResult()
+                    if let gloss = prefetchTranslation {
+                        cancelTranslation()
+                        translationText = gloss
+                    } else {
+                        prefetchTranslationTask?.cancel()
+                        scheduleTranslationOfResult()
+                    }
                 }
                 return
             }
@@ -233,11 +276,9 @@ final class FloatingPanelViewModel {
 
         do {
             let config = try settings.runtimeConfig()
-            let systemPrompt = settings.effectiveSystemPrompt(for: settings.lastMode)
-                + "\n回覆只要修正後的全文，不要解釋。"
             let request = ChatRequest(
                 model: config.model,
-                systemPrompt: systemPrompt,
+                systemPrompt: prefetchSystemPrompt,
                 userText: result.text,
                 reasoningEffort: .low,
                 fastMode: settings.fastMode
@@ -259,6 +300,7 @@ final class FloatingPanelViewModel {
             }
             if Task.isCancelled { return }
             prefetchFinished = true
+            lastModelActivity = Date()
             isPrefetching = false
             isPrefetchReady = prefetchError == nil && !prefetchBuffer.isEmpty
             if prefetchAttachedToUI {
@@ -268,6 +310,8 @@ final class FloatingPanelViewModel {
                 if errorMessage == nil {
                     scheduleTranslationOfResult()
                 }
+            } else if isPrefetchReady {
+                startPrefetchTranslation()
             }
             onPrefetchStateChange?()
         } catch is CancellationError {
@@ -353,6 +397,40 @@ final class FloatingPanelViewModel {
         translationTask = Task { await self.translateResult(source) }
     }
 
+    private static let translationSystemPrompt = """
+        你是翻譯。把使用者文字譯成流暢的台灣繁體中文。
+        只輸出譯文，不要引號、標籤或說明。
+        若原文已是繁體中文，原樣輸出即可。
+        保留專有名詞、產品名、程式碼與 URL。
+        """
+
+    /// Local model only — a cloud provider would pay for a second request per typing pause.
+    private func startPrefetchTranslation() {
+        guard settings.wantsManagedLocalServer else { return }
+        let source = prefetchBuffer.trimmingCharacters(in: .whitespacesAndNewlines)
+        prefetchTranslationTask = Task { [weak self] in
+            guard let self else { return }
+            do {
+                let config = try self.settings.runtimeConfig()
+                let request = ChatRequest(
+                    model: config.model,
+                    systemPrompt: Self.translationSystemPrompt,
+                    userText: source,
+                    maxTokens: 512,
+                    reasoningEffort: .low,
+                    fastMode: true
+                )
+                var out = ""
+                for try await event in try self.llm.stream(config: config, request: request) {
+                    if case .text(let token) = event { out += token }
+                }
+                if !Task.isCancelled {
+                    self.prefetchTranslation = out.trimmingCharacters(in: .whitespacesAndNewlines)
+                }
+            } catch {}
+        }
+    }
+
     private func translateResult(_ source: String) async {
         isTranslating = true
         translationText = ""
@@ -362,12 +440,7 @@ final class FloatingPanelViewModel {
             let config = try settings.runtimeConfig()
             let request = ChatRequest(
                 model: config.model,
-                systemPrompt: """
-                你是翻譯。把使用者文字譯成流暢的台灣繁體中文。
-                只輸出譯文，不要引號、標籤或說明。
-                若原文已是繁體中文，原樣輸出即可。
-                保留專有名詞、產品名、程式碼與 URL。
-                """,
+                systemPrompt: Self.translationSystemPrompt,
                 userText: source,
                 maxTokens: 512,
                 reasoningEffort: .low,

@@ -102,7 +102,7 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
         }
         // Clipboard / broader capture fallback — still mini bubble, not full panel.
         Task { @MainActor in
-            if let captured = await capture.capture() {
+            if let captured = await capture.capture(allowSelectAll: true) {
                 self.runAutoSuggest(captured)
                 return
             }

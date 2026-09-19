@@ -15,8 +15,39 @@ final class TextCaptureService {
     }
 
     private(set) var lastCapture: CaptureResult?
+    /// PIDs already asked to expose their web AX tree (attempted once, whatever the result).
+    private static var webAccessibilityRequested = Set<pid_t>()
 
-    func capture() async -> CaptureResult? {
+    /// Chromium / Electron apps (SeaTalk, ChatGPT, Slack, browsers, …) build their web AX tree only
+    /// after an assistive client asks: Electron listens for `AXManualAccessibility`, plain Chromium
+    /// for `AXEnhancedUserInterface`. Both calls may report an error yet still switch the tree on.
+    /// Native apps are left alone — `AXEnhancedUserInterface` changes their window behaviour.
+    private static func ensureWebAccessibility() {
+        guard let app = NSWorkspace.shared.frontmostApplication,
+              app.processIdentifier != ProcessInfo.processInfo.processIdentifier,
+              webAccessibilityRequested.insert(app.processIdentifier).inserted,
+              isChromiumBased(app) else { return }
+        let element = AXUIElementCreateApplication(app.processIdentifier)
+        for name in ["AXManualAccessibility", "AXEnhancedUserInterface"] {
+            let err = AXUIElementSetAttributeValue(element, name as CFString, kCFBooleanTrue)
+            log("\(name) pid=\(app.processIdentifier) err=\(err.rawValue)")
+        }
+    }
+
+    private static func isChromiumBased(_ app: NSRunningApplication) -> Bool {
+        guard let bundle = app.bundleURL else { return false }
+        if FileManager.default.fileExists(atPath: bundle.appendingPathComponent("Contents/Frameworks/Electron Framework.framework").path) {
+            return true
+        }
+        let info = NSDictionary(contentsOf: bundle.appendingPathComponent("Contents/Info.plist"))
+        if info?["ElectronAsarIntegrity"] != nil || info?["ChromiumBaseVersion"] != nil { return true }
+        return (info?["NSPrincipalClass"] as? String)?.contains("CrApplication") == true
+    }
+
+    /// `allowSelectAll` (⌥⌘K only): when nothing is selected and AX exposes no text, select the whole
+    /// field to read it. The full panel keeps its old behaviour of never touching the source app's selection.
+    func capture(allowSelectAll: Bool = false) async -> CaptureResult? {
+        if AccessibilityPermission.isTrusted { Self.ensureWebAccessibility() }
         if AccessibilityPermission.isTrusted, let ax = Self.readAXSelectedText() {
             let result = CaptureResult(
                 text: ax.text,
@@ -28,6 +59,16 @@ final class TextCaptureService {
             lastCapture = result
             return result
         }
+        if allowSelectAll {
+            if let selected = await readViaClipboard(requireChange: true) {
+                lastCapture = selected
+                return selected
+            }
+            if let whole = await readViaSelectAll() {
+                lastCapture = whole
+                return whole
+            }
+        }
         if let fallback = await readViaClipboard() {
             lastCapture = fallback
             return fallback
@@ -37,6 +78,7 @@ final class TextCaptureService {
 
     func peekAXSelection() -> CaptureResult? {
         guard AccessibilityPermission.isTrusted else { return nil }
+        Self.ensureWebAccessibility()
         guard let ax = Self.readAXSelectedText() else { return nil }
         if Self.isSecureElement(ax.element) { return nil }
         return CaptureResult(
@@ -53,6 +95,7 @@ final class TextCaptureService {
     /// `selectedRange` is the snippet's UTF-16 range in the full field so Replace still works.
     func peekAXFocusedSnippet(maxUTF16Length: Int = 1000) -> CaptureResult? {
         guard AccessibilityPermission.isTrusted else { return nil }
+        Self.ensureWebAccessibility()
         guard let focused = Self.focusedElement() else { return nil }
         if Self.isSecureElement(focused) { return nil }
 
@@ -607,7 +650,9 @@ final class TextCaptureService {
         return false
     }
 
-    private func readViaClipboard() async -> CaptureResult? {
+    /// `requireChange`: only accept text that Cmd+C actually put on the pasteboard (a real selection),
+    /// not whatever was already there.
+    private func readViaClipboard(requireChange: Bool = false) async -> CaptureResult? {
         let snapshot = PasteboardMemory.snapshot()
         let before = NSPasteboard.general.changeCount
         Self.postHotkey(keyCode: 8) // C
@@ -615,11 +660,51 @@ final class TextCaptureService {
             try? await Task.sleep(for: .milliseconds(25))
             if NSPasteboard.general.changeCount != before { break }
         }
+        let changed = NSPasteboard.general.changeCount != before
         let text = NSPasteboard.general.string(forType: .string)
         PasteboardMemory.restore(snapshot)
-        guard let text, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+        guard changed || !requireChange,
+              let text, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             return nil
         }
+        return CaptureResult(
+            text: text,
+            usedClipboardFallback: true,
+            axElement: nil,
+            sourceAppPID: Self.frontmostPID(),
+            selectedRange: nil
+        )
+    }
+
+    /// Roles where Cmd+A means "the text of this field"; lists, tables, etc. would select files/rows.
+    private static let selectAllRoles: Set<String> = [
+        "AXTextArea", "AXTextField", "AXComboBox", "AXWebArea", "AXGroup", "AXScrollArea", "AXUnknown",
+    ]
+
+    /// Last resort for apps whose AX tree exposes no text: select the field, copy it, then collapse the
+    /// selection to its end so the next keystroke does not overwrite the whole field.
+    private func readViaSelectAll() async -> CaptureResult? {
+        if let focused = Self.focusedElement(),
+           let role = Self.readStringAttribute(focused, kAXRoleAttribute as String),
+           !Self.selectAllRoles.contains(role) {
+            return nil
+        }
+        let snapshot = PasteboardMemory.snapshot()
+        let before = NSPasteboard.general.changeCount
+        Self.postHotkey(keyCode: 0) // A
+        try? await Task.sleep(for: .milliseconds(80))
+        Self.postHotkey(keyCode: 8) // C
+        for _ in 0..<12 {
+            try? await Task.sleep(for: .milliseconds(25))
+            if NSPasteboard.general.changeCount != before { break }
+        }
+        let changed = NSPasteboard.general.changeCount != before
+        let text = NSPasteboard.general.string(forType: .string)
+        PasteboardMemory.restore(snapshot)
+        Self.postHotkey(keyCode: 124, flags: []) // Right arrow
+        guard changed, let text,
+              !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              text.count <= 4000 else { return nil }
         return CaptureResult(
             text: text,
             usedClipboardFallback: true,
@@ -640,15 +725,15 @@ final class TextCaptureService {
         PasteboardMemory.restore(snapshot)
     }
 
-    private static func postHotkey(keyCode: CGKeyCode, to pid: pid_t? = nil) {
+    private static func postHotkey(keyCode: CGKeyCode, to pid: pid_t? = nil, flags: CGEventFlags = .maskCommand) {
         // Always post to the HID tap after activating the target app.
         // postToPid fails for Electron/Chrome (focus lives in a helper process).
         _ = pid
         let source = CGEventSource(stateID: .hidSystemState)
         let down = CGEvent(keyboardEventSource: source, virtualKey: keyCode, keyDown: true)
-        down?.flags = .maskCommand
+        down?.flags = flags
         let up = CGEvent(keyboardEventSource: source, virtualKey: keyCode, keyDown: false)
-        up?.flags = .maskCommand
+        up?.flags = flags
         down?.post(tap: .cghidEventTap)
         up?.post(tap: .cghidEventTap)
     }

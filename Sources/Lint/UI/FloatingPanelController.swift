@@ -46,6 +46,13 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
     private var bubbleAvoidRect: NSRect?
     /// Once the user drags, stop auto-repositioning on size changes.
     private var bubbleUserDragged = false
+    /// Show the bubble without making Lint a regular, active app. Activating Lint while one of its own
+    /// windows (Settings, full panel) sits on another Space makes macOS jump to that Space, taking the
+    /// user away from the app they are typing in. Keys still work through `BubbleKeyEventTap`.
+    private var bubbleNonActivating = false
+    /// App that had the focus when a non-activating bubble opened; clicking the bubble activates Lint,
+    /// so closing it hands the focus back.
+    private var bubbleSourcePID: pid_t?
 
     init(viewModel: FloatingPanelViewModel) {
         self.viewModel = viewModel
@@ -53,6 +60,12 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
         viewModel.onPrefetchStateChange = { [weak self] in
             self?.refreshChipTitle()
         }
+        // Build every panel while Lint is still an accessory app. Panels first created after Lint turned
+        // `.regular` (Settings open) did not show up in another app's fullscreen Space, and they are
+        // cached for the process lifetime, so a late first use left the bubble on the wrong desktop.
+        bubblePanel = makeBubblePanel()
+        chipPanel = makeChipPanel()
+        fullPanel = makeFullPanel()
     }
 
     var isVisible: Bool {
@@ -118,7 +131,14 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
         bubbleAnchorPoint = NSEvent.mouseLocation
         bubbleAvoidRect = nil
         bubbleUserDragged = false
+        bubbleNonActivating = hasLintWindowOnAnotherSpace()
         showBubbleNearCapture()
+    }
+
+    private func hasLintWindowOnAnotherSpace() -> Bool {
+        NSApp.windows.contains {
+            $0.styleMask.contains(.titled) && $0.isVisible && !$0.isOnActiveSpace
+        }
     }
 
     /// User clicked the chip (or wants immediate suggest).
@@ -133,6 +153,7 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
         bubbleAvoidRect = TextCaptureService.focusedFieldScreenRect(for: result)
             ?? TextCaptureService.selectionScreenRect(for: result)
         bubbleUserDragged = false
+        bubbleNonActivating = hasLintWindowOnAnotherSpace()
         showBubbleNearCapture()
     }
 
@@ -166,6 +187,16 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
         bubbleAnchorPoint = nil
         bubbleAvoidRect = nil
         bubbleUserDragged = false
+        if bubbleNonActivating, NSApp.isActive,
+           let pid = bubbleSourcePID, let app = NSRunningApplication(processIdentifier: pid), !app.isTerminated {
+            if #available(macOS 14.0, *) {
+                NSApp.yieldActivation(to: app)
+                _ = app.activate(from: NSRunningApplication.current)
+            } else {
+                app.activate(options: [.activateIgnoringOtherApps])
+            }
+        }
+        bubbleNonActivating = false
         bubblePanel?.orderOut(nil)
         onBubbleVisibilityChange?(false)
     }
@@ -208,8 +239,12 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
         onBubbleVisibilityChange?(true)
 
         // Same as Settings: .regular so the bubble can really become key and get keyDown.
-        NSApp.setActivationPolicy(.regular)
-        NSApp.activate(ignoringOtherApps: true)
+        if bubbleNonActivating {
+            bubbleSourcePID = NSWorkspace.shared.frontmostApplication?.processIdentifier
+        } else {
+            NSApp.setActivationPolicy(.regular)
+            NSApp.activate(ignoringOtherApps: true)
+        }
 
         panel.ignoresMouseEvents = false
         panel.orderFrontRegardless()
@@ -327,7 +362,7 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
     /// Keep the bubble key so Enter/R/Esc actually land (menu-bar apps lose focus easily).
     private func ensureBubbleKeyFocus() {
         guard !replacingInProgress else { return }
-        guard let panel = bubblePanel, panel.isVisible else { return }
+        guard let panel = bubblePanel, panel.isVisible, !bubbleNonActivating else { return }
         if NSApp.activationPolicy() != .regular {
             NSApp.setActivationPolicy(.regular)
         }
@@ -376,8 +411,10 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
                 bubbleChrome?.apply(viewModel: viewModel)
                 // Show bubble again so the user can retry / dismiss.
                 if let panel = bubblePanel {
-                    NSApp.setActivationPolicy(.regular)
-                    NSApp.activate(ignoringOtherApps: true)
+                    if !bubbleNonActivating {
+                        NSApp.setActivationPolicy(.regular)
+                        NSApp.activate(ignoringOtherApps: true)
+                    }
                     panel.orderFrontRegardless()
                     panel.makeKeyAndOrderFront(nil)
                 }
@@ -703,7 +740,7 @@ private final class BubbleKeyEventTap: @unchecked Sendable {
     private var source: CFRunLoopSource?
 
     func start() {
-        stop()
+        stop() // keeps `handler`: callers set it before start()
         let mask = CGEventMask(1 << CGEventType.keyDown.rawValue)
         let userInfo = Unmanaged.passUnretained(self).toOpaque()
         guard let tap = CGEvent.tapCreate(
@@ -759,7 +796,6 @@ private final class BubbleKeyEventTap: @unchecked Sendable {
         }
         tap = nil
         source = nil
-        handler = nil
     }
 }
 

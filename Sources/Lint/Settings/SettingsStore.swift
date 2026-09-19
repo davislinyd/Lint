@@ -2,11 +2,27 @@ import Foundation
 import LintCore
 import Observation
 
+/// UI language. Bundles resolve their language from `AppleLanguages` once at launch,
+/// so a change only takes effect after a restart.
+enum AppLanguage: String, CaseIterable, Identifiable {
+    case system
+    case zhHant = "zh-Hant"
+    case en
+
+    var id: String { rawValue }
+
+    /// nil → follow the system language.
+    var languageCode: String? {
+        self == .system ? nil : rawValue
+    }
+}
+
 @MainActor
 @Observable
 final class SettingsStore {
     private enum Keys {
         static let provider = "app.lint.providerKind"
+        static let appLanguage = "app.lint.appLanguage"
         static let customPrompt = "app.lint.customPrompt"
         static let translateTarget = "app.lint.translateTarget"
         static let lastMode = "app.lint.lastMode"
@@ -42,6 +58,20 @@ final class SettingsStore {
     var customPrompt: String {
         didSet { defaults.set(customPrompt, forKey: Keys.customPrompt) }
     }
+    var appLanguage: AppLanguage {
+        didSet {
+            defaults.set(appLanguage.rawValue, forKey: Keys.appLanguage)
+            // `array(forKey: "AppleLanguages")` falls through to the system value, so the choice
+            // is kept under our own key and only mirrored into the app domain here.
+            if let code = appLanguage.languageCode {
+                defaults.set([code], forKey: "AppleLanguages")
+            } else {
+                defaults.removeObject(forKey: "AppleLanguages")
+            }
+        }
+    }
+    /// The choice in effect for this run; differs from `appLanguage` once a restart is pending.
+    let launchAppLanguage: AppLanguage
     /// Per-mode full system prompt overrides. Empty / missing → built-in default.
     var systemPromptOverrides: [String: String] {
         didSet { defaults.set(systemPromptOverrides, forKey: Keys.systemPromptOverrides) }
@@ -105,6 +135,9 @@ final class SettingsStore {
             kind = .localLlama
         }
         providerKind = kind
+        let language = AppLanguage(rawValue: defaults.string(forKey: Keys.appLanguage) ?? "") ?? .system
+        appLanguage = language
+        launchAppLanguage = language
         customPrompt = defaults.string(forKey: Keys.customPrompt) ?? ""
         systemPromptOverrides =
             defaults.dictionary(forKey: Keys.systemPromptOverrides) as? [String: String] ?? [:]

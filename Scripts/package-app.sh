@@ -21,6 +21,10 @@ mkdir -p "$APP/Contents/Resources"
 if [ -f "$ROOT/Resources/AppIcon.icns" ]; then
   cp "$ROOT/Resources/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
 fi
+# UI strings (Localizable.strings per language).
+for lproj in "$ROOT"/Resources/*.lproj; do
+  cp -R "$lproj" "$APP/Contents/Resources/"
+done
 # SwiftPM package resources (e.g. KeyboardShortcuts.Recorder localization bundle).
 # Without these, opening the Writing tab crashes in Bundle.module.
 for bundle in "$BIN_DIR"/*.bundle; do

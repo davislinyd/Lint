@@ -30,10 +30,10 @@ final class BubbleChromeView: NSView {
     private let bodyLabel = NSTextField(wrappingLabelWithString: "")
     private let translationLabel = NSTextField(wrappingLabelWithString: "")
     private let spinner = NSProgressIndicator()
-    private let replaceButton = NSButton(title: "取代", target: nil, action: nil)
-    private let rewriteButton = NSButton(title: "重寫", target: nil, action: nil)
-    private let closeButton = NSButton(title: "關閉", target: nil, action: nil)
-    private let xButton = NSButton(image: NSImage(systemSymbolName: "xmark", accessibilityDescription: "關閉") ?? NSImage(), target: nil, action: nil)
+    private let replaceButton = NSButton(title: String(localized: "取代"), target: nil, action: nil)
+    private let rewriteButton = NSButton(title: String(localized: "重寫"), target: nil, action: nil)
+    private let closeButton = NSButton(title: String(localized: "關閉"), target: nil, action: nil)
+    private let xButton = NSButton(image: NSImage(systemSymbolName: "xmark", accessibilityDescription: String(localized: "關閉")) ?? NSImage(), target: nil, action: nil)
     private let card = NSVisualEffectView()
     private var widthConstraint: NSLayoutConstraint!
     private var dragStartScreen: NSPoint?
@@ -178,10 +178,10 @@ final class BubbleChromeView: NSView {
         }
 
         if viewModel.resultText.isEmpty && viewModel.isStreaming {
-            bodyLabel.stringValue = "產生建議中…"
+            bodyLabel.stringValue = String(localized: "產生建議中…")
             bodyLabel.textColor = .secondaryLabelColor
         } else if viewModel.resultText.isEmpty {
-            bodyLabel.stringValue = "（尚無建議）"
+            bodyLabel.stringValue = String(localized: "（尚無建議）")
             bodyLabel.textColor = .secondaryLabelColor
         } else {
             bodyLabel.stringValue = viewModel.resultText
@@ -190,19 +190,19 @@ final class BubbleChromeView: NSView {
 
         if viewModel.isTranslating && viewModel.translationText.isEmpty {
             translationLabel.isHidden = false
-            translationLabel.stringValue = "翻譯中…"
+            translationLabel.stringValue = String(localized: "翻譯中…")
         } else if !viewModel.translationText.isEmpty {
             translationLabel.isHidden = false
-            translationLabel.stringValue = "中文：" + viewModel.translationText
+            translationLabel.stringValue = String(localized: "中文：") + viewModel.translationText
         } else {
             translationLabel.isHidden = true
             translationLabel.stringValue = ""
         }
 
         let canReplace = !viewModel.resultText.isEmpty
-        replaceButton.title = "取代 ⏎"
-        rewriteButton.title = "重寫 R"
-        closeButton.title = "關閉 esc"
+        replaceButton.title = String(localized: "取代 ⏎")
+        rewriteButton.title = String(localized: "重寫 R")
+        closeButton.title = String(localized: "關閉 esc")
         replaceButton.isEnabled = canReplace
         rewriteButton.isEnabled = !viewModel.originalText.isEmpty && !viewModel.isStreaming
 
@@ -225,16 +225,16 @@ final class BubbleChromeView: NSView {
 
         let body: String
         if viewModel.resultText.isEmpty && viewModel.isStreaming {
-            body = "產生建議中…"
+            body = String(localized: "產生建議中…")
         } else if viewModel.resultText.isEmpty {
-            body = viewModel.errorMessage ?? "（尚無建議）"
+            body = viewModel.errorMessage ?? String(localized: "（尚無建議）")
         } else {
             body = viewModel.resultText
         }
         let translation: String = {
-            if viewModel.isTranslating && viewModel.translationText.isEmpty { return "翻譯中…" }
+            if viewModel.isTranslating && viewModel.translationText.isEmpty { return String(localized: "翻譯中…") }
             if viewModel.translationText.isEmpty { return "" }
-            return "中文：" + viewModel.translationText
+            return String(localized: "中文：") + viewModel.translationText
         }()
 
         let bodyFont = NSFont.systemFont(ofSize: 14)
@@ -247,9 +247,9 @@ final class BubbleChromeView: NSView {
             .size(withAttributes: [.font: NSFont.systemFont(ofSize: 13, weight: .semibold)]).width + 48
 
         // Buttons + gaps + side padding (~取代 ⏎ / 重寫 R / 關閉 esc).
-        let b1 = ("取代 ⏎" as NSString).size(withAttributes: [.font: buttonFont]).width + 24
-        let b2 = ("重寫 R" as NSString).size(withAttributes: [.font: buttonFont]).width + 24
-        let b3 = ("關閉 esc" as NSString).size(withAttributes: [.font: buttonFont]).width + 16
+        let b1 = (String(localized: "取代 ⏎") as NSString).size(withAttributes: [.font: buttonFont]).width + 24
+        let b2 = (String(localized: "重寫 R") as NSString).size(withAttributes: [.font: buttonFont]).width + 24
+        let b3 = (String(localized: "關閉 esc") as NSString).size(withAttributes: [.font: buttonFont]).width + 16
         let buttonsW = b1 + 8 + b2 + 8 + b3 + horizontalPad
 
         let content = max(bodyW, transW, titleW) + horizontalPad

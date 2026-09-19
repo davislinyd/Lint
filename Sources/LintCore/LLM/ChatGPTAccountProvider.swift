@@ -121,7 +121,7 @@ public struct ChatGPTAccountProvider: LLMProvider {
             if http.statusCode == 403, err.contains("Unusual activity") {
                 throw LLMError.httpStatus(
                     403,
-                    "ChatGPT 判定為異常流量（403）。請改走 App 內 WebView 連線，或稍後重試／重新登入。"
+                    String(localized: "ChatGPT 判定為異常流量（403）。請改走 App 內 WebView 連線，或稍後重試／重新登入。")
                 )
             }
             throw LLMError.httpStatus(http.statusCode, err)

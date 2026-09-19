@@ -10,6 +10,7 @@ struct GeneralSettingsPane: View {
             accessibilitySection
             behaviorSection
             hotkeySection
+            languageSection
         }
         .formStyle(.grouped)
     }
@@ -34,7 +35,7 @@ struct GeneralSettingsPane: View {
             } label: {
                 HStack(spacing: 6) {
                     StatusDot(color: app.accessibilityTrusted ? .green : .orange)
-                    Text(app.accessibilityTrusted ? "已授權" : "未授權")
+                    Text(app.accessibilityTrusted ? String(localized: "已授權") : String(localized: "未授權"))
                 }
             }
             if !app.accessibilityTrusted {
@@ -86,6 +87,37 @@ struct GeneralSettingsPane: View {
         } footer: {
             Text("打完字後按「執行檢查」即可套用「已就緒」建議，不必點按鈕。中英文皆可用。")
                 .sectionNote()
+        }
+    }
+
+    @ViewBuilder
+    private var languageSection: some View {
+        Section {
+            Picker("介面語言", selection: Bindable(app.settings).appLanguage) {
+                ForEach(AppLanguage.allCases) { language in
+                    languageName(language).tag(language)
+                }
+            }
+            if app.settings.appLanguage != app.settings.launchAppLanguage {
+                LabeledContent("需要重新啟動才會套用") {
+                    Button("立即重新啟動") {
+                        app.relaunch()
+                    }
+                }
+            }
+        } header: {
+            Text("語言")
+        } footer: {
+            Text("重新啟動 Lint 後才會切換語言；若使用本機模型，重新啟動時模型服務會一併重載。")
+                .sectionNote()
+        }
+    }
+
+    private func languageName(_ language: AppLanguage) -> Text {
+        switch language {
+        case .system: Text("跟隨系統")
+        case .zhHant: Text(verbatim: "繁體中文")
+        case .en: Text(verbatim: "English")
         }
     }
 }

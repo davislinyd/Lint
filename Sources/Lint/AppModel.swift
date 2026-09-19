@@ -75,22 +75,22 @@ final class AppModel: NSObject, NSWindowDelegate {
         if UserDefaults.standard.bool(forKey: skipKey) { return }
 
         let alert = NSAlert()
-        alert.messageText = "尚未偵測到 llama-server"
+        alert.messageText = String(localized: "尚未偵測到 llama-server")
         switch state {
         case .brewUnavailable:
-            alert.informativeText = "本機沒有 Homebrew，無法自動安裝。請先到 https://brew.sh 安裝後，再開設定按「安裝 llama-server」。"
-            alert.addButton(withTitle: "知道了")
-            alert.addButton(withTitle: "不要再提醒")
+            alert.informativeText = String(localized: "本機沒有 Homebrew，無法自動安裝。請先到 https://brew.sh 安裝後，再開設定按「安裝 llama-server」。")
+            alert.addButton(withTitle: String(localized: "知道了"))
+            alert.addButton(withTitle: String(localized: "不要再提醒"))
             let response = alert.runModal()
             if response == .alertSecondButtonReturn {
                 UserDefaults.standard.set(true, forKey: skipKey)
             }
             return
         default:
-            alert.informativeText = "Lint 可用 Homebrew 安裝 llama.cpp（含 llama-server）。需要網路，通常數分鐘。要現在安裝嗎？"
-            alert.addButton(withTitle: "安裝")
-            alert.addButton(withTitle: "稍後")
-            alert.addButton(withTitle: "不要再提醒")
+            alert.informativeText = String(localized: "Lint 可用 Homebrew 安裝 llama.cpp（含 llama-server）。需要網路，通常數分鐘。要現在安裝嗎？")
+            alert.addButton(withTitle: String(localized: "安裝"))
+            alert.addButton(withTitle: String(localized: "稍後"))
+            alert.addButton(withTitle: String(localized: "不要再提醒"))
         }
         let response = alert.runModal()
         if response == .alertThirdButtonReturn {
@@ -106,7 +106,7 @@ final class AppModel: NSObject, NSWindowDelegate {
             NSLog("Lint: installed llama-server at \(path)")
         } catch {
             let err = NSAlert()
-            err.messageText = "安裝失敗"
+            err.messageText = String(localized: "安裝失敗")
             err.informativeText = error.localizedDescription
             err.runModal()
         }
@@ -135,6 +135,25 @@ final class AppModel: NSObject, NSWindowDelegate {
         panel.activateCheckFromHotkey(capture: capture)
     }
 
+    /// Quit and reopen this app bundle (e.g. to apply a new UI language).
+    func relaunch() {
+        // Wait for this process to exit first: `open` on a still-running app only re-activates it,
+        // and `applicationWillTerminate` needs time to stop the managed llama-server.
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/sh")
+        process.arguments = [
+            "-c", "while kill -0 \"$1\" 2>/dev/null; do sleep 0.1; done; open \"$0\"",
+            Bundle.main.bundlePath, String(ProcessInfo.processInfo.processIdentifier),
+        ]
+        do {
+            try process.run()
+        } catch {
+            NSLog("Lint relaunch failed: \(error.localizedDescription)")
+            return
+        }
+        NSApp.terminate(nil)
+    }
+
     func startPolling() {
         Task { [weak self] in
             while let self {
@@ -152,7 +171,7 @@ final class AppModel: NSObject, NSWindowDelegate {
                 backing: .buffered,
                 defer: false
             )
-            window.title = "Lint 設定"
+            window.title = String(localized: "Lint 設定")
             window.contentMinSize = NSSize(width: 680, height: 460)
             window.isReleasedWhenClosed = false
             window.contentView = NSHostingView(rootView: SettingsView(app: self))

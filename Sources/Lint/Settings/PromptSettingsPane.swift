@@ -22,7 +22,7 @@ struct PromptSettingsPane: View {
                 Spacer()
                 HStack(spacing: 6) {
                     StatusDot(color: isOverridden ? .orange : .green)
-                    Text(isOverridden ? "已自訂" : "使用內建預設")
+                    Text(isOverridden ? String(localized: "已自訂") : String(localized: "使用內建預設"))
                         .foregroundStyle(.secondary)
                 }
             }

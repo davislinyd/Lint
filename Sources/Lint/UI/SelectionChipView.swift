@@ -5,7 +5,7 @@ import AppKit
 final class SelectionChipView: NSView {
     var onTap: (() -> Void)?
 
-    private let button = NSButton(title: "檢查", target: nil, action: nil)
+    private let button = NSButton(title: String(localized: "檢查"), target: nil, action: nil)
     private let card = NSVisualEffectView()
 
     override init(frame frameRect: NSRect) {
@@ -33,7 +33,7 @@ final class SelectionChipView: NSView {
         button.isBordered = false
         button.image = NSImage(systemSymbolName: "pencil.line", accessibilityDescription: "Lint")
         button.imagePosition = .imageLeading
-        button.title = "檢查"
+        button.title = String(localized: "檢查")
         button.font = .systemFont(ofSize: 12, weight: .semibold)
         button.target = self
         button.action = #selector(tapped)

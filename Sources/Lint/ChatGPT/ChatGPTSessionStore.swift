@@ -16,7 +16,7 @@ final class ChatGPTSessionStore {
 
     var email: String = UserDefaults.standard.string(forKey: DefaultsKey.email) ?? ""
     var isLoggedIn: Bool = false
-    var statusText: String = "未登入"
+    var statusText: String = String(localized: "未登入")
 
     private init() {
         refresh()
@@ -26,9 +26,9 @@ final class ChatGPTSessionStore {
         let token = (try? keychain.get(account: account)) ?? ""
         isLoggedIn = !token.isEmpty
         if isLoggedIn {
-            statusText = email.isEmpty ? "已登入" : "已登入：\(email)"
+            statusText = email.isEmpty ? String(localized: "已登入") : String(localized: "已登入：\(email)")
         } else {
-            statusText = "未登入"
+            statusText = String(localized: "未登入")
         }
     }
 

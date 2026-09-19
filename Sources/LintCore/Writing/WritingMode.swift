@@ -12,12 +12,12 @@ public enum WritingMode: String, CaseIterable, Identifiable, Sendable, Codable {
 
     public var title: String {
         switch self {
-        case .proofread: "文法校對與潤飾"
-        case .toneFormal: "語氣：正式"
-        case .toneConcise: "語氣：簡潔"
-        case .toneProfessional: "語氣：專業"
-        case .translate: "翻譯"
-        case .custom: "自訂 Prompt"
+        case .proofread: String(localized: "文法校對與潤飾")
+        case .toneFormal: String(localized: "語氣：正式")
+        case .toneConcise: String(localized: "語氣：簡潔")
+        case .toneProfessional: String(localized: "語氣：專業")
+        case .translate: String(localized: "翻譯")
+        case .custom: String(localized: "自訂 Prompt")
         }
     }
 

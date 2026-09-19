@@ -10,5 +10,5 @@ enum AppVersion {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "0"
     }
 
-    static var display: String { "版本 \(short)" }
+    static var display: String { String(localized: "版本 \(short)") }
 }

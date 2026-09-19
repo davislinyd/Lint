@@ -4,6 +4,11 @@
 <dict>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>zh-Hant</string>
+	<key>CFBundleLocalizations</key>
+	<array>
+		<string>zh-Hant</string>
+		<string>en</string>
+	</array>
 	<key>CFBundleDisplayName</key>
 	<string>Lint</string>
 	<key>CFBundleExecutable</key>
@@ -19,7 +24,7 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>0.1.1</string>
+	<string>0.1.2</string>
 	<key>CFBundleVersion</key>
 	<string>1</string>
 	<key>LSMinimumSystemVersion</key>

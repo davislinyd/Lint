@@ -2,8 +2,8 @@ import SwiftUI
 
 /// Toggle with a one-line explanation under its title, as in System Settings.
 struct SettingsToggle: View {
-    let title: String
-    let detail: String
+    let title: LocalizedStringKey
+    let detail: LocalizedStringKey
     @Binding var isOn: Bool
 
     var body: some View {
@@ -42,7 +42,7 @@ struct StatusDot: View {
 
 /// Full-row disclosure. `DisclosureGroup` in a grouped Form only toggles from its small chevron.
 struct ExpandableRow<Content: View>: View {
-    let title: String
+    let title: LocalizedStringKey
     @Binding var isExpanded: Bool
     @ViewBuilder var content: Content
 

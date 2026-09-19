@@ -119,7 +119,7 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
                 self.runAutoSuggest(captured)
                 return
             }
-            self.showBubbleWithMessage("找不到可檢查的文字。請先選取，或把游標放在輸入框裡再按 ⌥⌘K。")
+            self.showBubbleWithMessage(String(localized: "找不到可檢查的文字。請先選取，或把游標放在輸入框裡再按 ⌥⌘K。"))
         }
     }
 
@@ -169,11 +169,11 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
     private func refreshChipTitle() {
         guard let chipView else { return }
         if viewModel.isPrefetchReady {
-            chipView.setTitle("已就緒")
+            chipView.setTitle(String(localized: "已就緒"))
         } else if viewModel.isPrefetching {
-            chipView.setTitle("準備中")
+            chipView.setTitle(String(localized: "準備中"))
         } else {
-            chipView.setTitle("檢查")
+            chipView.setTitle(String(localized: "檢查"))
         }
     }
 
@@ -394,7 +394,7 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
         TextCaptureService.logPublic("REPLACE FROM BUBBLE originalCount=\(viewModel.originalText.count) resultCount=\(viewModel.resultText.count)")
         // Immediate UI feedback on the AppKit chrome (do not rely on Observation alone).
         viewModel.errorMessage = nil
-        viewModel.statusNote = "正在取代…"
+        viewModel.statusNote = String(localized: "正在取代…")
         bubbleChrome?.apply(viewModel: viewModel)
         // Stop focus pump / monitors, then release key window so macOS 14+ yieldActivation can work.
         replacingInProgress = true
@@ -650,7 +650,7 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
         if event.keyCode == 36 || event.keyCode == 76 {
             TextCaptureService.logPublic("bubble key Enter resultCount=\(viewModel.resultText.count) streaming=\(viewModel.isStreaming) active=\(bubbleActive)")
             if viewModel.resultText.isEmpty {
-                viewModel.statusNote = viewModel.isStreaming ? "還在產生中…完成後再按 ⏎" : "尚無建議可取代"
+                viewModel.statusNote = viewModel.isStreaming ? String(localized: "還在產生中…完成後再按 ⏎") : String(localized: "尚無建議可取代")
                 bubbleChrome?.apply(viewModel: viewModel)
                 NSSound.beep()
                 return true

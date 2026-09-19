@@ -12,7 +12,7 @@ struct DiffTextView: View {
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         } else {
-            Text(result.isEmpty ? "（等待模型輸出）" : result)
+            Text(result.isEmpty ? String(localized: "（等待模型輸出）") : result)
                 .foregroundStyle(result.isEmpty ? .secondary : .primary)
                 .font(.body)
                 .textSelection(.enabled)

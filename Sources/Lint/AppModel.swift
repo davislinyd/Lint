@@ -137,12 +137,15 @@ final class AppModel: NSObject, NSWindowDelegate {
 
     /// Quit and reopen this app bundle (e.g. to apply a new UI language).
     func relaunch() {
-        // Wait for this process to exit first: `open` on a still-running app only re-activates it,
-        // and `applicationWillTerminate` needs time to stop the managed llama-server.
+        // Wait for this process to exit first, since `applicationWillTerminate` needs time to stop
+        // the managed llama-server. Even then LaunchServices can lag behind the exit and fail a
+        // plain `open` with -600, so use `-n` and retry.
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/sh")
         process.arguments = [
-            "-c", "while kill -0 \"$1\" 2>/dev/null; do sleep 0.1; done; open \"$0\"",
+            "-c",
+            "while kill -0 \"$1\" 2>/dev/null; do sleep 0.1; done; "
+                + "for i in 1 2 3 4 5 6 7 8 9 10; do open -n \"$0\" && exit 0; sleep 0.5; done",
             Bundle.main.bundlePath, String(ProcessInfo.processInfo.processIdentifier),
         ]
         do {

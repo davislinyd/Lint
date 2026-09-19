@@ -93,6 +93,9 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         }
 
         menu.addItem(.separator())
+        let version = NSMenuItem(title: "Lint \(AppVersion.display)", action: nil, keyEquivalent: "")
+        version.isEnabled = false
+        menu.addItem(version)
         let settings = NSMenuItem(title: "設定…", action: #selector(openSettings), keyEquivalent: ",")
         settings.target = self
         menu.addItem(settings)

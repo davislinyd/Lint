@@ -37,6 +37,15 @@ struct SettingsView: View {
             }
             .formStyle(.grouped)
             .tabItem { Label("寫作", systemImage: "pencil") }
+
+            Form {
+                Section("關於") {
+                    LabeledContent("Lint", value: AppVersion.display)
+                    LabeledContent("Build", value: AppVersion.build)
+                }
+            }
+            .formStyle(.grouped)
+            .tabItem { Label("關於", systemImage: "info.circle") }
         }
         .frame(width: 560, height: 480)
         .onAppear {

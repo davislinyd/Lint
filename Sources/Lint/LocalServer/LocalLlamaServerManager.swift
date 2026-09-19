@@ -226,6 +226,30 @@ final class LocalLlamaServerManager {
         }
     }
 
+    // MARK: - Model files
+
+    /// Where llama-server keeps the `-hf` model: the model's own folder in the
+    /// HuggingFace hub cache once downloaded, otherwise the cache root. Nil if neither exists yet.
+    static func modelFolder(hfModel: String) -> URL? {
+        let env = ProcessInfo.processInfo.environment
+        let hub: URL
+        if let path = env["HF_HUB_CACHE"], !path.isEmpty {
+            hub = URL(fileURLWithPath: path)
+        } else if let home = env["HF_HOME"], !home.isEmpty {
+            hub = URL(fileURLWithPath: home).appendingPathComponent("hub")
+        } else {
+            hub = FileManager.default.homeDirectoryForCurrentUser
+                .appendingPathComponent(".cache/huggingface/hub")
+        }
+
+        let repo = hfModel.split(separator: ":").first.map(String.init) ?? hfModel
+        let model = hub.appendingPathComponent("models--" + repo.replacingOccurrences(of: "/", with: "--"))
+        for url in [model, hub] where FileManager.default.fileExists(atPath: url.path) {
+            return url
+        }
+        return nil
+    }
+
     // MARK: - Binary detection / Homebrew install
 
     /// Common install locations + `PATH` lookup.

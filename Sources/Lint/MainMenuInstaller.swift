@@ -43,6 +43,13 @@ enum MainMenuInstaller {
         editMenu.addItem(withTitle: "刪除", action: #selector(NSText.delete(_:)), keyEquivalent: "")
         editMenu.addItem(withTitle: "全選", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
 
+        let windowMenu = NSMenu(title: "視窗")
+        let windowItem = NSMenuItem(title: "視窗", action: nil, keyEquivalent: "")
+        windowItem.submenu = windowMenu
+        mainMenu.addItem(windowItem)
+
+        windowMenu.addItem(withTitle: "關閉視窗", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
+
         NSApp.mainMenu = mainMenu
     }
 }

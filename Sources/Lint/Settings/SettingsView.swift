@@ -276,6 +276,9 @@ struct SettingsView: View {
                     showBrewInstallConfirm = true
                 }
                 .disabled(localServerBusy)
+                Button("在 Finder 顯示模型資料夾") {
+                    openModelFolder()
+                }
             }
             if let saveMessage {
                 Text(saveMessage)
@@ -298,6 +301,17 @@ struct SettingsView: View {
         .onAppear {
             refreshBinaryStatus()
         }
+    }
+
+    private func openModelFolder() {
+        let hf = app.settings.localServerHFModel.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let folder = LocalLlamaServerManager.modelFolder(
+            hfModel: hf.isEmpty ? SettingsStore.defaultLocalHFModel : hf
+        ) else {
+            saveMessage = "找不到模型資料夾，模型可能尚未下載"
+            return
+        }
+        NSWorkspace.shared.open(folder)
     }
 
     private func refreshLocalServerStatus(showFeedback: Bool = false) async {

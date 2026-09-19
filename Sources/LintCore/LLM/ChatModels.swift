@@ -62,10 +62,10 @@ public enum ProviderKind: String, Codable, CaseIterable, Sendable, Identifiable 
         self == .chatgptAccount
     }
 
-    /// Temporarily unavailable providers stay listed but cannot be selected.
+    /// Unavailable providers stay listed but cannot be selected.
     public var isEnabled: Bool {
         switch self {
-        case .chatgptAccount:
+        case .chatgptAccount, .openai, .anthropic, .gemini:
             return false
         default:
             return true
@@ -74,7 +74,10 @@ public enum ProviderKind: String, Codable, CaseIterable, Sendable, Identifiable 
 
     public var pickerLabel: String {
         if isEnabled { return title }
-        return "\(title)（暫時關閉）"
+        switch self {
+        case .chatgptAccount: return "\(title)（暫時關閉）"
+        default: return "\(title)（尚未測試）"
+        }
     }
 }
 

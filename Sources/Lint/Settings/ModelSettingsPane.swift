@@ -67,7 +67,7 @@ struct ModelSettingsPane: View {
             } else {
                 Text("寫作建議用 Low。越高越慢，因為會先花時間做 reasoning。")
                 if !ProviderKind.chatgptAccount.isEnabled {
-                    Text("ChatGPT 網頁登入暫時關閉（OpenAI 常回 403 異常流量），請改用 OpenAI API 或 OpenAI 相容端點。")
+                    Text("ChatGPT 網頁登入暫時關閉（OpenAI 常回 403 異常流量），請改用本機 llama.cpp 或 OpenAI 相容端點。")
                 }
             }
         }

@@ -17,7 +17,7 @@ final class ChatGPTLoginWindowController: NSWindowController, WKNavigationDelega
             backing: .buffered,
             defer: false
         )
-        window.title = "登入 ChatGPT（非官方）"
+        window.title = String(localized: "登入 ChatGPT（非官方）")
         window.center()
         self.init(window: window)
         self.onFinished = onFinished
@@ -32,19 +32,19 @@ final class ChatGPTLoginWindowController: NSWindowController, WKNavigationDelega
         webView.customUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15"
         self.webView = webView
 
-        let header = NSTextField(wrappingLabelWithString: "請登入你的 ChatGPT Plus／Pro 帳戶。看到聊天畫面後，若沒有自動關閉，按下方「完成登入」。此為非官方 session。")
+        let header = NSTextField(wrappingLabelWithString: String(localized: "請登入你的 ChatGPT Plus／Pro 帳戶。看到聊天畫面後，若沒有自動關閉，按下方「完成登入」。此為非官方 session。"))
         header.translatesAutoresizingMaskIntoConstraints = false
 
-        let status = NSTextField(labelWithString: "等待登入…")
+        let status = NSTextField(labelWithString: String(localized: "等待登入…"))
         status.textColor = .secondaryLabelColor
         status.translatesAutoresizingMaskIntoConstraints = false
         self.statusLabel = status
 
-        let finishButton = NSButton(title: "完成登入", target: self, action: #selector(finishLoginClicked))
+        let finishButton = NSButton(title: String(localized: "完成登入"), target: self, action: #selector(finishLoginClicked))
         finishButton.bezelStyle = .rounded
         finishButton.translatesAutoresizingMaskIntoConstraints = false
 
-        let cancelButton = NSButton(title: "取消", target: self, action: #selector(cancelClicked))
+        let cancelButton = NSButton(title: String(localized: "取消"), target: self, action: #selector(cancelClicked))
         cancelButton.bezelStyle = .rounded
         cancelButton.translatesAutoresizingMaskIntoConstraints = false
 
@@ -81,7 +81,7 @@ final class ChatGPTLoginWindowController: NSWindowController, WKNavigationDelega
     }
 
     @objc private func finishLoginClicked() {
-        statusLabel.stringValue = "正在讀取 session…"
+        statusLabel.stringValue = String(localized: "正在讀取 session…")
         Task { await captureSession(force: true) }
     }
 
@@ -143,7 +143,7 @@ final class ChatGPTLoginWindowController: NSWindowController, WKNavigationDelega
             }
         } catch {
             if force {
-                statusLabel.stringValue = "讀取失敗：\(error.localizedDescription)"
+                statusLabel.stringValue = String(localized: "讀取失敗：\(error.localizedDescription)")
             }
         }
 
@@ -175,7 +175,7 @@ final class ChatGPTLoginWindowController: NSWindowController, WKNavigationDelega
               !token.isEmpty
         else {
             if force {
-                statusLabel.stringValue = "還抓不到 token。請確認已看到 ChatGPT 聊天畫面後再按一次。"
+                statusLabel.stringValue = String(localized: "還抓不到 token。請確認已看到 ChatGPT 聊天畫面後再按一次。")
             }
             return
         }
@@ -183,7 +183,7 @@ final class ChatGPTLoginWindowController: NSWindowController, WKNavigationDelega
         let email = dict["email"] as? String
         do {
             try ChatGPTSessionStore.shared.save(accessToken: token, email: email)
-            statusLabel.stringValue = "已儲存 session"
+            statusLabel.stringValue = String(localized: "已儲存 session")
             finish(.success(()))
         } catch {
             statusLabel.stringValue = error.localizedDescription
@@ -208,7 +208,7 @@ final class ChatGPTLoginWindowController: NSWindowController, WKNavigationDelega
     }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-        statusLabel.stringValue = webView.url?.host.map { "頁面：\($0)" } ?? "等待登入…"
+        statusLabel.stringValue = webView.url?.host.map { String(localized: "頁面：\($0)") } ?? String(localized: "等待登入…")
         Task { await captureSession(force: false) }
     }
 }

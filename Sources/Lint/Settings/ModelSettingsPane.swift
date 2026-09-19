@@ -90,14 +90,14 @@ struct ModelSettingsPane: View {
                 SecureField(
                     "API Key",
                     text: Bindable(app.settings).apiKeyDraft,
-                    prompt: Text(app.settings.hasStoredKey ? "留空沿用已儲存的 Key" : "貼上 API Key")
+                    prompt: Text(app.settings.hasStoredKey ? String(localized: "留空沿用已儲存的 Key") : String(localized: "貼上 API Key"))
                 )
                 .labelsHidden()
                 .multilineTextAlignment(.trailing)
                 Button("儲存") {
                     do {
                         try app.settings.saveAPIKeyIfNeeded()
-                        providerMessage = "已寫入 Keychain"
+                        providerMessage = String(localized: "已寫入 Keychain")
                     } catch {
                         providerMessage = error.localizedDescription
                     }
@@ -108,7 +108,7 @@ struct ModelSettingsPane: View {
             }
         } label: {
             VStack(alignment: .leading, spacing: 2) {
-                Text(app.settings.providerKind.requiresAPIKey ? "API Key" : "API Key（選填）")
+                Text(app.settings.providerKind.requiresAPIKey ? "API Key" : String(localized: "API Key（選填）"))
                 if let providerMessage {
                     Text(providerMessage)
                         .font(.caption)
@@ -152,14 +152,14 @@ struct ModelSettingsPane: View {
         )
         LabeledContent {
             HStack {
-                Button(ChatGPTSessionStore.shared.isLoggedIn ? "重新登入…" : "登入 ChatGPT…") {
+                Button(ChatGPTSessionStore.shared.isLoggedIn ? String(localized: "重新登入…") : String(localized: "登入 ChatGPT…")) {
                     let controller = ChatGPTLoginWindowController { result in
                         chatGPTLoginWindow = nil
                         ChatGPTSessionStore.shared.refresh()
                         app.settings.refreshKeyStatus()
                         switch result {
                         case .success:
-                            providerMessage = "ChatGPT 已登入"
+                            providerMessage = String(localized: "ChatGPT 已登入")
                         case .failure(let error):
                             providerMessage = error.localizedDescription
                         }
@@ -174,7 +174,7 @@ struct ModelSettingsPane: View {
                         do {
                             try ChatGPTSessionStore.shared.logout()
                             app.settings.refreshKeyStatus()
-                            providerMessage = "已登出 ChatGPT"
+                            providerMessage = String(localized: "已登出 ChatGPT")
                         } catch {
                             providerMessage = error.localizedDescription
                         }

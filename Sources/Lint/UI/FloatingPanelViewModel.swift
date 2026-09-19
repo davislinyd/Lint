@@ -14,6 +14,8 @@ final class FloatingPanelViewModel {
     var isStreaming = false
     var errorMessage: String?
     var statusNote: String?
+    /// Compared against `statusNote` to clear it once the user types; keep one localized copy.
+    static let noSelectionNote = String(localized: "沒有選取文字。可直接在左側輸入，再按「產生」。")
     var usedClipboardFallback = false
     var mode: WritingMode = .proofread
     var testOutput: String = ""
@@ -210,7 +212,7 @@ final class FloatingPanelViewModel {
         streamTask?.cancel()
         cancelPrefetch()
         errorMessage = nil
-        if statusNote?.contains("沒有選取文字") == true {
+        if statusNote == Self.noSelectionNote {
             statusNote = nil
         }
         streamTask = Task { await runStream(forceLowReasoning: isAutoSuggestSession) }
@@ -269,7 +271,7 @@ final class FloatingPanelViewModel {
             prefetchFinished = true
             isPrefetching = false
             isPrefetchReady = false
-            prefetchError = "沒有原文可送出。"
+            prefetchError = String(localized: "沒有原文可送出。")
             onPrefetchStateChange?()
             return
         }
@@ -306,7 +308,7 @@ final class FloatingPanelViewModel {
             if prefetchAttachedToUI {
                 resultText = prefetchBuffer
                 isStreaming = false
-                errorMessage = prefetchBuffer.isEmpty ? (prefetchError ?? "沒有收到建議。") : nil
+                errorMessage = prefetchBuffer.isEmpty ? (prefetchError ?? String(localized: "沒有收到建議。")) : nil
                 if errorMessage == nil {
                     scheduleTranslationOfResult()
                 }
@@ -362,16 +364,16 @@ final class FloatingPanelViewModel {
             usedClipboardFallback = captured.usedClipboardFallback
             if captured.usedClipboardFallback {
                 if !AccessibilityPermission.isTrusted {
-                    statusNote = "未授權輔助功能，已改用剪貼簿擷取。"
+                    statusNote = String(localized: "未授權輔助功能，已改用剪貼簿擷取。")
                 } else {
-                    statusNote = "此應用程式無法用輔助功能讀取選取，已改用剪貼簿。"
+                    statusNote = String(localized: "此應用程式無法用輔助功能讀取選取，已改用剪貼簿。")
                 }
             }
             await runStream()
             return
         }
         // No selection: keep panel open for manual input.
-        statusNote = "沒有選取文字。可直接在左側輸入，再按「產生」。"
+        statusNote = Self.noSelectionNote
     }
 
     
@@ -477,7 +479,7 @@ final class FloatingPanelViewModel {
         }
         let source = originalText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !source.isEmpty else {
-            errorMessage = "沒有原文可送出。"
+            errorMessage = String(localized: "沒有原文可送出。")
             isStreaming = false
             return
         }
@@ -559,7 +561,7 @@ final class FloatingPanelViewModel {
                 }
             }
             if testOutput.isEmpty {
-                errorMessage = "連線成功但沒有收到正文（可能全是 reasoning）。"
+                errorMessage = String(localized: "連線成功但沒有收到正文（可能全是 reasoning）。")
             }
         } catch {
             errorMessage = error.localizedDescription

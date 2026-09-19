@@ -231,7 +231,7 @@ final class ChatGPTWebBridge: NSObject, ChatGPTBrowserBackend, WKNavigationDeleg
         } catch {
             let message = (error as NSError).userInfo["WKJavaScriptExceptionMessage"] as? String
                 ?? error.localizedDescription
-            throw LLMError.httpStatus(0, "JavaScript：\(message)")
+            throw LLMError.httpStatus(0, String(localized: "JavaScript：\(message)"))
         }
 
         if (result["ok"] as? Bool) == true,
@@ -241,11 +241,11 @@ final class ChatGPTWebBridge: NSObject, ChatGPTBrowserBackend, WKNavigationDeleg
         }
 
         let status = result["status"] as? Int ?? 500
-        let body = (result["body"] as? String) ?? "ChatGPT WebView 請求失敗"
+        let body = (result["body"] as? String) ?? String(localized: "ChatGPT WebView 請求失敗")
         if status == 403 || body.localizedCaseInsensitiveContains("unusual activity") {
             throw LLMError.httpStatus(
                 403,
-                "ChatGPT 判定異常流量（403）。請稍後重試、重新登入，或改用官方 API Key。"
+                String(localized: "ChatGPT 判定異常流量（403）。請稍後重試、重新登入，或改用官方 API Key。")
             )
         }
         throw LLMError.httpStatus(status == 0 ? 500 : status, String(body.prefix(800)))

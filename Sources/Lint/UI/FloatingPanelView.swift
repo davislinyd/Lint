@@ -58,7 +58,7 @@ struct FloatingPanelView: View {
                             if viewModel.errorMessage?.contains("找不到選取文字") == true {
                                 viewModel.errorMessage = nil
                             }
-                            if viewModel.statusNote?.contains("沒有選取文字") == true,
+                            if viewModel.statusNote == FloatingPanelViewModel.noSelectionNote,
                                !viewModel.originalText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                                 viewModel.statusNote = nil
                             }
@@ -94,7 +94,7 @@ struct FloatingPanelView: View {
                 }
                 .disabled(viewModel.resultText.isEmpty)
 
-                Button(viewModel.resultText.isEmpty ? "產生" : "重試") {
+                Button(viewModel.resultText.isEmpty ? String(localized: "產生") : String(localized: "重試")) {
                     viewModel.generateFromOriginal()
                 }
                 .disabled(viewModel.originalText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || viewModel.isStreaming)
@@ -113,7 +113,7 @@ struct FloatingPanelView: View {
         }
     }
 
-    private func column(title: String, @ViewBuilder content: () -> some View) -> some View {
+    private func column(title: LocalizedStringKey, @ViewBuilder content: () -> some View) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(title)
                 .font(.headline)

@@ -48,7 +48,7 @@ final class LocalLlamaServerManager {
         }
         guard settings.localServerAutoStart else {
             throw LocalServerError.notRunning(
-                "本機 llama-server 未在埠 \(port) 運行。可在設定開啟「自動啟動」，或先在終端機手動啟動。"
+                String(localized: "本機 llama-server 未在埠 \(port) 運行。可在設定開啟「自動啟動」，或先在終端機手動啟動。")
             )
         }
         try await start(settings: settings)
@@ -77,11 +77,11 @@ final class LocalLlamaServerManager {
                 settings.localServerBinaryPath = path
             }
         case .missing:
-            let message = "本機尚未安裝 llama-server。請在設定按「安裝 llama-server」，或終端機執行：brew install llama.cpp"
+            let message = String(localized: "本機尚未安裝 llama-server。請在設定按「安裝 llama-server」，或終端機執行：brew install llama.cpp")
             status = .failed(message)
             throw LocalServerError.binaryMissing(message)
         case .brewUnavailable:
-            let message = "找不到 llama-server，且本機沒有 Homebrew。請先安裝 https://brew.sh 後再試。"
+            let message = String(localized: "找不到 llama-server，且本機沒有 Homebrew。請先安裝 https://brew.sh 後再試。")
             status = .failed(message)
             throw LocalServerError.binaryMissing(message)
         }
@@ -107,7 +107,7 @@ final class LocalLlamaServerManager {
         do {
             try proc.run()
         } catch {
-            let message = "無法啟動 llama-server：\(error.localizedDescription)"
+            let message = String(localized: "無法啟動 llama-server：\(error.localizedDescription)")
             status = .failed(message)
             throw LocalServerError.launchFailed(message)
         }
@@ -169,16 +169,16 @@ final class LocalLlamaServerManager {
         status = .stopped
 
         if stoppedManaged && killedExternal.isEmpty {
-            return "已停止 Lint 管理的 llama-server"
+            return String(localized: "已停止 Lint 管理的 llama-server")
         }
         if !killedExternal.isEmpty {
             let pids = killedExternal.map(String.init).joined(separator: ", ")
-            return "已停止埠 \(port) 上的服務（PID \(pids)）"
+            return String(localized: "已停止埠 \(port) 上的服務（PID \(pids)）")
         }
         if stoppedManaged {
-            return "已停止服務"
+            return String(localized: "已停止服務")
         }
-        return "埠 \(port) 上沒有偵測到監聽中的服務"
+        return String(localized: "埠 \(port) 上沒有偵測到監聽中的服務")
     }
 
     /// Stop whatever is on the port, then start with current settings (applies new args).
@@ -288,7 +288,7 @@ final class LocalLlamaServerManager {
     func installViaHomebrew() async throws -> String {
         guard let brew = Self.brewExecutable() else {
             throw LocalServerError.binaryMissing(
-                "本機沒有 Homebrew。請先安裝：https://brew.sh  之後再回來按「安裝 llama-server」。"
+                String(localized: "本機沒有 Homebrew。請先安裝：https://brew.sh  之後再回來按「安裝 llama-server」。")
             )
         }
         status = .starting
@@ -302,7 +302,7 @@ final class LocalLlamaServerManager {
         do {
             try proc.run()
         } catch {
-            let message = "無法執行 brew：\(error.localizedDescription)"
+            let message = String(localized: "無法執行 brew：\(error.localizedDescription)")
             status = .failed(message)
             throw LocalServerError.launchFailed(message)
         }
@@ -315,7 +315,7 @@ final class LocalLlamaServerManager {
         let stderr = String(data: err.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
         let stdout = String(data: out.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
         guard proc.terminationStatus == 0 else {
-            let message = "brew install llama.cpp 失敗（code \(proc.terminationStatus)）。\n\(stderr.isEmpty ? stdout : stderr)"
+            let message = String(localized: "brew install llama.cpp 失敗（code \(proc.terminationStatus)）。\n\(stderr.isEmpty ? stdout : stderr)")
             status = .failed(message)
             throw LocalServerError.launchFailed(message)
         }
@@ -324,7 +324,7 @@ final class LocalLlamaServerManager {
             status = .stopped
             return path
         default:
-            let message = "brew 回報成功，但仍找不到 llama-server。請確認 `brew --prefix llama.cpp`。"
+            let message = String(localized: "brew 回報成功，但仍找不到 llama-server。請確認 `brew --prefix llama.cpp`。")
             status = .failed(message)
             throw LocalServerError.binaryMissing(message)
         }
@@ -335,11 +335,11 @@ final class LocalLlamaServerManager {
         while ContinuousClock.now < deadline {
             if await isHealthy(port: port) { return }
             if let process, !process.isRunning {
-                throw LocalServerError.launchFailed("llama-server 已結束（可能是參數錯誤或模型下載失敗）。請在終端機手動跑一次查看訊息。")
+                throw LocalServerError.launchFailed(String(localized: "llama-server 已結束（可能是參數錯誤或模型下載失敗）。請在終端機手動跑一次查看訊息。"))
             }
             try? await Task.sleep(for: .milliseconds(500))
         }
-        throw LocalServerError.timeout("等待 llama-server 就緒逾時（\(timeoutSeconds)s）。首次下載 GGUF 會較久，可先在終端機啟動一次。")
+        throw LocalServerError.timeout(String(localized: "等待 llama-server 就緒逾時（\(timeoutSeconds)s）。首次下載 GGUF 會較久，可先在終端機啟動一次。"))
     }
 
     private static func splitArgs(_ line: String) -> [String] {

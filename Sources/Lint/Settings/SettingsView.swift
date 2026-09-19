@@ -8,7 +8,7 @@ private enum SettingsPane: String, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
-    var title: String {
+    var title: LocalizedStringKey {
         switch self {
         case .general: "一般"
         case .model: "模型"

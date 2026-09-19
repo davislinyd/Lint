@@ -58,11 +58,11 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private func rebuild() {
         menu.removeAllItems()
 
-        let run = NSMenuItem(title: "改善選取文字", action: #selector(runCapture), keyEquivalent: "")
+        let run = NSMenuItem(title: String(localized: "改善選取文字"), action: #selector(runCapture), keyEquivalent: "")
         run.target = self
         menu.addItem(run)
 
-        let modeMenu = NSMenu(title: "模式")
+        let modeMenu = NSMenu(title: String(localized: "模式"))
         for mode in WritingMode.allCases {
             let item = NSMenuItem(title: mode.title, action: #selector(selectMode(_:)), keyEquivalent: "")
             item.target = self
@@ -70,24 +70,24 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             item.state = app.settings.lastMode == mode ? .on : .off
             modeMenu.addItem(item)
         }
-        let modeRoot = NSMenuItem(title: "模式", action: nil, keyEquivalent: "")
+        let modeRoot = NSMenuItem(title: String(localized: "模式"), action: nil, keyEquivalent: "")
         menu.addItem(modeRoot)
         menu.setSubmenu(modeMenu, for: modeRoot)
 
         menu.addItem(.separator())
 
         if app.accessibilityTrusted {
-            let status = NSMenuItem(title: "輔助功能：已授權", action: nil, keyEquivalent: "")
+            let status = NSMenuItem(title: String(localized: "輔助功能：已授權"), action: nil, keyEquivalent: "")
             status.isEnabled = false
             menu.addItem(status)
         } else {
-            let status = NSMenuItem(title: "輔助功能：未授權（剪貼簿備援）", action: nil, keyEquivalent: "")
+            let status = NSMenuItem(title: String(localized: "輔助功能：未授權（剪貼簿備援）"), action: nil, keyEquivalent: "")
             status.isEnabled = false
             menu.addItem(status)
-            let prompt = NSMenuItem(title: "授權輔助功能…", action: #selector(promptAccess), keyEquivalent: "")
+            let prompt = NSMenuItem(title: String(localized: "授權輔助功能…"), action: #selector(promptAccess), keyEquivalent: "")
             prompt.target = self
             menu.addItem(prompt)
-            let open = NSMenuItem(title: "打開系統設定", action: #selector(openAccessSettings), keyEquivalent: "")
+            let open = NSMenuItem(title: String(localized: "打開系統設定"), action: #selector(openAccessSettings), keyEquivalent: "")
             open.target = self
             menu.addItem(open)
         }
@@ -96,10 +96,10 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         let version = NSMenuItem(title: "Lint \(AppVersion.display)", action: nil, keyEquivalent: "")
         version.isEnabled = false
         menu.addItem(version)
-        let settings = NSMenuItem(title: "設定…", action: #selector(openSettings), keyEquivalent: ",")
+        let settings = NSMenuItem(title: String(localized: "設定…"), action: #selector(openSettings), keyEquivalent: ",")
         settings.target = self
         menu.addItem(settings)
-        let quitItem = NSMenuItem(title: "結束 Lint", action: #selector(quit), keyEquivalent: "q")
+        let quitItem = NSMenuItem(title: String(localized: "結束 Lint"), action: #selector(quit), keyEquivalent: "q")
         quitItem.target = self
         menu.addItem(quitItem)
     }

@@ -184,7 +184,7 @@ final class TextCaptureService {
 
     /// Replace previously captured selection. Returns error message or nil on success.
     func replaceLast(with newText: String) async -> String? {
-        guard let last = lastCapture else { return "沒有可覆蓋的選取" }
+        guard let last = lastCapture else { return String(localized: "沒有可覆蓋的選取") }
         Self.log("replace start originalCount=\(last.text.count) newCount=\(newText.count) hasAX=\(last.axElement != nil) range=\(String(describing: last.selectedRange)) pid=\(String(describing: last.sourceAppPID))")
 
         // Always bring source app forward first — we likely stole focus for the bubble.

@@ -156,7 +156,7 @@ struct LocalServerSection: View {
         guard let folder = LocalLlamaServerManager.modelFolder(
             hfModel: hf.isEmpty ? SettingsStore.defaultLocalHFModel : hf
         ) else {
-            serverMessage = "找不到模型資料夾，模型可能尚未下載"
+            serverMessage = String(localized: "找不到模型資料夾，模型可能尚未下載")
             return
         }
         NSWorkspace.shared.open(folder)
@@ -168,7 +168,7 @@ struct LocalServerSection: View {
         await LocalLlamaServerManager.shared.refreshStatus(port: port)
         serverStatus = LocalLlamaServerManager.shared.status
         if showFeedback {
-            serverMessage = "已重新檢查：\(statusLabel(serverStatus))"
+            serverMessage = String(localized: "已重新檢查：\(statusLabel(serverStatus))")
         }
     }
 
@@ -191,12 +191,12 @@ struct LocalServerSection: View {
             localServerBusy = false
             busyLabel = nil
         }
-        busyLabel = "重新啟動中…"
-        serverMessage = "正在套用目前參數並重新啟動…"
+        busyLabel = String(localized: "重新啟動中…")
+        serverMessage = String(localized: "正在套用目前參數並重新啟動…")
         do {
             try await LocalLlamaServerManager.shared.restart(settings: app.settings)
             serverStatus = LocalLlamaServerManager.shared.status
-            serverMessage = "已重新啟動，目前參數已生效"
+            serverMessage = String(localized: "已重新啟動，目前參數已生效")
         } catch {
             serverStatus = .failed(error.localizedDescription)
             serverMessage = error.localizedDescription
@@ -217,12 +217,12 @@ struct LocalServerSection: View {
             localServerBusy = false
             busyLabel = nil
         }
-        busyLabel = "正在 brew install llama.cpp…"
+        busyLabel = String(localized: "正在 brew install llama.cpp…")
         do {
             let path = try await LocalLlamaServerManager.shared.installViaHomebrew()
             app.settings.localServerBinaryPath = path
             binaryState = .found(path: path)
-            serverMessage = "llama-server 已安裝"
+            serverMessage = String(localized: "llama-server 已安裝")
             await refreshLocalServerStatus()
         } catch {
             serverMessage = error.localizedDescription
@@ -236,14 +236,14 @@ struct LocalServerSection: View {
             localServerBusy = false
             busyLabel = nil
         }
-        busyLabel = "啟動中…"
+        busyLabel = String(localized: "啟動中…")
         do {
             let launched = try await LocalLlamaServerManager.shared.start(settings: app.settings)
             serverStatus = LocalLlamaServerManager.shared.status
             if launched {
-                serverMessage = "已用目前參數啟動本機 llama-server"
+                serverMessage = String(localized: "已用目前參數啟動本機 llama-server")
             } else {
-                serverMessage = "埠上已有服務在跑，未重新啟動。若剛改參數，請按「重新啟動」。"
+                serverMessage = String(localized: "埠上已有服務在跑，未重新啟動。若剛改參數，請按「重新啟動」。")
             }
         } catch {
             serverStatus = .failed(error.localizedDescription)
@@ -254,11 +254,11 @@ struct LocalServerSection: View {
     private func statusLabel(_ status: LocalLlamaServerManager.Status) -> String {
         switch status {
         case .stopped:
-            return "未運行"
+            return String(localized: "未運行")
         case .starting:
-            return "啟動中（首次下載模型會較久）…"
+            return String(localized: "啟動中（首次下載模型會較久）…")
         case .running(_, let managed):
-            return managed ? "運行中（由 Lint 管理）" : "運行中（外部已啟動）"
+            return managed ? String(localized: "運行中（由 Lint 管理）") : String(localized: "運行中（外部已啟動）")
         case .failed(let message):
             return message
         }

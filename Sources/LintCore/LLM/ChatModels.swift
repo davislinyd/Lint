@@ -13,11 +13,11 @@ public enum ProviderKind: String, Codable, CaseIterable, Sendable, Identifiable 
     public var title: String {
         switch self {
         case .openai: "OpenAI"
-        case .localLlama: "本機 llama.cpp（由 Lint 管理）"
-        case .openaiCompatible: "OpenAI 相容端點（Ollama / LM Studio / 自訂）"
+        case .localLlama: String(localized: "本機 llama.cpp（由 Lint 管理）")
+        case .openaiCompatible: String(localized: "OpenAI 相容端點（Ollama / LM Studio / 自訂）")
         case .anthropic: "Anthropic"
         case .gemini: "Google Gemini"
-        case .chatgptAccount: "ChatGPT（Plus／Pro 登入）"
+        case .chatgptAccount: String(localized: "ChatGPT（Plus／Pro 登入）")
         }
     }
 
@@ -75,8 +75,8 @@ public enum ProviderKind: String, Codable, CaseIterable, Sendable, Identifiable 
     public var pickerLabel: String {
         if isEnabled { return title }
         switch self {
-        case .chatgptAccount: return "\(title)（暫時關閉）"
-        default: return "\(title)（尚未測試）"
+        case .chatgptAccount: return String(localized: "\(title)（暫時關閉）")
+        default: return String(localized: "\(title)（尚未測試）")
         }
     }
 }
@@ -92,7 +92,7 @@ public enum ChatGPTModelOption: String, CaseIterable, Sendable, Identifiable {
 
     public var title: String {
         switch self {
-        case .luna: "GPT-5.6 Luna（預設）"
+        case .luna: String(localized: "GPT-5.6 Luna（預設）")
         case .terra: "GPT-5.6 Terra"
         case .sol: "GPT-5.6 Sol"
         case .auto: "Auto"
@@ -113,9 +113,9 @@ public enum ReasoningEffort: String, Codable, CaseIterable, Sendable, Identifiab
 
     public var title: String {
         switch self {
-        case .low: "Low（較快）"
+        case .low: String(localized: "Low（較快）")
         case .medium: "Medium"
-        case .high: "High（較慢）"
+        case .high: String(localized: "High（較慢）")
         }
     }
 }
@@ -157,15 +157,15 @@ public enum LLMError: Error, LocalizedError, Sendable {
     public var errorDescription: String? {
         switch self {
         case .invalidURL:
-            "API URL 無效"
+            String(localized: "API URL 無效")
         case .emptyAPIKey:
-            "尚未設定 API Key"
+            String(localized: "尚未設定 API Key")
         case .notLoggedInToChatGPT:
-            "請先在設定中登入 ChatGPT（Plus／Pro）"
+            String(localized: "請先在設定中登入 ChatGPT（Plus／Pro）")
         case .httpStatus(let code, let body):
-            "HTTP \(code)：\(body)"
+            String(localized: "HTTP \(code)：\(body)")
         case .decoding:
-            "無法解析模型回應"
+            String(localized: "無法解析模型回應")
         }
     }
 }

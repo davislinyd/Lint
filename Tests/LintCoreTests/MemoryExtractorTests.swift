@@ -14,12 +14,8 @@ final class MemoryExtractorTests: XCTestCase {
         )
     }
 
-    private func extract(
-        _ action: FeedbackAction,
-        _ feedback: LearningFeedback,
-        storeExamples: Bool = false
-    ) -> [MemoryCandidate] {
-        MemoryExtractor(storeExamples: storeExamples).candidates(from: feedback, action: action)
+    private func extract(_ action: FeedbackAction, _ feedback: LearningFeedback) -> [MemoryCandidate] {
+        MemoryExtractor().candidates(from: feedback, action: action)
     }
 
     private func keys(_ candidates: [MemoryCandidate]) -> [String] {
@@ -38,8 +34,6 @@ final class MemoryExtractorTests: XCTestCase {
         XCTAssertEqual(memory.kind, .grammar)
         XCTAssertEqual(memory.triggers, ["discuss about"])
         XCTAssertNil(memory.modeScope)
-        XCTAssertNil(memory.negativeExample)
-        XCTAssertNil(memory.preferredExample)
         let stored = [memory.instruction] + memory.triggers
         XCTAssertFalse(stored.contains { $0.contains("think we need") }, "the sentence must not be kept")
     }
@@ -370,29 +364,36 @@ final class MemoryExtractorTests: XCTestCase {
         )
     }
 
-    // MARK: examples
+    // MARK: typography
 
-    func testExamplesAreOnlyKeptWhenAskedForAndWhenTheirContextIsSafe() throws {
-        let sample = feedback(
-            original: "From my prospective I think we should wait.",
-            generated: "From my perspective I think we should wait."
-        )
-        XCTAssertNil(try XCTUnwrap(extract(.accepted, sample).first).negativeExample)
+    func testSwitchingApostropheStyleIsNoHabit() {
+        let found = extract(.accepted, feedback(
+            original: "We don’t know why it can’t work.", generated: "We don't know why it can't work."
+        ))
+        XCTAssertTrue(found.isEmpty, "a model straightening quotes is not the user's spelling")
+    }
 
-        let withExamples = try XCTUnwrap(extract(.accepted, sample, storeExamples: true).first)
-        XCTAssertEqual(withExamples.negativeExample, "From my prospective I think")
-        XCTAssertEqual(withExamples.preferredExample, "From my perspective I think")
-
-        let risky = feedback(
-            original: "From my prospective on 2026 we should wait.",
-            generated: "From my perspective on 2026 we should wait."
-        )
-        let riskyFound = try XCTUnwrap(extract(.accepted, risky, storeExamples: true).first)
-        XCTAssertNil(riskyFound.negativeExample, "a number in the surrounding words keeps the example out")
-        XCTAssertEqual(riskyFound.dedupKey, "spelling:en:prospective>perspective", "the memory itself is still learned")
+    func testAKeyWritesTheApostropheTheSameWhicheverWayItWasTyped() throws {
+        let found = extract(.editedAndAccepted, feedback(
+            original: "I think we dont know.", generated: "I think we dont know.", final: "I think we don’t know."
+        ))
+        XCTAssertEqual(keys(found), ["spelling:en:dont>don't"])
+        XCTAssertTrue(try XCTUnwrap(found.first).instruction.contains("don't"))
     }
 
     // MARK: safety of what is stored
+
+    func testWordsAroundAnEditAreNeverStored() throws {
+        let found = try XCTUnwrap(extract(.accepted, feedback(
+            original: "From my prospective on 2026 we should wait.",
+            generated: "From my perspective on 2026 we should wait."
+        )).first)
+        XCTAssertEqual(found.dedupKey, "spelling:en:prospective>perspective")
+        let stored = ([found.dedupKey, found.instruction] + found.triggers).joined(separator: " ")
+        for word in ["2026", "should", "wait", "From my"] {
+            XCTAssertFalse(stored.contains(word), "\(word) is not part of the pattern")
+        }
+    }
 
     func testStoredTextOnlyHasSafeCharactersAndIsShort() {
         let samples = [
@@ -401,7 +402,7 @@ final class MemoryExtractorTests: XCTestCase {
             feedback(original: "I have meeting.", generated: "I have a meeting."),
         ]
         for sample in samples {
-            for memory in extract(.accepted, sample, storeExamples: true) {
+            for memory in extract(.accepted, sample) {
                 XCTAssertLessThanOrEqual(memory.instruction.count, 200)
                 for trigger in memory.triggers {
                     XCTAssertLessThanOrEqual(trigger.count, MemorySanitizer.maxPhraseLength)

@@ -7,7 +7,7 @@ final class PromptComposerTests: XCTestCase {
     private func memory(_ instruction: String) -> WritingMemory {
         WritingMemory(
             id: UUID(), dedupKey: "k-\(UUID().uuidString)", kind: .grammar, language: "en", modeScope: nil,
-            triggers: [], instruction: instruction, negativeExample: nil, preferredExample: nil,
+            triggers: [], instruction: instruction,
             evidenceScore: 1.2, occurrenceCount: 3, state: .active, userEdited: false,
             createdAt: Date(timeIntervalSince1970: 0), lastConfirmedAt: Date(timeIntervalSince1970: 0)
         )

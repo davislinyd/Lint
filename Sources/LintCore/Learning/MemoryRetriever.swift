@@ -52,7 +52,9 @@ struct MemoryRetriever: Sendable {
             .map { memory in
                 Entry(
                     memory: memory,
-                    latinTriggers: memory.triggers.filter { !$0.isEmpty && !$0.unicodeScalars.contains(where: Script.isCJK) },
+                    latinTriggers: memory.triggers
+                        .filter { !$0.isEmpty && !$0.unicodeScalars.contains(where: Script.isCJK) }
+                        .map(WordToken.key(of:)),
                     cjkTriggers: memory.triggers.filter { $0.unicodeScalars.contains(where: Script.isCJK) }
                 )
             }
@@ -140,7 +142,7 @@ struct MemoryRetriever: Sendable {
         tokenizer.string = text
         var words: [String] = []
         tokenizer.enumerateTokens(in: text.startIndex..<text.endIndex) { range, _ in
-            words.append(text[range].lowercased())
+            words.append(WordToken.key(of: String(text[range])))
             return true
         }
         var grams = Set<String>()

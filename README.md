@@ -63,7 +63,7 @@ Proofreading and polishing, formal / concise / professional tone, translation, c
 With **Settings → Learning** turned on, Lint notices writing habits you keep correcting (a word you often misspell, an article you often drop) and remembers them as short rules. While it is off, Lint behaves exactly as before. The few memories that fit what you are writing (at most five short lines) are added to the end of the prompt sent to your model; with a local model that stays on your Mac.
 
 - Everything stays on your Mac, in `~/Library/Application Support/Lint/LintLearning.sqlite` (readable only by you).
-- Only abstracted rules are kept: a word, a short phrase or a template sentence, never your text. Words that look like names, numbers, addresses, paths or acronyms are left out. A short stretch of surrounding words is kept only if you turn on "Keep example snippets".
+- Only abstracted rules are kept: a word, a short phrase or a template sentence, never the text around it. Numbers, addresses, paths, acronyms and capitalised names are left out. Lint cannot recognise Chinese names or names typed in lowercase, so a name you corrected can still end up in a memory; you can read and delete every memory under Settings → Learning → Manage Memories.
 - What you did with a suggestion (replace, copy, rewrite) is logged as keyed hashes, not text; the key is in the Keychain.
 - Memories fade when the pattern stops showing up: after a month without it the evidence halves every three months, so a memory first drops out of the prompt and is eventually archived (never deleted). Pinned and disabled memories do not fade, and Enable brings an archived one back.
 - Under Settings → Learning → Manage Memories you can read, reword, pin, disable or delete every memory, clear them all, or reset the whole database.
@@ -139,7 +139,7 @@ chmod +x Scripts/*.sh
 在「設定 → 學習」開啟後，Lint 會留意你反覆修正的寫作習慣（常拼錯的字、常漏掉的冠詞），記成簡短的規則。關閉時，Lint 的行為與以前完全相同。符合你正在寫的內容的少數記憶（最多五行短句）會加在送給模型的 prompt 結尾；使用本機模型時，這些都留在你的 Mac 上。
 
 - 全部只存在你的 Mac：`~/Library/Application Support/Lint/LintLearning.sqlite`（僅你本人可讀）。
-- 只保存抽象後的規則（一個字、一小段詞組或模板句），不保存你的文字。疑似人名、數字、網址、路徑或縮寫的詞不會被記下。只有開啟「儲存範例句」才會附上一小段前後文。
+- 只保存抽象後的規則（一個字、一小段詞組或模板句），不保存周圍的文字。數字、網址、路徑、縮寫與大寫開頭的人名不會被記下。Lint 認不出中文人名或全小寫的英文名，被你修正過的名字仍可能進入記憶；可在「設定 → 學習 → 管理記憶」查看並刪除。
 - 你對建議做了什麼（取代、複製、重寫）只以帶金鑰的雜湊記錄，不含文字；金鑰放在鑰匙圈。
 - 太久沒再出現的記憶會淡出：超過一個月沒出現後，證據每三個月減半，先退出 prompt，最後被封存（不會刪除）。已釘選與已停用的記憶不會淡出，按「啟用」可把封存的記憶還原。
 - 在「設定 → 學習 → 管理記憶」可以查看、改寫、釘選、停用或刪除每一條記憶，也能全部清除或重設整個資料庫。

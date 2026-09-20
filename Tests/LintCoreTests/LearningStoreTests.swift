@@ -1,3 +1,4 @@
+import GRDB
 import XCTest
 @testable import LintCore
 
@@ -23,8 +24,6 @@ final class LearningStoreTests: XCTestCase {
             modeScope: modeScope,
             triggers: ["prospective"],
             instruction: "Check whether \"perspective\" was meant.",
-            negativeExample: nil,
-            preferredExample: "perspective",
             evidenceScore: 0.35,
             occurrenceCount: 2,
             state: state,
@@ -242,6 +241,40 @@ final class LearningStoreTests: XCTestCase {
         let reopened = try SQLiteLearningStore(url: url)
         let loaded = try await reopened.memory(id: saved.id)
         XCTAssertEqual(loaded, saved)
+    }
+
+    func testOpeningAnOlderDatabaseScrubsTheExampleSnippetsFromTheFile() async throws {
+        let url = try makeTempDirectory().appendingPathComponent("LintLearning.sqlite")
+        // A database as the first version left it: the snippet columns exist and hold stretches of text.
+        do {
+            let queue = try DatabaseQueue(path: url.path)
+            try SQLiteLearningStore.migrator.migrate(queue, upTo: "v1_learning")
+            try await queue.write { db in
+                for index in 0..<300 {
+                    try db.execute(
+                        sql: """
+                        INSERT INTO writing_memory (id, dedup_key, kind, language, triggers, instruction,
+                            negative_example, preferred_example, evidence_score, occurrence_count, state,
+                            user_edited, created_at, last_confirmed_at)
+                        VALUES (?, ?, 'spelling', 'en', '["teh"]', 'Check the word.',
+                            'quokka roster teh', 'quokka roster the', 1.2, 3, 'active', 0, 1700000000, 1700000500)
+                        """,
+                        arguments: [UUID().uuidString, "spelling:en:teh\(index)>the"]
+                    )
+                }
+            }
+        }
+        let before = try Data(contentsOf: url)
+        XCTAssertNotNil(before.range(of: Data("quokka".utf8)), "sanity: the snippets are in the file")
+
+        let store = try SQLiteLearningStore(url: url)
+
+        let memories = try await store.memories()
+        XCTAssertEqual(memories.count, 300)
+        XCTAssertEqual(memories.first?.triggers, ["teh"])
+        XCTAssertEqual(memories.first?.evidenceScore, 1.2)
+        let after = try Data(contentsOf: url)
+        XCTAssertNil(after.range(of: Data("quokka".utf8)), "and gone from the file itself")
     }
 
     func testFileIsOwnerOnly() throws {

@@ -23,8 +23,6 @@ enum MemoryLifecycle {
             modeScope: candidate.modeScope,
             triggers: [],
             instruction: candidate.instruction,
-            negativeExample: nil,
-            preferredExample: nil,
             evidenceScore: 0,
             occurrenceCount: 0,
             state: .candidate,
@@ -37,8 +35,6 @@ enum MemoryLifecycle {
         memory.lastConfirmedAt = now
         // A phrase seen in the user's own text is a trigger, even if it was first seen elsewhere.
         if memory.triggers.isEmpty { memory.triggers = candidate.triggers }
-        if memory.negativeExample == nil { memory.negativeExample = candidate.negativeExample }
-        if memory.preferredExample == nil { memory.preferredExample = candidate.preferredExample }
         if memory.state == .archived { memory.state = .candidate }
         if memory.state == .candidate {
             memory.state = restingState(evidenceScore: memory.evidenceScore)

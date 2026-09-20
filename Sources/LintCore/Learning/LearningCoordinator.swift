@@ -69,7 +69,7 @@ public actor LearningCoordinator {
             )
             // A repeat of the same feedback is not new evidence.
             if inserted {
-                await learn(from: feedback, action: event.action, config: config, at: event.createdAt, store: store)
+                await learn(from: feedback, action: event.action, at: event.createdAt, store: store)
             }
         } catch {
             NSLog("Lint learning: could not record feedback: \(error.localizedDescription)")
@@ -222,13 +222,12 @@ public actor LearningCoordinator {
     private func learn(
         from feedback: LearningFeedback,
         action: FeedbackAction,
-        config: LearningConfig,
         at now: Date,
         store: any LearningStore
     ) async {
         let weight = LearningPolicy.evidenceWeight(for: action)
         guard weight > 0 else { return }
-        let extractor = MemoryExtractor(storeExamples: config.storeExamples)
+        let extractor = MemoryExtractor()
         let injected = await injectedKeys(feedback.usedMemoryIDs, store: store)
         let extraction = extractor.extraction(from: feedback, action: action, injected: injected)
         let against = LearningPolicy.contradictionWeight(for: action)

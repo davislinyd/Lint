@@ -41,7 +41,7 @@ struct SQLiteLearningStore: LearningStore {
         try Self.migrator.migrate(dbQueue)
     }
 
-    private static var migrator: DatabaseMigrator {
+    static var migrator: DatabaseMigrator {
         var migrator = DatabaseMigrator()
         migrator.registerMigration("v1_learning") { db in
             try db.create(table: "writing_memory") { t in
@@ -72,6 +72,15 @@ struct SQLiteLearningStore: LearningStore {
                 t.column("provider", .text).notNull()
                 t.column("model", .text).notNull()
                 t.column("used_memory_ids", .text).notNull()
+            }
+        }
+        // Memories once kept a short stretch of the user's own words as an example. Nothing ever used
+        // them, so they are gone. Dropping the columns rewrites the rows, and the old snippets leave
+        // the file with them (`LearningStoreTests` checks the bytes).
+        migrator.registerMigration("v2_drop_examples") { db in
+            try db.alter(table: "writing_memory") { t in
+                t.drop(column: "negative_example")
+                t.drop(column: "preferred_example")
             }
         }
         return migrator
@@ -244,8 +253,6 @@ private struct MemoryRecord: FetchableRecord, PersistableRecord {
             modeScope: scope,
             triggers: try JSONDecoder().decode([String].self, from: Data(triggers.utf8)),
             instruction: row["instruction"],
-            negativeExample: row["negative_example"],
-            preferredExample: row["preferred_example"],
             evidenceScore: row["evidence_score"],
             occurrenceCount: row["occurrence_count"],
             state: state,
@@ -263,8 +270,6 @@ private struct MemoryRecord: FetchableRecord, PersistableRecord {
         container["mode_scope"] = memory.modeScope?.rawValue
         container["triggers"] = String(decoding: try JSONEncoder().encode(memory.triggers), as: UTF8.self)
         container["instruction"] = memory.instruction
-        container["negative_example"] = memory.negativeExample
-        container["preferred_example"] = memory.preferredExample
         container["evidence_score"] = memory.evidenceScore
         container["occurrence_count"] = memory.occurrenceCount
         container["state"] = memory.state.rawValue

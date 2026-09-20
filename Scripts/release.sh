@@ -1,6 +1,7 @@
 #!/bin/bash
-# Build, sign, notarize and package Lint as a Developer ID DMG. Runs on a Mac, locally or in
-# GitHub Actions (.github/workflows/release.yml); it does not create the GitHub Release.
+# Build, sign, notarize and package Lint as a Developer ID DMG (or, with LINT_PREVIEW_BUILD=1, an
+# unsigned preview). Runs on a Mac, locally or in GitHub Actions (.github/workflows/release.yml and
+# ci.yml); it does not create the GitHub Release.
 #
 # Environment (optional unless noted):
 #   LINT_RELEASE_TAG       vX.Y.Z; must match CFBundleShortVersionString in Resources/Info.plist.
@@ -12,6 +13,9 @@
 #                          App Store Connect Team API key for notarytool (required unless skipping).
 #   LINT_SKIP_NOTARIZE=1   Packaging-only dry run: nothing is sent to Apple and the DMG is named
 #                          "...-unnotarized.dmg" so it cannot be mistaken for a release.
+#   LINT_PREVIEW_BUILD=1   Unsigned preview for when no Developer ID exists: ad-hoc signature (with Hardened
+#                          Runtime), no Apple services, DMG named "...-preview.dmg". macOS warns on first open
+#                          and the Accessibility permission must be granted again after every update. Not a release.
 #
 # Output: dist/release/ (Lint.app, the DMG, its .sha256 and notarization.json).
 set -euo pipefail
@@ -29,6 +33,16 @@ case "${LINT_SKIP_NOTARIZE:-}" in
   1) SKIP_NOTARIZE=1 ;;
   *) echo "error: LINT_SKIP_NOTARIZE must be 1 or unset, got '$LINT_SKIP_NOTARIZE'" >&2; exit 1 ;;
 esac
+
+case "${LINT_PREVIEW_BUILD:-}" in
+  ''|0) PREVIEW= ;;
+  1) PREVIEW=1 ;;
+  *) echo "error: LINT_PREVIEW_BUILD must be 1 or unset, got '$LINT_PREVIEW_BUILD'" >&2; exit 1 ;;
+esac
+if [ -n "$PREVIEW" ]; then
+  [ -z "$SKIP_NOTARIZE" ] || { echo "error: LINT_PREVIEW_BUILD and LINT_SKIP_NOTARIZE are separate dry runs; set only one" >&2; exit 1; }
+  SKIP_NOTARIZE=1 # a preview never uses Apple's services
+fi
 
 VERSION=""; IDENTITY=""; IDENTITY_NAME=""; ARCH=""; DMG=""
 WORK=""     # scratch directory, removed on exit
@@ -130,12 +144,20 @@ resolve_identity() {
 build_app() {
   rm -rf "$OUT"
   mkdir -p "$OUT"
-  LINT_RELEASE_BUILD=1 LINT_DIST_DIR="$OUT" CODESIGN_IDENTITY="$IDENTITY" ./Scripts/package-app.sh release >/dev/null
+  if [ -n "$PREVIEW" ]; then
+    # LINT_RELEASE_BUILD=0 keeps a stray value in the environment from switching package-app.sh to its
+    # strict Developer ID mode. The second signature only adds Hardened Runtime, so the preview
+    # runs under the same restrictions as a release.
+    LINT_RELEASE_BUILD=0 LINT_DIST_DIR="$OUT" CODESIGN_IDENTITY=- ./Scripts/package-app.sh release >/dev/null
+    codesign --force --options runtime --sign - --entitlements "$ROOT/Resources/Lint.entitlements" "$APP"
+  else
+    LINT_RELEASE_BUILD=1 LINT_DIST_DIR="$OUT" CODESIGN_IDENTITY="$IDENTITY" ./Scripts/package-app.sh release >/dev/null
+  fi
   [ -d "$APP" ] || die "package-app.sh did not produce $APP"
 }
 
 detect_arch() {
-  local archs
+  local archs suffix=""
   archs=$(lipo -archs "$APP/Contents/MacOS/Lint") || die "cannot read the executable's architectures"
   case " $archs " in
     " arm64 ") ARCH=arm64 ;;
@@ -143,26 +165,33 @@ detect_arch() {
     " arm64 x86_64 "|" x86_64 arm64 ") ARCH=universal ;;
     *) die "unsupported executable architectures: '$archs'" ;;
   esac
-  DMG="$OUT/Lint-$VERSION-macOS-$ARCH${SKIP_NOTARIZE:+-unnotarized}.dmg"
+  if [ -n "$PREVIEW" ]; then suffix="-preview"; elif [ -n "$SKIP_NOTARIZE" ]; then suffix="-unnotarized"; fi
+  DMG="$OUT/Lint-$VERSION-macOS-$ARCH$suffix.dmg"
 }
 
 # Hard checks on a signed Lint.app (the build output, and again the copy inside the DMG).
 verify_app_signature() {
-  local app="$1" info first_authority team want got plist v b
+  local app="$1" info first_authority team want got plist v b who
   codesign --verify --deep --strict --verbose=2 "$app" || die "codesign verification failed for $app"
   info=$(codesign -dvv "$app" 2>&1) || die "cannot read the signature of $app"
   has "^Identifier=$BUNDLE_ID\$" "$info" || die "the signature Identifier is not $BUNDLE_ID"
-  first_authority=$(sed -n '/^Authority=/{s/^Authority=//p;q;}' <<<"$info")
-  case "$first_authority" in
-    "$IDENTITY_KIND: "*) ;;
-    *) die "signed by '$first_authority', expected a '$IDENTITY_KIND' certificate" ;;
-  esac
   has 'flags=0x[0-9a-f]+\([^)]*runtime[^)]*\)' "$info" || die "Hardened Runtime is not enabled"
-  has '^Timestamp=' "$info" || die "the signature has no secure timestamp"
-  team=$(sed -n 's/^TeamIdentifier=//p' <<<"$info")
-  case "$team" in ''|'not set') die "the signature has no TeamIdentifier" ;; esac
-  if [ -n "${APPLE_TEAM_ID:-}" ] && [ "$team" != "$APPLE_TEAM_ID" ]; then
-    die "the signature's TeamIdentifier does not match APPLE_TEAM_ID"
+  if [ -n "$PREVIEW" ]; then
+    has '^Signature=adhoc' "$info" || die "a preview build must be ad-hoc signed"
+    who="ad-hoc signature"
+  else
+    first_authority=$(sed -n '/^Authority=/{s/^Authority=//p;q;}' <<<"$info")
+    case "$first_authority" in
+      "$IDENTITY_KIND: "*) ;;
+      *) die "signed by '$first_authority', expected a '$IDENTITY_KIND' certificate" ;;
+    esac
+    has '^Timestamp=' "$info" || die "the signature has no secure timestamp"
+    team=$(sed -n 's/^TeamIdentifier=//p' <<<"$info")
+    case "$team" in ''|'not set') die "the signature has no TeamIdentifier" ;; esac
+    if [ -n "${APPLE_TEAM_ID:-}" ] && [ "$team" != "$APPLE_TEAM_ID" ]; then
+      die "the signature's TeamIdentifier does not match APPLE_TEAM_ID"
+    fi
+    who="$first_authority · team $team · secure timestamp"
   fi
 
   # Only the entitlements declared in Resources/Lint.entitlements, and never get-task-allow
@@ -179,7 +208,7 @@ verify_app_signature() {
     b=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$plist")
     [ "$b" = "$LINT_BUILD_NUMBER" ] || die "the app's CFBundleVersion is $b, expected $LINT_BUILD_NUMBER"
   fi
-  echo "   $first_authority · team $team · Hardened Runtime · secure timestamp · version $v"
+  echo "   $who · Hardened Runtime · version $v"
 }
 
 sign_dmg() {
@@ -215,8 +244,10 @@ build_dmg() {
   detach_volume "$vol" || die "cannot unmount the new disk image"
   MOUNT=""
   hdiutil convert "$rw" -format UDZO -ov -o "$DMG" >/dev/null || die "hdiutil convert failed"
-  sign_dmg || die "cannot sign the DMG"
-  codesign --verify --verbose=2 "$DMG" || die "the DMG signature does not verify"
+  if [ -z "$PREVIEW" ]; then
+    sign_dmg || die "cannot sign the DMG"
+    codesign --verify --verbose=2 "$DMG" || die "the DMG signature does not verify"
+  fi
 }
 
 notarize() {
@@ -248,7 +279,9 @@ staple() {
 # Verify what users will actually receive: the DMG, and the app inside the mounted DMG.
 final_checks() {
   hdiutil verify "$DMG" >/dev/null || die "hdiutil verify failed"
-  codesign --verify --verbose=2 "$DMG" || die "the DMG signature does not verify"
+  if [ -z "$PREVIEW" ]; then
+    codesign --verify --verbose=2 "$DMG" || die "the DMG signature does not verify"
+  fi
   MOUNT="$WORK/mnt"
   mkdir "$MOUNT"
   hdiutil attach "$DMG" -nobrowse -readonly -noautoopen -mountpoint "$MOUNT" >/dev/null || die "cannot mount the DMG"
@@ -276,11 +309,17 @@ main() {
   check_notary_inputs
   read_version
   echo "   Lint $VERSION${LINT_RELEASE_TAG:+ (tag $LINT_RELEASE_TAG)}${LINT_BUILD_NUMBER:+, build $LINT_BUILD_NUMBER}"
-  if [ -n "$SKIP_NOTARIZE" ]; then echo "   LINT_SKIP_NOTARIZE=1: packaging-only dry run, nothing is sent to Apple"; fi
+  if [ -n "$PREVIEW" ]; then
+    echo "   LINT_PREVIEW_BUILD=1: unsigned preview (ad-hoc signature), nothing is sent to Apple"
+  elif [ -n "$SKIP_NOTARIZE" ]; then
+    echo "   LINT_SKIP_NOTARIZE=1: packaging-only dry run, nothing is sent to Apple"
+  fi
 
-  log "Finding the $IDENTITY_KIND identity"
-  resolve_identity
-  echo "   $IDENTITY_NAME"
+  if [ -z "$PREVIEW" ]; then
+    log "Finding the $IDENTITY_KIND identity"
+    resolve_identity
+    echo "   $IDENTITY_NAME"
+  fi
 
   log "Building and signing Lint.app"
   build_app
@@ -309,7 +348,11 @@ main() {
   log "Done"
   echo "   $DMG"
   echo "   $DMG.sha256"
-  if [ -n "$SKIP_NOTARIZE" ]; then echo "   NOT NOTARIZED: dry run only, do not distribute this DMG"; fi
+  if [ -n "$PREVIEW" ]; then
+    echo "   PREVIEW BUILD: ad-hoc signed and not notarized, so it is not a release"
+  elif [ -n "$SKIP_NOTARIZE" ]; then
+    echo "   NOT NOTARIZED: dry run only, do not distribute this DMG"
+  fi
   if [ -n "${GITHUB_OUTPUT:-}" ]; then
     { echo "dmg=$DMG"; echo "sha256=$DMG.sha256"; } >>"$GITHUB_OUTPUT"
   fi

@@ -59,19 +59,14 @@ final class TextCaptureService {
             lastCapture = result
             return result
         }
-        if allowSelectAll {
-            if let selected = await readViaClipboard(requireChange: true) {
-                lastCapture = selected
-                return selected
-            }
-            if let whole = await readViaSelectAll() {
-                lastCapture = whole
-                return whole
-            }
+        // Never fall back to whatever was already on the clipboard: only text that ⌘C just copied counts.
+        if let selected = await readViaClipboard() {
+            lastCapture = selected
+            return selected
         }
-        if let fallback = await readViaClipboard() {
-            lastCapture = fallback
-            return fallback
+        if allowSelectAll, let whole = await readViaSelectAll() {
+            lastCapture = whole
+            return whole
         }
         return nil
     }
@@ -650,9 +645,9 @@ final class TextCaptureService {
         return false
     }
 
-    /// `requireChange`: only accept text that Cmd+C actually put on the pasteboard (a real selection),
+    /// Only accepts text that Cmd+C actually put on the pasteboard (a real selection),
     /// not whatever was already there.
-    private func readViaClipboard(requireChange: Bool = false) async -> CaptureResult? {
+    private func readViaClipboard() async -> CaptureResult? {
         let snapshot = PasteboardMemory.snapshot()
         let before = NSPasteboard.general.changeCount
         Self.postHotkey(keyCode: 8) // C
@@ -663,7 +658,7 @@ final class TextCaptureService {
         let changed = NSPasteboard.general.changeCount != before
         let text = NSPasteboard.general.string(forType: .string)
         PasteboardMemory.restore(snapshot)
-        guard changed || !requireChange,
+        guard changed,
               let text, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             return nil
         }

@@ -375,7 +375,22 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
         }
     }
 
+    /// The bubble's edit button: the suggestion on screen moves to the full panel, ready to edit,
+    /// without being captured or generated again. Same order as ⌥⌘L: the bubble goes first (which
+    /// lets the selection monitor run) and showing the panel pauses it again. The capture that
+    /// Replace writes back to, and the finished suggestion feedback compares against, both survive.
+    private func editInFullPanel() {
+        guard viewModel.canEditInFullPanel, !bubbleNonActivating else {
+            NSSound.beep()
+            return
+        }
+        dismissBubble()
+        showFull()
+        viewModel.handOffForEditing()
+    }
+
     private func refreshBubbleChrome() {
+        bubbleChrome?.offersFullPanelEdit = !bubbleNonActivating
         bubbleChrome?.apply(viewModel: viewModel)
         if let panel = bubblePanel, let chrome = bubbleChrome {
             let fitting = chrome.fittingSize
@@ -426,6 +441,24 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
             }
             replacingInProgress = false
             dismissBubble()
+        }
+    }
+
+    /// The full panel's Replace, run the way the bubble's is: the panel goes first, because Lint
+    /// cannot hand the activation back while it holds the key window, and the caret would stay in
+    /// Lint instead of returning to the field the text came from. The selection monitor stays
+    /// paused until the text is written. If writing fails the panel comes back with the message.
+    private func replaceFromFullPanel() {
+        fullPanel?.orderOut(nil)
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(40))
+            if await viewModel.replaceOriginalReturningError() != nil {
+                showFull()
+                return
+            }
+            if bubblePanel?.isVisible != true {
+                onBubbleVisibilityChange?(false)
+            }
         }
     }
 
@@ -571,7 +604,10 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         panel.standardWindowButton(.miniaturizeButton)?.isHidden = true
         panel.standardWindowButton(.zoomButton)?.isHidden = true
-        panel.contentView = NSHostingView(rootView: FloatingPanelView(viewModel: viewModel))
+        panel.contentView = NSHostingView(rootView: FloatingPanelView(
+            viewModel: viewModel,
+            onReplace: { [weak self] in self?.replaceFromFullPanel() }
+        ))
         panel.delegate = self
         panel.center()
         return panel
@@ -606,6 +642,7 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
         chrome.onRewrite = { [weak self] in
             self?.viewModel.retry()
         }
+        chrome.onEdit = { [weak self] in self?.editInFullPanel() }
         chrome.onDismiss = { [weak self] in self?.dismissBubble() }
         chrome.onDragBegan = { [weak self] in
             self?.bubbleUserDragged = true

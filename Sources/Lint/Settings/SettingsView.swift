@@ -4,6 +4,7 @@ private enum SettingsPane: String, CaseIterable, Identifiable {
     case general
     case model
     case prompts
+    case learning
     case about
 
     var id: String { rawValue }
@@ -13,6 +14,7 @@ private enum SettingsPane: String, CaseIterable, Identifiable {
         case .general: "一般"
         case .model: "模型"
         case .prompts: "提示詞"
+        case .learning: "學習"
         case .about: "關於"
         }
     }
@@ -22,6 +24,7 @@ private enum SettingsPane: String, CaseIterable, Identifiable {
         case .general: "gearshape"
         case .model: "cpu"
         case .prompts: "text.quote"
+        case .learning: "brain"
         case .about: "info.circle"
         }
     }
@@ -73,6 +76,7 @@ struct SettingsView: View {
         case .general: GeneralSettingsPane(app: app)
         case .model: ModelSettingsPane(app: app)
         case .prompts: PromptSettingsPane(app: app)
+        case .learning: LearningSettingsPane(app: app)
         case .about: AboutSettingsPane()
         }
     }

@@ -3,7 +3,16 @@ import SwiftUI
 
 struct FloatingPanelView: View {
     @Bindable var viewModel: FloatingPanelViewModel
+    /// Carried out by the controller: the panel has to be taken away before the text is written back.
+    var onReplace: () -> Void
     @FocusState private var originalFocused: Bool
+    @FocusState private var resultFocused: Bool
+    @State private var isEditingResult = false
+    /// The editor has to exist before it can take the focus, so a hand-off from the bubble that
+    /// opens it asks for the focus once it has appeared.
+    @State private var focusResultOnAppear = false
+    /// The last hand-off from the bubble this view has acted on.
+    @State private var handledEditRequest = 0
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -66,13 +75,7 @@ struct FloatingPanelView: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-                column(title: "結果") {
-                    DiffTextView(
-                        original: viewModel.originalText,
-                        result: viewModel.resultText,
-                        highlight: !viewModel.isStreaming
-                    )
-                }
+                resultColumn
             }
 
             if let usage = viewModel.lastUsage {
@@ -84,7 +87,7 @@ struct FloatingPanelView: View {
 
             HStack {
                 Button {
-                    viewModel.replaceOriginal()
+                    onReplace()
                 } label: {
                     Text("覆蓋取代") + shortcutHint("⌘⏎")
                 }
@@ -118,6 +121,28 @@ struct FloatingPanelView: View {
             if viewModel.originalText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 originalFocused = true
             }
+            // A hand-off can come before this view first renders (the panel is built once, up front).
+            openResultEditorIfRequested()
+        }
+        .onChange(of: viewModel.isStreaming) { _, streaming in
+            if streaming { isEditingResult = false }
+        }
+        // The bubble's "edit in full panel". The panel is reused, so `onAppear` alone would only catch
+        // the first time.
+        .onChange(of: viewModel.resultEditRequest) { _, _ in
+            openResultEditorIfRequested()
+        }
+    }
+
+    /// Open the result editor and put the caret in it, once per hand-off.
+    private func openResultEditorIfRequested() {
+        guard viewModel.resultEditRequest != handledEditRequest else { return }
+        handledEditRequest = viewModel.resultEditRequest
+        if isEditingResult {
+            resultFocused = true
+        } else {
+            focusResultOnAppear = true
+            isEditingResult = true
         }
     }
 
@@ -125,14 +150,44 @@ struct FloatingPanelView: View {
         Text(verbatim: " \(keys)").foregroundStyle(.secondary)
     }
 
-    private func column(title: LocalizedStringKey, @ViewBuilder content: () -> some View) -> some View {
+    /// Read-only with the changes highlighted, or editable so the user's own wording is what gets
+    /// applied (and learned from).
+    private var resultColumn: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(title)
-                .font(.headline)
-            ScrollView {
-                content().padding(8)
+            HStack {
+                Text("結果")
+                    .font(.headline)
+                Toggle("編輯", isOn: $isEditingResult)
+                    .toggleStyle(.checkbox)
+                    .controlSize(.small)
+                    .disabled(viewModel.resultText.isEmpty || viewModel.isStreaming)
+                Spacer()
             }
-            .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 8))
+            if isEditingResult {
+                TextEditor(text: $viewModel.resultText)
+                    .font(.body)
+                    .scrollContentBackground(.hidden)
+                    .padding(8)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                    .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 8))
+                    .focused($resultFocused)
+                    .onAppear {
+                        guard focusResultOnAppear else { return }
+                        focusResultOnAppear = false
+                        // Not in the responder chain yet: ask for the focus on the next turn.
+                        DispatchQueue.main.async { resultFocused = true }
+                    }
+            } else {
+                ScrollView {
+                    DiffTextView(
+                        original: viewModel.originalText,
+                        result: viewModel.resultText,
+                        highlight: !viewModel.isStreaming
+                    )
+                    .padding(8)
+                }
+                .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 8))
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }

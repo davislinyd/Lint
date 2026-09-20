@@ -1,0 +1,291 @@
+import GRDB
+import XCTest
+@testable import LintCore
+
+final class LearningStoreTests: XCTestCase {
+    private func makeTempDirectory() throws -> URL {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("LintLearningTests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        addTeardownBlock { try? FileManager.default.removeItem(at: dir) }
+        return dir
+    }
+
+    private func memory(
+        key: String = "spelling:en:prospective>perspective",
+        state: MemoryState = .candidate,
+        modeScope: WritingMode? = nil
+    ) -> WritingMemory {
+        WritingMemory(
+            id: UUID(),
+            dedupKey: key,
+            kind: .spelling,
+            language: "en",
+            modeScope: modeScope,
+            triggers: ["prospective"],
+            instruction: "Check whether \"perspective\" was meant.",
+            evidenceScore: 0.35,
+            occurrenceCount: 2,
+            state: state,
+            userEdited: false,
+            createdAt: Date(timeIntervalSince1970: 1_700_000_000),
+            lastConfirmedAt: Date(timeIntervalSince1970: 1_700_000_500)
+        )
+    }
+
+    private func event(at seconds: TimeInterval, action: FeedbackAction = .accepted) -> FeedbackEvent {
+        FeedbackEvent(
+            id: UUID(),
+            createdAt: Date(timeIntervalSince1970: seconds),
+            mode: .proofread,
+            action: action,
+            sourceHMAC: "src",
+            suggestionHMAC: "sug",
+            finalHMAC: nil,
+            provider: "localLlama",
+            model: "qwen",
+            usedMemoryIDs: [UUID()]
+        )
+    }
+
+    func testMemoryRoundTripKeepsEveryField() async throws {
+        let store = try SQLiteLearningStore(url: nil)
+        let saved = memory(modeScope: .translate)
+        try await store.saveMemory(saved)
+        let loaded = try await store.memory(id: saved.id)
+        XCTAssertEqual(loaded, saved)
+        let byKey = try await store.memory(dedupKey: saved.dedupKey)
+        XCTAssertEqual(byKey, saved)
+    }
+
+    func testSavingSameIDUpdatesInsteadOfDuplicating() async throws {
+        let store = try SQLiteLearningStore(url: nil)
+        var saved = memory()
+        try await store.saveMemory(saved)
+        saved.evidenceScore = 1.05
+        saved.state = .active
+        try await store.saveMemory(saved)
+        let all = try await store.memories()
+        XCTAssertEqual(all, [saved])
+    }
+
+    func testDedupKeyIsUniqueAcrossDifferentIDs() async throws {
+        let store = try SQLiteLearningStore(url: nil)
+        try await store.saveMemory(memory())
+        do {
+            try await store.saveMemory(memory())
+            XCTFail("second memory with the same dedupKey should be rejected")
+        } catch {}
+        let count = try await store.memories().count
+        XCTAssertEqual(count, 1)
+    }
+
+    func testDeleteMemory() async throws {
+        let store = try SQLiteLearningStore(url: nil)
+        let kept = memory(key: "grammar:en:articles")
+        let dropped = memory()
+        try await store.saveMemory(kept)
+        try await store.saveMemory(dropped)
+        try await store.deleteMemory(id: dropped.id)
+        let remaining = try await store.memories()
+        XCTAssertEqual(remaining, [kept])
+    }
+
+    func testMergeMemoryInsertsThenSeesTheExistingRow() async throws {
+        let store = try SQLiteLearningStore(url: nil)
+        let base = memory()
+        try await store.mergeMemory(dedupKey: base.dedupKey) { existing in
+            XCTAssertNil(existing)
+            return base
+        }
+        try await store.mergeMemory(dedupKey: base.dedupKey) { existing in
+            var updated = existing ?? base
+            XCTAssertEqual(existing, base)
+            updated.occurrenceCount += 1
+            return updated
+        }
+        let all = try await store.memories()
+        XCTAssertEqual(all.count, 1)
+        XCTAssertEqual(all.first?.occurrenceCount, base.occurrenceCount + 1)
+    }
+
+    func testUpdateMemoryChangesOneRowAndIgnoresAMissingOne() async throws {
+        let store = try SQLiteLearningStore(url: nil)
+        let target = memory(key: "a")
+        let other = memory(key: "b")
+        try await store.saveMemory(target)
+        try await store.saveMemory(other)
+        try await store.updateMemory(id: target.id) { $0.state = .pinned }
+        try await store.updateMemory(id: UUID()) { $0.state = .disabled }
+        let pinned = try await store.memory(id: target.id)
+        let untouched = try await store.memory(id: other.id)
+        XCTAssertEqual(pinned?.state, .pinned)
+        XCTAssertEqual(untouched, other)
+    }
+
+    func testUpdateMemoryByKeyChangesOnlyThatMemoryAndIgnoresAMissingKey() async throws {
+        let store = try SQLiteLearningStore(url: nil)
+        let target = memory(key: "spelling:en:a>b")
+        let other = memory(key: "spelling:en:b>a")
+        try await store.saveMemory(target)
+        try await store.saveMemory(other)
+        try await store.updateMemory(dedupKey: "spelling:en:a>b") { $0.evidenceScore = 0.1 }
+        try await store.updateMemory(dedupKey: "spelling:en:missing>key") { $0.evidenceScore = 99 }
+        let changed = try await store.memory(dedupKey: "spelling:en:a>b")
+        let untouched = try await store.memory(dedupKey: "spelling:en:b>a")
+        XCTAssertEqual(changed?.evidenceScore, 0.1)
+        XCTAssertEqual(untouched, other)
+        let count = try await store.memories().count
+        XCTAssertEqual(count, 2, "nothing was created")
+    }
+
+    func testDeleteAllMemoriesKeepsEvents() async throws {
+        let store = try SQLiteLearningStore(url: nil)
+        try await store.saveMemory(memory(key: "a"))
+        try await store.saveMemory(memory(key: "b"))
+        try await store.insertEvent(event(at: 1), unlessDuplicateWithin: nil)
+        try await store.deleteAllMemories()
+        let stats = try await store.stats()
+        XCTAssertEqual(stats.memoriesByState, [:])
+        XCTAssertEqual(stats.eventCount, 1)
+    }
+
+    func testInsertEventsAndCount() async throws {
+        let store = try SQLiteLearningStore(url: nil)
+        try await store.insertEvent(event(at: 1), unlessDuplicateWithin: nil)
+        try await store.insertEvent(event(at: 2, action: .editedAndAccepted), unlessDuplicateWithin: nil)
+        let count = try await store.eventCount()
+        XCTAssertEqual(count, 2)
+    }
+
+    func testDuplicateWithinWindowIsSkippedAndLaterOneIsKept() async throws {
+        let store = try SQLiteLearningStore(url: nil)
+        let hour: TimeInterval = 3_600
+        let window = 24 * hour
+        let first = try await store.insertEvent(event(at: 0), unlessDuplicateWithin: window)
+        let sameDay = try await store.insertEvent(event(at: 12 * hour), unlessDuplicateWithin: window)
+        let nextDay = try await store.insertEvent(event(at: 30 * hour), unlessDuplicateWithin: window)
+        XCTAssertTrue(first)
+        XCTAssertFalse(sameDay, "same source, action and (empty) final text within 24 h")
+        XCTAssertTrue(nextDay)
+        let count = try await store.eventCount()
+        XCTAssertEqual(count, 2)
+    }
+
+    func testDedupeKeepsDifferentActionsAndFinalTexts() async throws {
+        let store = try SQLiteLearningStore(url: nil)
+        let window: TimeInterval = 24 * 3_600
+        var edited = event(at: 0, action: .editedAndAccepted)
+        edited.finalHMAC = "final-a"
+        var otherFinal = event(at: 60, action: .editedAndAccepted)
+        otherFinal.finalHMAC = "final-b"
+        var otherAction = event(at: 120, action: .accepted)
+        otherAction.finalHMAC = "final-a"
+        var repeatedEdit = event(at: 180, action: .editedAndAccepted)
+        repeatedEdit.finalHMAC = "final-a"
+
+        let results = [
+            try await store.insertEvent(edited, unlessDuplicateWithin: window),
+            try await store.insertEvent(otherFinal, unlessDuplicateWithin: window),
+            try await store.insertEvent(otherAction, unlessDuplicateWithin: window),
+            try await store.insertEvent(repeatedEdit, unlessDuplicateWithin: window),
+        ]
+        XCTAssertEqual(results, [true, true, true, false])
+    }
+
+    func testPruneDropsOldEventsThenKeepsNewest() async throws {
+        let store = try SQLiteLearningStore(url: nil)
+        for seconds in [100, 200, 300, 400, 500] {
+            try await store.insertEvent(event(at: TimeInterval(seconds)), unlessDuplicateWithin: nil)
+        }
+        try await store.pruneEvents(keepingLast: 10, olderThan: Date(timeIntervalSince1970: 250))
+        let afterCutoff = try await store.eventCount()
+        XCTAssertEqual(afterCutoff, 3)
+        try await store.pruneEvents(keepingLast: 2, olderThan: Date(timeIntervalSince1970: 0))
+        let afterCap = try await store.eventCount()
+        XCTAssertEqual(afterCap, 2)
+    }
+
+    func testStatsCountsMemoriesByStateAndEvents() async throws {
+        let store = try SQLiteLearningStore(url: nil)
+        try await store.saveMemory(memory(key: "a", state: .candidate))
+        try await store.saveMemory(memory(key: "b", state: .candidate))
+        try await store.saveMemory(memory(key: "c", state: .active))
+        try await store.insertEvent(event(at: 1), unlessDuplicateWithin: nil)
+        let stats = try await store.stats()
+        XCTAssertEqual(stats.count(.candidate), 2)
+        XCTAssertEqual(stats.count(.active), 1)
+        XCTAssertEqual(stats.count(.pinned), 0)
+        XCTAssertEqual(stats.eventCount, 1)
+    }
+
+    func testResetAllEmptiesTheStoreAndStaysUsable() async throws {
+        let store = try SQLiteLearningStore(url: nil)
+        try await store.saveMemory(memory())
+        try await store.insertEvent(event(at: 1), unlessDuplicateWithin: nil)
+        try await store.resetAll()
+        let stats = try await store.stats()
+        XCTAssertEqual(stats, .empty)
+        try await store.saveMemory(memory())
+        let count = try await store.memories().count
+        XCTAssertEqual(count, 1)
+    }
+
+    func testFileStorePersistsAcrossReopenAndMigratesOnlyOnce() async throws {
+        let url = try makeTempDirectory().appendingPathComponent("LintLearning.sqlite")
+        let saved = memory()
+        do {
+            let store = try SQLiteLearningStore(url: url)
+            try await store.saveMemory(saved)
+        }
+        let reopened = try SQLiteLearningStore(url: url)
+        let loaded = try await reopened.memory(id: saved.id)
+        XCTAssertEqual(loaded, saved)
+    }
+
+    func testOpeningAnOlderDatabaseScrubsTheExampleSnippetsFromTheFile() async throws {
+        let url = try makeTempDirectory().appendingPathComponent("LintLearning.sqlite")
+        // A database as the first version left it: the snippet columns exist and hold stretches of text.
+        do {
+            let queue = try DatabaseQueue(path: url.path)
+            try SQLiteLearningStore.migrator.migrate(queue, upTo: "v1_learning")
+            try await queue.write { db in
+                for index in 0..<300 {
+                    try db.execute(
+                        sql: """
+                        INSERT INTO writing_memory (id, dedup_key, kind, language, triggers, instruction,
+                            negative_example, preferred_example, evidence_score, occurrence_count, state,
+                            user_edited, created_at, last_confirmed_at)
+                        VALUES (?, ?, 'spelling', 'en', '["teh"]', 'Check the word.',
+                            'quokka roster teh', 'quokka roster the', 1.2, 3, 'active', 0, 1700000000, 1700000500)
+                        """,
+                        arguments: [UUID().uuidString, "spelling:en:teh\(index)>the"]
+                    )
+                }
+            }
+        }
+        let before = try Data(contentsOf: url)
+        XCTAssertNotNil(before.range(of: Data("quokka".utf8)), "sanity: the snippets are in the file")
+
+        let store = try SQLiteLearningStore(url: url)
+
+        let memories = try await store.memories()
+        XCTAssertEqual(memories.count, 300)
+        XCTAssertEqual(memories.first?.triggers, ["teh"])
+        XCTAssertEqual(memories.first?.evidenceScore, 1.2)
+        let after = try Data(contentsOf: url)
+        XCTAssertNil(after.range(of: Data("quokka".utf8)), "and gone from the file itself")
+    }
+
+    func testFileIsOwnerOnly() throws {
+        let dir = try makeTempDirectory().appendingPathComponent("Lint", isDirectory: true)
+        let url = dir.appendingPathComponent("LintLearning.sqlite")
+        _ = try SQLiteLearningStore(url: url)
+        func permissions(_ url: URL) throws -> Int {
+            let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
+            return (attributes[.posixPermissions] as? NSNumber)?.intValue ?? -1
+        }
+        XCTAssertEqual(try permissions(url), 0o600)
+        XCTAssertEqual(try permissions(dir), 0o700)
+    }
+}

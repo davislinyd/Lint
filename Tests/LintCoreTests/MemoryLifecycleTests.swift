@@ -100,6 +100,59 @@ final class MemoryLifecycleTests: XCTestCase {
         XCTAssertEqual(filled.negativeExample, "c")
     }
 
+    func testWeakeningTakesEvidenceAwayButNeverBelowZero() {
+        let memory = fold([0.35, 0.35])
+        XCTAssertEqual(MemoryLifecycle.weakened(memory, by: 0.3).evidenceScore, 0.4, accuracy: 1e-9)
+        XCTAssertEqual(MemoryLifecycle.weakened(memory, by: 5).evidenceScore, 0)
+    }
+
+    func testAnActiveMemoryFallsBackToCandidateOnlyWellBelowTheBar() {
+        let active = fold([0.35, 0.35, 0.35])
+        XCTAssertEqual(active.state, .active)
+        XCTAssertEqual(MemoryLifecycle.weakened(active, by: 0.3).state, .active, "0.75 is below the bar to become active, not to stay")
+        XCTAssertEqual(MemoryLifecycle.weakened(active, by: 0.7).state, .candidate)
+    }
+
+    func testAWeakenedMemoryNeedsFreshEvidenceToBecomeActiveAgain() {
+        let weakened = MemoryLifecycle.weakened(fold([0.35, 0.35, 0.35]), by: 0.7)
+        XCTAssertEqual(weakened.state, .candidate)
+        let again = fold([0.35], into: weakened)
+        XCTAssertEqual(again.state, .candidate, "0.7 is not enough")
+        XCTAssertEqual(fold([0.35, 0.35], into: weakened).state, .active)
+    }
+
+    func testPinnedDisabledAndArchivedKeepTheirStateWhenWeakened() {
+        for state in [MemoryState.pinned, .disabled, .archived] {
+            var memory = fold([0.35, 0.35, 0.35])
+            memory.state = state
+            XCTAssertEqual(MemoryLifecycle.weakened(memory, by: 5).state, state)
+        }
+        XCTAssertEqual(MemoryLifecycle.weakened(fold([0.35]), by: 5).state, .candidate)
+    }
+
+    func testWeakeningIsNoConfirmation() {
+        var memory = fold([0.35, 0.35])
+        memory.instruction = "the user's words"
+        memory.userEdited = true
+        let weakened = MemoryLifecycle.weakened(memory, by: 0.3)
+        XCTAssertEqual(weakened.id, memory.id)
+        XCTAssertEqual(weakened.occurrenceCount, memory.occurrenceCount)
+        XCTAssertEqual(weakened.lastConfirmedAt, memory.lastConfirmedAt)
+        XCTAssertEqual(weakened.instruction, memory.instruction)
+        XCTAssertEqual(weakened.triggers, memory.triggers)
+        XCTAssertTrue(weakened.userEdited)
+    }
+
+    func testAContradictionWeighsTwiceWhatTheSameObservationWouldHaveAdded() {
+        for action in FeedbackAction.allCases {
+            XCTAssertEqual(
+                LearningPolicy.contradictionWeight(for: action), 2 * LearningPolicy.evidenceWeight(for: action),
+                accuracy: 1e-9
+            )
+        }
+        XCTAssertLessThan(LearningPolicy.demoteThreshold, LearningPolicy.activeThreshold)
+    }
+
     func testConfidenceRisesWithEvidenceWithoutReachingOne() {
         let none = fold([0.0])
         let some = fold([1.0])

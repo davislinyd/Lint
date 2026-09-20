@@ -10,6 +10,8 @@ protocol LearningStore: Sendable {
     func mergeMemory(dedupKey: String, _ transform: @escaping @Sendable (WritingMemory?) -> WritingMemory) async throws
     /// Changes one memory in one transaction; does nothing if it is gone.
     func updateMemory(id: UUID, _ transform: @escaping @Sendable (inout WritingMemory) -> Void) async throws
+    /// Like `updateMemory(id:_:)`, for the memory with this `dedupKey`.
+    func updateMemory(dedupKey: String, _ transform: @escaping @Sendable (inout WritingMemory) -> Void) async throws
     func memory(id: UUID) async throws -> WritingMemory?
     func memory(dedupKey: String) async throws -> WritingMemory?
     func memories() async throws -> [WritingMemory]

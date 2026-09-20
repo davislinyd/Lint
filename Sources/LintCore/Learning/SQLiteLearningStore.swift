@@ -98,6 +98,15 @@ struct SQLiteLearningStore: LearningStore {
         }
     }
 
+    func updateMemory(dedupKey: String, _ transform: @escaping @Sendable (inout WritingMemory) -> Void) async throws {
+        try await dbQueue.write { db in
+            guard var memory = try MemoryRecord.filter(Column("dedup_key") == dedupKey).fetchOne(db)?.memory
+            else { return }
+            transform(&memory)
+            try MemoryRecord(memory).save(db)
+        }
+    }
+
     func memory(id: UUID) async throws -> WritingMemory? {
         try await dbQueue.read { db in
             try MemoryRecord.fetchOne(db, key: id.uuidString)?.memory

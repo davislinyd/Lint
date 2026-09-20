@@ -166,6 +166,9 @@ enum LearningPolicy {
     static let eventDedupeWindow: TimeInterval = 24 * 60 * 60
     /// Evidence at which a candidate becomes active.
     static let activeThreshold = 1.0
+    /// An active memory whose evidence falls below this is a candidate again. Lower than the bar
+    /// for becoming active, so that a memory does not flip back and forth around it.
+    static let demoteThreshold = 0.5
     static let maxInstructionLength = 200
 
     /// What a prompt may carry: a few short reminders, so a small local context window stays free
@@ -194,5 +197,11 @@ enum LearningPolicy {
         case .copied: 0.05
         case .regenerated: 0
         }
+    }
+
+    /// What one observation *against* a memory takes away: twice what the same observation would
+    /// have added, because undoing what a memory asks for is a clear sign that it is wrong.
+    static func contradictionWeight(for action: FeedbackAction) -> Double {
+        2 * evidenceWeight(for: action)
     }
 }

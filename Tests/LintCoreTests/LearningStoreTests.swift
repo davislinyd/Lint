@@ -124,6 +124,22 @@ final class LearningStoreTests: XCTestCase {
         XCTAssertEqual(untouched, other)
     }
 
+    func testUpdateMemoryByKeyChangesOnlyThatMemoryAndIgnoresAMissingKey() async throws {
+        let store = try SQLiteLearningStore(url: nil)
+        let target = memory(key: "spelling:en:a>b")
+        let other = memory(key: "spelling:en:b>a")
+        try await store.saveMemory(target)
+        try await store.saveMemory(other)
+        try await store.updateMemory(dedupKey: "spelling:en:a>b") { $0.evidenceScore = 0.1 }
+        try await store.updateMemory(dedupKey: "spelling:en:missing>key") { $0.evidenceScore = 99 }
+        let changed = try await store.memory(dedupKey: "spelling:en:a>b")
+        let untouched = try await store.memory(dedupKey: "spelling:en:b>a")
+        XCTAssertEqual(changed?.evidenceScore, 0.1)
+        XCTAssertEqual(untouched, other)
+        let count = try await store.memories().count
+        XCTAssertEqual(count, 2, "nothing was created")
+    }
+
     func testDeleteAllMemoriesKeepsEvents() async throws {
         let store = try SQLiteLearningStore(url: nil)
         try await store.saveMemory(memory(key: "a"))

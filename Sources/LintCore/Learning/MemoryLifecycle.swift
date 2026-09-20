@@ -41,6 +41,18 @@ enum MemoryLifecycle {
         return memory
     }
 
+    /// Takes evidence away, because the user undid what the memory asks for. An active memory that
+    /// falls well below the bar is a candidate again; pinned, disabled and archived ones keep their
+    /// state, and nothing else about the memory changes (this is no confirmation of it).
+    static func weakened(_ memory: WritingMemory, by amount: Double) -> WritingMemory {
+        var memory = memory
+        memory.evidenceScore = max(0, memory.evidenceScore - amount)
+        if memory.state == .active, memory.evidenceScore < LearningPolicy.demoteThreshold {
+            memory.state = .candidate
+        }
+        return memory
+    }
+
     /// Where a memory settles when the user has neither pinned nor disabled it.
     static func restingState(evidenceScore: Double) -> MemoryState {
         // The tolerance keeps sums like 3 × 0.35 from missing the threshold by rounding.

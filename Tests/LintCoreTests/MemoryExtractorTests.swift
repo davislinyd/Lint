@@ -119,6 +119,78 @@ final class MemoryExtractorTests: XCTestCase {
         XCTAssertEqual(keys(found), ["grammar:en:articles"])
     }
 
+    // MARK: opposites and contradictions
+
+    func testTheOppositeOfADirectionalMemoryIsItsKeyReversed() {
+        XCTAssertEqual(
+            MemoryExtractor.reversedKey(of: "spelling:en:prospective>perspective"),
+            "spelling:en:perspective>prospective"
+        )
+        XCTAssertEqual(
+            MemoryExtractor.reversedKey(of: "style:en:toneFormal:need to>should"),
+            "style:en:toneFormal:should>need to"
+        )
+        XCTAssertEqual(
+            MemoryExtractor.reversedKey(of: "terminology:zh-Hant:translate:軟件>軟體"),
+            "terminology:zh-Hant:translate:軟體>軟件"
+        )
+        for key in ["grammar:en:articles", "grammar:en:discuss about", "nocolon", "a:>b", "a:b>", "a:x>y>z"] {
+            XCTAssertNil(MemoryExtractor.reversedKey(of: key), key)
+        }
+    }
+
+    func testTheOppositeEditProducesTheReversedKey() throws {
+        let forward = extract(.editedAndAccepted, feedback(
+            original: "I need a big house", generated: "I need a big house", final: "I need a large house"
+        ))
+        let backward = extract(.editedAndAccepted, feedback(
+            original: "I need a large house", generated: "I need a large house", final: "I need a big house"
+        ))
+        let forwardKey = try XCTUnwrap(forward.first).dedupKey
+        XCTAssertEqual(MemoryExtractor.reversedKey(of: forwardKey), try XCTUnwrap(backward.first).dedupKey)
+        XCTAssertEqual(MemoryExtractor.reversedKey(of: MemoryExtractor.reversedKey(of: forwardKey) ?? ""), forwardKey)
+    }
+
+    func testAPrepositionPutBackAfterItsVerbContradictsTheMemoryThatDroppedIt() {
+        let putBack = feedback(
+            original: "We should discuss about the plan.",
+            generated: "We should discuss the plan.",
+            final: "We should discuss about the plan."
+        )
+        let result = MemoryExtractor().extraction(from: putBack, action: .editedAndAccepted)
+        XCTAssertEqual(result.contradicted, ["grammar:en:discuss about"])
+        XCTAssertTrue(result.candidates.isEmpty)
+    }
+
+    func testOnlyTheUsersOwnEditContradicts() {
+        let modelAdded = feedback(original: "We should discuss the plan.", generated: "We should discuss about the plan.")
+        XCTAssertTrue(MemoryExtractor().extraction(from: modelAdded, action: .accepted).contradicted.isEmpty)
+        XCTAssertTrue(MemoryExtractor().extraction(from: modelAdded, action: .copied).contradicted.isEmpty)
+    }
+
+    func testAPronounOrACommonVerbBeforeThePrepositionIsNoContradiction() {
+        for (generated, final) in [
+            ("Please help me check this.", "Please help me to check this."),
+            ("I will go home now.", "I will go to home now."),
+        ] {
+            let sample = feedback(original: generated, generated: generated, final: final)
+            XCTAssertTrue(
+                MemoryExtractor().extraction(from: sample, action: .editedAndAccepted).contradicted.isEmpty, final
+            )
+        }
+    }
+
+    func testAPatternEditedBothWaysInOneTextIsNoContradiction() {
+        let both = feedback(
+            original: "We discuss about the plan and discuss the budget.",
+            generated: "We discuss about the plan and discuss the budget.",
+            final: "We discuss the plan and discuss about the budget."
+        )
+        let result = MemoryExtractor().extraction(from: both, action: .editedAndAccepted)
+        XCTAssertEqual(result.candidates.map(\.dedupKey), ["grammar:en:discuss about"])
+        XCTAssertTrue(result.contradicted.isEmpty)
+    }
+
     func testHeavyRewriteTeachesNothing() {
         XCTAssertTrue(extract(.accepted, feedback(
             original: "Please kindly help me to check this issue.",

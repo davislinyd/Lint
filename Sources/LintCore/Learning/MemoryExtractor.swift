@@ -59,23 +59,40 @@ struct MemoryExtractor: Sendable {
         let newText: String
     }
 
-    /// Each pattern is reported once per feedback, however often it occurs in the text.
-    ///
-    /// `injected` holds the patterns (by `dedupKey`) the prompt already reminded the model of. If
-    /// the model then fixed the text and the user accepted it, that is the reminder working, not
-    /// new evidence: counting it would let a memory keep confirming itself. An edit by the user is
-    /// still their own choice, so it counts either way.
+    /// What one piece of feedback says about the memories.
+    struct Extraction: Equatable, Sendable {
+        /// Patterns it shows, each once however often it occurs in the text.
+        var candidates: [MemoryCandidate]
+        /// Memories (by `dedupKey`) the user's own edit argues against: a preposition a memory says
+        /// to drop, put back. Never one that the same feedback also supports.
+        var contradicted: [String]
+    }
+
+    /// The patterns in a piece of feedback.
     func candidates(
         from feedback: LearningFeedback,
         action: FeedbackAction,
         injected: Set<String> = []
     ) -> [MemoryCandidate] {
-        guard let comparison = comparison(for: feedback, action: action) else { return [] }
+        extraction(from: feedback, action: action, injected: injected).candidates
+    }
+
+    /// `injected` holds the patterns (by `dedupKey`) the prompt already reminded the model of. If
+    /// the model then fixed the text and the user accepted it, that is the reminder working, not
+    /// new evidence: counting it would let a memory keep confirming itself. An edit by the user is
+    /// still their own choice, so it counts either way.
+    func extraction(
+        from feedback: LearningFeedback,
+        action: FeedbackAction,
+        injected: Set<String> = []
+    ) -> Extraction {
+        let none = Extraction(candidates: [], contradicted: [])
+        guard let comparison = comparison(for: feedback, action: action) else { return none }
         let oldTokens = DiffAnalyzer.tokens(in: comparison.old)
         let newTokens = DiffAnalyzer.tokens(in: comparison.new)
         let spans = DiffAnalyzer.spans(from: oldTokens, to: newTokens)
         guard !DiffAnalyzer.isRewrite(spans, oldCount: oldTokens.count, newCount: newTokens.count) else {
-            return []
+            return none
         }
 
         let source = trimmed(feedback.originalText)
@@ -88,7 +105,11 @@ struct MemoryExtractor: Sendable {
         )
         var seen = Set<String>()
         var found: [MemoryCandidate] = []
+        var against: [String] = []
         for span in spans {
+            if comparison.userChoice, let key = contradictedKey(by: span), !against.contains(key) {
+                against.append(key)
+            }
             guard let pattern = pattern(of: span),
                   let candidate = candidate(for: pattern, span: span, context: context),
                   comparison.userChoice || !injected.contains(candidate.dedupKey),
@@ -96,7 +117,29 @@ struct MemoryExtractor: Sendable {
             else { continue }
             found.append(candidate)
         }
-        return found
+        // Editing a pattern both ways in one text is no reversal; it is left out.
+        return Extraction(candidates: found, contradicted: against.filter { !seen.contains($0) })
+    }
+
+    /// The key of the memory that asks for the opposite: `a>b` becomes `b>a`. Nil for a memory
+    /// with no direction ("articles", "discuss about").
+    static func reversedKey(of key: String) -> String? {
+        guard let colon = key.lastIndex(of: ":") else { return nil }
+        let sides = key[key.index(after: colon)...].split(separator: ">", omittingEmptySubsequences: false)
+        guard sides.count == 2, !sides[0].isEmpty, !sides[1].isEmpty else { return nil }
+        return "\(key[...colon])\(sides[1])>\(sides[0])"
+    }
+
+    /// The memory an edit of the user's undoes: a preposition the memory says to drop, put back
+    /// after its verb. (The opposite direction of `a>b` memories shows up as a candidate of its own.)
+    private func contradictedKey(by span: EditSpan) -> String? {
+        guard span.removed.isEmpty, span.added.count == 1,
+              Self.prepositions.contains(span.added[0].key),
+              MemorySanitizer.isSafe(span.added),
+              let verb = span.before.last, MemorySanitizer.isSafe(verb),
+              !Self.functionWords.contains(verb.key), !Self.commonVerbs.contains(verb.key)
+        else { return nil }
+        return "grammar:en:\(verb.key) \(span.added[0].key)"
     }
 
     // MARK: choosing what to compare

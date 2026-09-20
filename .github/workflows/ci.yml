@@ -1,0 +1,55 @@
+name: CI
+
+# Tests every pull request and every push to main, and builds an unsigned preview DMG that
+# testers can download from the run. It uses no secrets and only read permission, so it is safe
+# for pull requests, including forks. Signing and notarization live in release.yml.
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  build:
+    name: Test and build an unsigned preview
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Run the tests
+        run: |
+          swift --version
+          swift test
+
+      - name: Build the unsigned preview DMG
+        env:
+          LINT_PREVIEW_BUILD: "1"
+          LINT_BUILD_NUMBER: ${{ github.run_number }}
+        run: ./Scripts/release.sh
+
+      - name: Upload the preview DMG
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: Lint-preview-${{ github.run_number }}
+          path: |
+            dist/release/*-preview.dmg
+            dist/release/*-preview.dmg.sha256
+          if-no-files-found: error
+          retention-days: 14

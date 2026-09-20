@@ -8,6 +8,21 @@
 
 A macOS menu-bar AI writing assistant. Press a global hotkey to capture the selected text, send it to an LLM, compare the suggestion in a floating panel, then replace or copy it.
 
+### Download
+
+Get the latest `Lint-<version>-macOS-arm64.dmg` from [GitHub Releases](https://github.com/davislinyd/Lint/releases). Release builds are signed with a Developer ID certificate and notarized by Apple. They need macOS 14+ on an Apple Silicon Mac.
+
+1. Open the DMG and drag **Lint** into **Applications**.
+2. Launch Lint from Applications. A pencil icon appears in the menu bar.
+3. Enable **Lint** under System Settings → Privacy & Security → Accessibility.
+4. Optional: verify the download with `shasum -a 256 -c Lint-<version>-macOS-arm64.dmg.sha256`, run in the folder that holds both files.
+
+While replacing text, macOS may ask whether Lint may control "System Events". Allow it: Lint uses it only to bring your previous app back to the front, which makes Replace reliable in browsers and Electron apps.
+
+The DMG contains Lint only, not a model. To run a model on your Mac, choose **Local llama.cpp** in Settings → Model: Lint asks before it installs `llama.cpp` with Homebrew (Homebrew must already be installed), and `llama-server` downloads the model on first use. You can also point Lint at an OpenAI-compatible endpoint or a cloud provider.
+
+To build from source instead, see Requirements and Run below.
+
 ### Requirements
 
 - macOS 14+
@@ -83,6 +98,21 @@ swift test
 ## 繁體中文
 
 macOS 選單列 AI 寫作助手：全域快捷鍵擷取選取文字，送到 LLM，在浮動面板對比後覆蓋或複製。
+
+### 下載
+
+到 [GitHub Releases](https://github.com/davislinyd/Lint/releases) 下載最新的 `Lint-<版本>-macOS-arm64.dmg`。正式版以 Developer ID 憑證簽署並通過 Apple 公證，需要 macOS 14+ 與 Apple Silicon Mac。
+
+1. 開啟 DMG，把 **Lint** 拖進 **Applications**。
+2. 從「應用程式」開啟 Lint，選單列會出現鉛筆圖示。
+3. 到 系統設定 → 隱私權與安全性 → 輔助功能，勾選 **Lint**。
+4. 選用：在放有 DMG 與 `.sha256` 的資料夾執行 `shasum -a 256 -c Lint-<版本>-macOS-arm64.dmg.sha256` 驗證下載。
+
+取代文字時，macOS 可能會詢問是否允許 Lint 控制「系統事件」。請允許：Lint 只用它把你原本使用的 App 帶回最前面，這樣在瀏覽器與 Electron App 裡取代才會穩定。
+
+DMG 只含 Lint，不含模型。要在自己的 Mac 上跑模型，請在「設定 → 模型」選「本機 llama.cpp」：Lint 會先詢問，再用 Homebrew 安裝 `llama.cpp`（需已安裝 Homebrew），`llama-server` 會在第一次使用時下載模型。也可以改連 OpenAI 相容端點或雲端 provider。
+
+要從原始碼建置，見下方「需求」與「啟動」。
 
 ### 需求
 

@@ -4,6 +4,47 @@ ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 cd "$ROOT"
 
 CONFIG="${1:-debug}"
+
+fail() { echo "error: $*" >&2; exit 1; }
+
+# CFBundleVersion of the assembled copy only (CI passes github.run_number).
+# The source Resources/Info.plist is never rewritten.
+if [ -n "${LINT_BUILD_NUMBER:-}" ]; then
+  printf '%s' "$LINT_BUILD_NUMBER" | grep -Eq '^[0-9]+(\.[0-9]+){0,2}$' \
+    || fail "LINT_BUILD_NUMBER must be 1-3 dot-separated integers, got '$LINT_BUILD_NUMBER'"
+fi
+
+# Distribution build (Scripts/release.sh): LINT_RELEASE_BUILD=1 signs only with a
+# "Developer ID Application" identity, with Hardened Runtime and a secure timestamp.
+# It never falls back to another identity or to ad-hoc signing, and it is checked
+# before building so a wrong identity fails immediately.
+# CODESIGN_IDENTITY (name or SHA-1) is required; LINT_KEYCHAIN optionally limits the
+# identity search and the signing to one keychain file (CI uses a temporary one).
+case "${LINT_RELEASE_BUILD:-}" in
+  ''|0) RELEASE_BUILD= ;;
+  1) RELEASE_BUILD=1 ;;
+  *) fail "LINT_RELEASE_BUILD must be 1 or unset, got '$LINT_RELEASE_BUILD'" ;;
+esac
+if [ -n "$RELEASE_BUILD" ]; then
+  [ "$CONFIG" = "release" ] || fail "LINT_RELEASE_BUILD=1 requires the release configuration"
+  [ -n "${CODESIGN_IDENTITY:-}" ] || fail "LINT_RELEASE_BUILD=1 requires CODESIGN_IDENTITY (a 'Developer ID Application' identity)"
+  if [ -n "${LINT_KEYCHAIN:-}" ]; then
+    FOUND=$(security find-identity -v -p codesigning "$LINT_KEYCHAIN" || true)
+  else
+    FOUND=$(security find-identity -v -p codesigning || true)
+  fi
+  MATCHES=$(printf '%s\n' "$FOUND" | grep -E '^ *[0-9]+\) ' | grep -i -F -- "$CODESIGN_IDENTITY" || true)
+  MATCH_COUNT=$(printf '%s' "$MATCHES" | grep -c . || true)
+  [ "$MATCH_COUNT" = "1" ] || fail "CODESIGN_IDENTITY must match exactly one valid identity, matched $MATCH_COUNT (see: security find-identity -v -p codesigning)"
+  case "$MATCHES" in
+    *'"Developer ID Application: '*) ;;
+    *) fail "CODESIGN_IDENTITY is not a 'Developer ID Application' identity; other identities and ad-hoc signatures cannot be notarized" ;;
+  esac
+  # Sign with the matched certificate's hash, never with the raw CODESIGN_IDENTITY string.
+  IDENTITY=$(printf '%s' "$MATCHES" | awk '{print $2}')
+  IDENTITY_NAME=$(printf '%s' "$MATCHES" | sed -E 's/^[^"]*"([^"]*)".*/\1/')
+fi
+
 if [ "$CONFIG" = "release" ]; then
   swift build -c release --product Lint >&2
   BIN_DIR=$(swift build -c release --show-bin-path)
@@ -12,11 +53,14 @@ else
   BIN_DIR=$(swift build --show-bin-path)
 fi
 
-APP="$ROOT/dist/Lint.app"
+APP="${LINT_DIST_DIR:-$ROOT/dist}/Lint.app"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS"
 cp "$BIN_DIR/Lint" "$APP/Contents/MacOS/Lint"
 cp "$ROOT/Resources/Info.plist" "$APP/Contents/Info.plist"
+if [ -n "${LINT_BUILD_NUMBER:-}" ]; then
+  /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $LINT_BUILD_NUMBER" "$APP/Contents/Info.plist"
+fi
 mkdir -p "$APP/Contents/Resources"
 if [ -f "$ROOT/Resources/AppIcon.icns" ]; then
   cp "$ROOT/Resources/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
@@ -33,6 +77,17 @@ for bundle in "$BIN_DIR"/*.bundle; do
   fi
 done
 printf 'APPL????' > "$APP/Contents/PkgInfo"
+
+if [ -n "$RELEASE_BUILD" ]; then
+  echo "codesign identity: $IDENTITY_NAME (Developer ID, Hardened Runtime, secure timestamp)" >&2
+  set -- --force --options runtime --timestamp
+  if [ -n "${LINT_KEYCHAIN:-}" ]; then
+    set -- "$@" --keychain "$LINT_KEYCHAIN"
+  fi
+  codesign "$@" --sign "$IDENTITY" --entitlements "$ROOT/Resources/Lint.entitlements" "$APP" >&2
+  printf '%s\n' "$APP"
+  exit 0
+fi
 
 # Prefer a stable codesign identity so Accessibility survives rebuilds.
 # Override with: CODESIGN_IDENTITY='Apple Development: Your Name (TEAMID)'

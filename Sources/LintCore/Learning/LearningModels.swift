@@ -84,6 +84,8 @@ public struct LearningFeedback: Sendable {
     public var finalText: String
     public var provider: String
     public var model: String
+    /// Memories that were in the prompt that produced the suggestion.
+    public var usedMemoryIDs: [UUID]
 
     public init(
         gesture: UserGesture,
@@ -92,7 +94,8 @@ public struct LearningFeedback: Sendable {
         generatedText: String?,
         finalText: String,
         provider: String,
-        model: String
+        model: String,
+        usedMemoryIDs: [UUID] = []
     ) {
         self.gesture = gesture
         self.mode = mode
@@ -101,6 +104,7 @@ public struct LearningFeedback: Sendable {
         self.finalText = finalText
         self.provider = provider
         self.model = model
+        self.usedMemoryIDs = usedMemoryIDs
     }
 
     /// False when there is no finished suggestion or no source text to compare it with.
@@ -115,6 +119,18 @@ extension WritingMemory {
     /// 0...1 and rising with evidence; what the settings page shows and retrieval ranks by.
     public var confidence: Double {
         evidenceScore / (evidenceScore + 1)
+    }
+}
+
+/// A system prompt with the user's learned habits added.
+public struct PersonalizedPrompt: Sendable, Equatable {
+    public var systemPrompt: String
+    /// The memories whose wording went into it, so feedback can tell what the model was reminded of.
+    public var usedMemoryIDs: [UUID]
+
+    public init(systemPrompt: String, usedMemoryIDs: [UUID]) {
+        self.systemPrompt = systemPrompt
+        self.usedMemoryIDs = usedMemoryIDs
     }
 }
 
@@ -160,6 +176,11 @@ enum LearningPolicy {
     static let maxPersonalizationCharacters = 600
     /// The numbering and line break a memory costs once listed in a prompt.
     static let personalizationLineOverhead = 4
+
+    /// What one memory takes of the prompt budget once listed.
+    static func promptCost(of memory: WritingMemory) -> Int {
+        memory.instruction.count + personalizationLineOverhead
+    }
     /// A habit only applies to a text that is clearly in its language.
     static let minHabitLatinLetters = 8
     static let minHabitCJKCharacters = 4

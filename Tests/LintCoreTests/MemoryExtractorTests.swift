@@ -86,6 +86,39 @@ final class MemoryExtractorTests: XCTestCase {
         XCTAssertNil(memory.modeScope)
     }
 
+    func testAFixTheMemoryAskedForIsNotNewEvidenceButAnEditIs() {
+        let asked: Set<String> = ["grammar:en:discuss about"]
+        let fixed = feedback(original: "We should discuss about the plan.", generated: "We should discuss the plan.")
+        XCTAssertEqual(keys(extract(.accepted, fixed)), ["grammar:en:discuss about"], "without the reminder it counts")
+        XCTAssertTrue(MemoryExtractor().candidates(from: fixed, action: .accepted, injected: asked).isEmpty)
+        XCTAssertTrue(
+            MemoryExtractor().candidates(from: fixed, action: .copied, injected: asked).isEmpty,
+            "copying the unchanged suggestion is the same accepted fix"
+        )
+
+        let edited = feedback(
+            original: "We should discuss about the plan.",
+            generated: "We should discuss about the plan.",
+            final: "We should discuss the plan."
+        )
+        XCTAssertEqual(
+            keys(MemoryExtractor().candidates(from: edited, action: .editedAndAccepted, injected: asked)),
+            ["grammar:en:discuss about"], "the user's own edit still counts"
+        )
+    }
+
+    func testOnlyTheRemindedPatternIsLeftOut() {
+        let found = MemoryExtractor().candidates(
+            from: feedback(
+                original: "We should discuss about the plan and buy laptop.",
+                generated: "We should discuss the plan and buy a laptop."
+            ),
+            action: .accepted,
+            injected: ["grammar:en:discuss about"]
+        )
+        XCTAssertEqual(keys(found), ["grammar:en:articles"])
+    }
+
     func testHeavyRewriteTeachesNothing() {
         XCTAssertTrue(extract(.accepted, feedback(
             original: "Please kindly help me to check this issue.",

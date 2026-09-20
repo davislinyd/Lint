@@ -34,7 +34,7 @@ struct FeedbackCollector {
             finalHMAC: finalHMAC,
             provider: feedback.provider,
             model: feedback.model,
-            usedMemoryIDs: []
+            usedMemoryIDs: feedback.usedMemoryIDs
         )
     }
 

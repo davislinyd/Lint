@@ -286,6 +286,155 @@ final class LearningCoordinatorTests: XCTestCase {
         XCTAssertTrue(off.isEmpty)
     }
 
+    // MARK: personalizing a prompt
+
+    private let basePrompt = "BASE PROMPT\n回覆只要修正後的全文，不要解釋。"
+
+    private func learnedDiscussAbout() async throws -> (LearningCoordinator, WritingMemory) {
+        let coordinator = learner()
+        for topic in topics.prefix(3) {
+            await coordinator.recordFeedback(edit(topic), config: on)
+        }
+        return (coordinator, try await onlyMemory(coordinator))
+    }
+
+    func testPersonalizingAddsTheRelevantMemoriesAndSaysWhichWereUsed() async throws {
+        let (coordinator, memory) = try await learnedDiscussAbout()
+        let result = await coordinator.personalize(
+            prompt: basePrompt, for: "we should discuss about the roadmap", mode: .proofread, config: on
+        )
+        XCTAssertTrue(result.systemPrompt.hasPrefix(basePrompt + "\n\n" + PromptComposer.header + "\n1. "))
+        XCTAssertTrue(result.systemPrompt.hasSuffix(memory.instruction))
+        XCTAssertEqual(result.usedMemoryIDs, [memory.id])
+    }
+
+    func testThePromptIsUntouchedWhileLearningIsOffOrWhenNothingIsRelevant() async throws {
+        let (coordinator, _) = try await learnedDiscussAbout()
+
+        let off = await coordinator.personalize(
+            prompt: basePrompt, for: "we should discuss about the roadmap", mode: .proofread,
+            config: LearningConfig(enabled: false)
+        )
+        XCTAssertEqual(Array(off.systemPrompt.utf8), Array(basePrompt.utf8), "byte for byte")
+        XCTAssertTrue(off.usedMemoryIDs.isEmpty)
+
+        let irrelevant = await coordinator.personalize(
+            prompt: basePrompt, for: "the roadmap looks fine to everyone here", mode: .proofread, config: on
+        )
+        XCTAssertEqual(irrelevant.systemPrompt, basePrompt)
+        XCTAssertTrue(irrelevant.usedMemoryIDs.isEmpty)
+    }
+
+    func testThePromptIsUntouchedWhenThereIsNothingLearnedAtAll() async throws {
+        let url = try makeStoreURL()
+        let coordinator = LearningCoordinator(storeURL: url, hmacKey: testKey())
+        let result = await coordinator.personalize(prompt: basePrompt, for: "any text at all", mode: .proofread, config: on)
+        XCTAssertEqual(result.systemPrompt, basePrompt)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: url.path), "personalizing never creates the database")
+    }
+
+    func testTheTranslationTargetDecidesWhichTerminologyApplies() async throws {
+        let coordinator = learner()
+        let pairs = [
+            ("This software needs an update.", "這個軟件需要更新才能使用新功能", "這個軟體需要更新才能使用新功能"),
+            ("Please install the software first.", "請先安裝這個軟件再重新啟動電腦", "請先安裝這個軟體再重新啟動電腦"),
+            ("The software version is too old.", "軟件的版本太舊所以無法連線成功", "軟體的版本太舊所以無法連線成功"),
+        ]
+        for (source, generated, final) in pairs {
+            await coordinator.recordFeedback(
+                LearningFeedback(
+                    gesture: .replaced, mode: .translate, originalText: source, generatedText: generated,
+                    finalText: final, provider: "localLlama", model: "qwen"
+                ),
+                config: on
+            )
+        }
+        let memory = try await onlyMemory(coordinator)
+        XCTAssertEqual(memory.state, .active)
+        XCTAssertEqual(memory.modeScope, .translate)
+
+        func used(for target: String, mode: WritingMode = .translate) async -> [UUID] {
+            await coordinator.personalize(
+                prompt: basePrompt, for: "Where can I download the software?", mode: mode,
+                translateTarget: target, config: on
+            ).usedMemoryIDs
+        }
+        for target in ["繁體中文", "", "中文"] {
+            let ids = await used(for: target)
+            XCTAssertEqual(ids, [memory.id], "target \"\(target)\"")
+        }
+        for target in ["English", "日文", "簡體中文"] {
+            let ids = await used(for: target)
+            XCTAssertTrue(ids.isEmpty, "target \"\(target)\"")
+        }
+        let proofreading = await used(for: "繁體中文", mode: .proofread)
+        XCTAssertTrue(proofreading.isEmpty, "a translation memory stays out of proofreading")
+    }
+
+    // MARK: not learning from its own reminders
+
+    func testAMemoryIsNotCountedAgainWhenTheModelJustObeyedIt() async throws {
+        let (coordinator, memory) = try await learnedDiscussAbout()
+
+        // The model was reminded, fixed the text, and the user took it as is.
+        var reminded = accept("firewall")
+        reminded.usedMemoryIDs = [memory.id]
+        await coordinator.recordFeedback(reminded, config: on)
+        let afterReminded = try await onlyMemory(coordinator)
+        XCTAssertEqual(afterReminded.occurrenceCount, memory.occurrenceCount)
+        XCTAssertEqual(afterReminded.evidenceScore, memory.evidenceScore, accuracy: 1e-9)
+
+        // The same fix without the reminder is a fresh observation.
+        await coordinator.recordFeedback(accept("report"), config: on)
+        let afterPlain = try await onlyMemory(coordinator)
+        XCTAssertEqual(afterPlain.occurrenceCount, memory.occurrenceCount + 1)
+
+        // The user's own edit counts even though the memory was in the prompt.
+        var edited = edit("contract")
+        edited.usedMemoryIDs = [memory.id]
+        await coordinator.recordFeedback(edited, config: on)
+        let afterEdit = try await onlyMemory(coordinator)
+        XCTAssertEqual(afterEdit.occurrenceCount, memory.occurrenceCount + 2)
+    }
+
+    func testOtherPatternsInTheSameFeedbackStillCount() async throws {
+        let (coordinator, memory) = try await learnedDiscussAbout()
+        await coordinator.recordFeedback(
+            LearningFeedback(
+                gesture: .replaced, mode: .proofread,
+                originalText: "we should discuss about the plan and buy laptop.",
+                generatedText: "we should discuss the plan and buy a laptop.",
+                finalText: "we should discuss the plan and buy a laptop.",
+                provider: "localLlama", model: "qwen", usedMemoryIDs: [memory.id]
+            ),
+            config: on
+        )
+        let all = await coordinator.memories()
+        XCTAssertEqual(Set(all.map(\.dedupKey)), ["grammar:en:discuss about", "grammar:en:articles"])
+        let old = try XCTUnwrap(all.first { $0.id == memory.id })
+        XCTAssertEqual(old.occurrenceCount, memory.occurrenceCount, "the reminded pattern is left alone")
+    }
+
+    func testAMemoryThatIsGoneIsSimplyNotExcluded() async throws {
+        let coordinator = learner()
+        var feedback = accept("plan")
+        feedback.usedMemoryIDs = [UUID()]
+        await coordinator.recordFeedback(feedback, config: on)
+        let memories = await coordinator.memories()
+        XCTAssertEqual(memories.map(\.dedupKey), ["grammar:en:discuss about"])
+    }
+
+    func testTheMemoriesUsedAreKeptWithTheEvent() async throws {
+        let url = try makeStoreURL()
+        let coordinator = LearningCoordinator(storeURL: url, hmacKey: testKey())
+        let usedNowhereElse = UUID()
+        var feedback = edit("plan")
+        feedback.usedMemoryIDs = [usedNowhereElse]
+        await coordinator.recordFeedback(feedback, config: on)
+        let file = try Data(contentsOf: url)
+        XCTAssertNotNil(file.range(of: Data(usedNowhereElse.uuidString.utf8)))
+    }
+
     // MARK: managing memories
 
     private func seeded() async throws -> (LearningCoordinator, UUID) {

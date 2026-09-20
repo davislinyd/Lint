@@ -82,7 +82,7 @@ struct MemoryRetriever: Sendable {
         for candidate in candidates {
             guard picked.count < LearningPolicy.maxPersonalizedMemories else { break }
             if !candidate.isLexical, habits >= LearningPolicy.maxHabitMemories { continue }
-            let cost = candidate.memory.instruction.count + LearningPolicy.personalizationLineOverhead
+            let cost = LearningPolicy.promptCost(of: candidate.memory)
             guard characters + cost <= LearningPolicy.maxPersonalizationCharacters else { continue }
             picked.append(candidate.memory)
             characters += cost

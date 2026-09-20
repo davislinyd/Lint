@@ -9,6 +9,21 @@
 - **付費的 Apple Developer Program**：Developer ID 憑證與 Team API Key 都需要。
 - 一台 Mac：產生 CSR，憑證的私鑰會留在這台 Mac 的鑰匙圈裡。
 
+## 還沒有 Apple 憑證時：未簽章預覽版
+
+Apple Developer Program 核准之前發不出正式版（Developer ID + 公證），這段期間用**預覽版**：
+
+- [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) 在每個 pull request 與每次推送到 `main` 時跑 `swift test`，並用 `LINT_PREVIEW_BUILD=1 ./Scripts/release.sh` 組出 `Lint-<版本>-macOS-arm64-preview.dmg`（含 `.sha256`）。到該次 run 頁面的 **Artifacts** 下載（保留 14 天）。它不使用任何 secrets，只有唯讀權限。
+- 本機也能組：`LINT_PREVIEW_BUILD=1 ./Scripts/release.sh`，產物在 `dist/release/`。
+
+預覽版是 ad-hoc 簽章（仍啟用 Hardened Runtime，執行環境與正式版一致），沒有公證，所以：
+
+- 第一次開啟 macOS 會擋：系統設定 → 隱私權與安全性 → 找到 Lint 被阻擋的訊息 → **仍要打開**；或執行 `xattr -dr com.apple.quarantine /Applications/Lint.app`。
+- 每換一個新的預覽 DMG，macOS 都會當成新的程式，**輔助功能**等授權要重新允許。
+- 檔名固定帶 `-preview`，不會被當成正式版。正式版的流程、驗證與 secrets 完全不受影響。
+
+核准之後：照下方「一次性設定」補上憑證與 6 個 secrets，先在本機跑 `LINT_SKIP_NOTARIZE=1 ./Scripts/release.sh` 確認簽章，再用 `v` tag 走正式流程。不需要改任何程式。
+
 ## 一次性設定
 
 ### 1. Developer ID Application 憑證 → `.p12`
@@ -81,6 +96,7 @@ LINT_SKIP_NOTARIZE=1 ./Scripts/release.sh
 
 - 工作流程：tag 格式、tag 存在且就是 checkout 的 commit、commit 在 `main` 上、tag 版本 = Info.plist 版本、6 個 secrets 都在、`swift test` 通過。
 - `release.sh`：只接受**恰好一個** `Developer ID Application` 憑證（不 fallback 到 Apple Development 或 ad-hoc）；簽章有 `runtime` flag、安全時間戳、`app.lint.assistant`、`TeamIdentifier` 符合 `APPLE_TEAM_ID`、entitlements 與 `Resources/Lint.entitlements` 一致且沒有 `get-task-allow`；DMG 只含 `Lint.app` 與 `Applications` 連結、已簽章；公證必須 `Accepted`（否則印出 `notarytool log` 並失敗）；`stapler` 附上並驗證票證；`hdiutil verify`；掛載最終 DMG 對裡面的 app 做 `codesign` 與 `spctl` 驗證；產出並自我驗證 SHA-256。
+- 預覽版（`LINT_PREVIEW_BUILD=1`）：ad-hoc 簽章、`runtime` flag、entitlements、版本與 build number、DMG 內容、SHA-256；不呼叫任何 Apple 服務，DMG 不簽章。
 
 ## 疑難排解
 
@@ -104,6 +120,6 @@ LINT_SKIP_NOTARIZE=1 ./Scripts/release.sh
 
 - 只出 **arm64**；檔名由實際的執行檔架構決定（`lipo -archs`），不會標示成 universal。Universal 2 留待日後。
 - 只公證並 staple **DMG**，DMG 裡的 app 本體沒有另外 staple：使用者首次啟動需要能連到 Apple 查詢票證（離線首次啟動可能被 Gatekeeper 擋下）。
-- 沒有針對 pull request 的 CI workflow。若日後要加（例如只跑 `swift test`），不可帶任何 release secrets，也不要用 `pull_request_target`。
+- `ci.yml`（pull request 與 `main` 的測試和預覽版）刻意不使用任何 secrets，也不用 `pull_request_target`；日後不要在裡面加任何 release secrets。
 - 從 Apple Development 版換成 Developer ID 版時，macOS 會視為不同的簽章身分：輔助功能與「系統事件」自動化授權需重新允許一次，鑰匙圈也可能再問一次「永遠允許」。
 - macOS 27 的 `hdiutil create` 已標示為 deprecated（仍可用）；日後系統移除時需改用 `diskutil image`。

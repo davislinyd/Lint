@@ -1,5 +1,4 @@
 import Foundation
-import NaturalLanguage
 
 /// A pattern spotted in one piece of feedback, before it is folded into what is already known.
 struct MemoryCandidate: Equatable, Sendable {
@@ -240,7 +239,7 @@ struct MemoryExtractor: Sendable {
             let (from, to) = (Self.phrase(old), Self.phrase(new))
             guard from.count <= MemorySanitizer.maxPhraseLength, to.count <= MemorySanitizer.maxPhraseLength
             else { return nil }
-            let language = Self.chineseVariant(of: context.newText)
+            let language = TextProfile.chineseVariant(of: context.newText) ?? "zh-Hant"
             return MemoryCandidate(
                 dedupKey: Self.key(.terminology, language, scope, "\(from)>\(to)"),
                 kind: .terminology, language: language, modeScope: scope,
@@ -291,11 +290,5 @@ struct MemoryExtractor: Sendable {
 
     private static func key(_ kind: MemoryKind, _ language: String, _ scope: WritingMode?, _ pattern: String) -> String {
         [kind.rawValue, language, scope?.rawValue, pattern].compactMap { $0 }.joined(separator: ":")
-    }
-
-    private static func chineseVariant(of text: String) -> String {
-        let recognizer = NLLanguageRecognizer()
-        recognizer.processString(text)
-        return recognizer.dominantLanguage == .simplifiedChinese ? "zh-Hans" : "zh-Hant"
     }
 }

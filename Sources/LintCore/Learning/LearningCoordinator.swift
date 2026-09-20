@@ -10,6 +10,9 @@ public actor LearningCoordinator {
     private let hmacKeyProvider: @Sendable () throws -> Data
     private var store: (any LearningStore)?
     private var hmacKey: SymmetricKey?
+    private var retriever: MemoryRetriever?
+    /// Bumped by every change to the memories, so a read that raced with a change is not cached.
+    private var memoryVersion = 0
 
     /// Longest instruction a memory keeps, however it was edited.
     public static let maxInstructionLength = LearningPolicy.maxInstructionLength
@@ -64,6 +67,29 @@ public actor LearningCoordinator {
         }
     }
 
+    /// The few memories worth reminding the model about for this text: active or pinned ones whose
+    /// trigger is in it, plus general habits that fit its language. Empty while learning is off.
+    /// `outputLanguage` is the language written when it differs from the text's (translation).
+    public func relevantMemories(
+        for text: String,
+        mode: WritingMode,
+        outputLanguage: String? = nil,
+        config: LearningConfig
+    ) async -> [WritingMemory] {
+        guard config.enabled, let store = openStore(create: false) else { return [] }
+        let query = MemoryRetriever.Query(text: text, mode: mode, outputLanguage: outputLanguage)
+        if let retriever { return retriever.select(for: query) }
+        let versionBeforeReading = memoryVersion
+        do {
+            let fresh = MemoryRetriever(memories: try await store.memories())
+            if versionBeforeReading == memoryVersion { retriever = fresh }
+            return fresh.select(for: query)
+        } catch {
+            NSLog("Lint learning: could not read memories: \(error.localizedDescription)")
+            return []
+        }
+    }
+
     public func memories() async -> [WritingMemory] {
         guard let store = openStore(create: false) else { return [] }
         do {
@@ -104,6 +130,7 @@ public actor LearningCoordinator {
         guard let store = openStore(create: false) else { return }
         do {
             try await store.deleteMemory(id: id)
+            invalidateMemories()
         } catch {
             NSLog("Lint learning: could not delete a memory: \(error.localizedDescription)")
         }
@@ -113,6 +140,7 @@ public actor LearningCoordinator {
         guard let store = openStore(create: false) else { return }
         do {
             try await store.deleteAllMemories()
+            invalidateMemories()
         } catch {
             NSLog("Lint learning: could not clear memories: \(error.localizedDescription)")
         }
@@ -134,6 +162,7 @@ public actor LearningCoordinator {
         guard let store = openStore(create: false) else { return }
         do {
             try await store.resetAll()
+            invalidateMemories()
         } catch {
             NSLog("Lint learning: reset failed: \(error.localizedDescription)")
         }
@@ -154,16 +183,23 @@ public actor LearningCoordinator {
                 try await store.mergeMemory(dedupKey: candidate.dedupKey) { existing in
                     MemoryLifecycle.merging(candidate, weight: weight, at: now, into: existing)
                 }
+                invalidateMemories()
             } catch {
                 NSLog("Lint learning: could not update a memory: \(error.localizedDescription)")
             }
         }
     }
 
+    private func invalidateMemories() {
+        retriever = nil
+        memoryVersion += 1
+    }
+
     private func change(_ id: UUID, _ transform: @escaping @Sendable (inout WritingMemory) -> Void) async {
         guard let store = openStore(create: false) else { return }
         do {
             try await store.updateMemory(id: id, transform)
+            invalidateMemories()
         } catch {
             NSLog("Lint learning: could not change a memory: \(error.localizedDescription)")
         }

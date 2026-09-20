@@ -1,0 +1,485 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lint — macOS menu-bar AI writing assistant</title>
+<meta name="description" content="Lint is a macOS menu-bar AI writing assistant. Press a global hotkey to capture selected text, compare an LLM's suggestion in a floating panel, then replace or copy it.">
+<meta name="theme-color" content="#0b0a1a">
+<meta name="color-scheme" content="dark">
+<meta property="og:title" content="Lint — macOS menu-bar AI writing assistant">
+<meta property="og:description" content="Press a global hotkey to capture selected text, compare an LLM's suggestion in a floating panel, then replace or copy it.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://davislinyd.github.io/Lint/">
+<meta property="og:image" content="https://davislinyd.github.io/Lint/assets/icon.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/png" href="assets/favicon.png">
+<style>
+  :root {
+    --bg: #0b0a1a;
+    --bg-elev: rgba(255,255,255,0.045);
+    --border: rgba(255,255,255,0.10);
+    --text: #f5f3ff;
+    --text-dim: #b7b2d6;
+    --indigo: #241c58;
+    --violet: #7c3aed;
+    --violet-light: #a78bfa;
+    --violet-glow: #8b5cf6;
+    --radius: 16px;
+    --maxw: 1080px;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang TC", "Segoe UI", "Microsoft JhengHei", Helvetica, Arial, sans-serif;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+  img { max-width: 100%; display: block; }
+  a { color: inherit; }
+  ul, ol { margin: 0; padding: 0; list-style: none; }
+  h1, h2, h3, p { margin: 0; }
+
+  .wrap { max-width: var(--maxw); margin: 0 auto; padding: 0 24px; }
+
+  /* language toggle: pure CSS, no JS. !important guarantees this always
+     wins over any component rule that also sets display on the same element. */
+  .zh { display: none !important; }
+  body:has(#lang-toggle:checked) .en { display: none !important; }
+  body:has(#lang-toggle:checked) span.zh { display: inline !important; }
+  body:has(#lang-toggle:checked) p.zh,
+  body:has(#lang-toggle:checked) div.zh,
+  body:has(#lang-toggle:checked) h1.zh,
+  body:has(#lang-toggle:checked) h2.zh,
+  body:has(#lang-toggle:checked) h3.zh { display: block !important; }
+
+  a:focus-visible, button:focus-visible {
+    outline: 2px solid var(--violet-light);
+    outline-offset: 3px;
+    border-radius: 4px;
+  }
+
+  /* Top bar */
+  .topbar {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: rgba(11,10,26,0.75);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--border);
+  }
+  .topbar-inner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 24px;
+    gap: 16px;
+  }
+  .brand { display: flex; align-items: center; gap: 10px; text-decoration: none; }
+  .brand-mark { width: 28px; height: 28px; border-radius: 8px; }
+  .brand-name { font-weight: 700; font-size: 16px; letter-spacing: 0.2px; }
+  .topnav { display: flex; align-items: center; gap: 18px; }
+
+  .lang-toggle { position: absolute; opacity: 0; width: 1px; height: 1px; }
+  .lang-switch {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 62px;
+    height: 30px;
+    padding: 0 3px;
+    background: rgba(255,255,255,0.08);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    cursor: pointer;
+    user-select: none;
+  }
+  .lang-switch::before {
+    content: "";
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 27px;
+    height: 24px;
+    border-radius: 999px;
+    background: var(--violet-glow);
+    transition: transform 0.2s ease;
+  }
+  body:has(#lang-toggle:checked) .lang-switch::before { transform: translateX(29px); }
+  .lang-switch span {
+    position: relative;
+    z-index: 1;
+    width: 27px;
+    text-align: center;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text);
+  }
+  .lang-toggle:focus-visible + .lang-switch { outline: 2px solid var(--violet-light); outline-offset: 3px; }
+
+  .nav-link { display: flex; align-items: center; gap: 6px; text-decoration: none; color: var(--text-dim); font-size: 14px; }
+  .nav-link:hover { color: var(--text); }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 22px;
+    border-radius: 12px;
+    font-weight: 600;
+    font-size: 15px;
+    text-decoration: none;
+    transition: transform 0.15s ease, background 0.15s ease;
+    white-space: nowrap;
+  }
+  .btn-primary { background: var(--violet); color: #fff; }
+  .btn-primary:hover { background: #6d28d9; transform: translateY(-1px); }
+  .btn-ghost { background: transparent; border: 1px solid var(--border); color: var(--text); }
+  .btn-ghost:hover { background: rgba(255,255,255,0.06); }
+  .btn-small { padding: 8px 16px; font-size: 13px; border-radius: 10px; }
+
+  /* Hero */
+  .hero {
+    position: relative;
+    overflow: hidden;
+    background: linear-gradient(180deg, var(--indigo) 0%, var(--bg) 62%);
+    text-align: center;
+    padding: 96px 0 72px;
+  }
+  .hero::before {
+    content: "";
+    position: absolute;
+    top: -120px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 560px;
+    height: 560px;
+    background: radial-gradient(circle, var(--violet-glow) 0%, transparent 70%);
+    opacity: 0.35;
+    filter: blur(10px);
+    pointer-events: none;
+  }
+  .hero-inner { position: relative; }
+  .hero-icon {
+    width: 96px;
+    height: 96px;
+    border-radius: 22px;
+    margin: 0 auto 28px;
+    box-shadow: 0 24px 60px -18px rgba(139,92,246,0.65);
+  }
+  .hero h1 {
+    font-size: clamp(40px, 8vw, 64px);
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    background: linear-gradient(135deg, #ffffff 0%, var(--violet-light) 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    margin-bottom: 18px;
+  }
+  .hero-tagline { font-size: clamp(18px, 2.6vw, 22px); font-weight: 600; color: var(--text); margin-bottom: 12px; }
+  .hero-sub { font-size: 16px; color: var(--text-dim); max-width: 560px; margin: 0 auto; }
+  .hero-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 14px; margin-top: 36px; }
+  .hero-meta { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 12px; margin-top: 28px; }
+  .kbd {
+    display: inline-flex;
+    align-items: center;
+    padding: 7px 13px;
+    border-radius: 8px;
+    background: rgba(255,255,255,0.08);
+    border: 1px solid var(--border);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 14px;
+    letter-spacing: 0.5px;
+  }
+  .hero-req { font-size: 13px; color: var(--text-dim); }
+  .kbd-inline {
+    display: inline-block;
+    padding: 1px 7px;
+    border-radius: 6px;
+    background: rgba(255,255,255,0.1);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.92em;
+  }
+
+  section { padding: 88px 0; }
+  section h2 {
+    font-size: clamp(26px, 4vw, 32px);
+    font-weight: 800;
+    text-align: center;
+    letter-spacing: -0.01em;
+  }
+  section .section-lead {
+    text-align: center;
+    color: var(--text-dim);
+    max-width: 620px;
+    margin: 12px auto 0;
+    font-size: 15.5px;
+  }
+
+  /* Steps */
+  .step-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 22px;
+    margin-top: 40px;
+  }
+  .step-grid li { background: var(--bg-elev); border: 1px solid var(--border); border-radius: var(--radius); padding: 22px; }
+  .step-num {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    background: var(--violet);
+    color: #fff;
+    font-weight: 700;
+    font-size: 14px;
+    margin-bottom: 14px;
+  }
+  .step-grid p { font-size: 14.5px; color: var(--text-dim); line-height: 1.55; }
+
+  /* Features */
+  .feature-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 20px;
+    margin-top: 44px;
+  }
+  .feature-card { background: var(--bg-elev); border: 1px solid var(--border); border-radius: var(--radius); padding: 26px; }
+  .feature-card h3 { font-size: 17px; font-weight: 700; margin-bottom: 10px; }
+  .feature-card p { font-size: 14.5px; color: var(--text-dim); line-height: 1.6; }
+
+  /* Privacy */
+  .privacy { background: rgba(255,255,255,0.02); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+  .privacy-inner { max-width: 680px; }
+  .privacy > .wrap > p { text-align: center; color: var(--text-dim); font-size: 15.5px; line-height: 1.65; margin-top: 16px; }
+  .privacy-list { margin: 28px 0 0; display: grid; gap: 14px; }
+  .privacy-list li { position: relative; padding-left: 26px; color: var(--text-dim); font-size: 14.5px; line-height: 1.6; }
+  .privacy-list li::before { content: "✓"; position: absolute; left: 0; top: 0; color: var(--violet-light); font-weight: 700; }
+
+  /* Download */
+  .download { text-align: center; }
+  .download > .wrap > p { color: var(--text-dim); font-size: 15.5px; max-width: 560px; margin: 14px auto 0; }
+  .req-list { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin: 24px 0 34px; }
+  .req-list li span {
+    display: inline-block;
+    padding: 6px 14px;
+    border-radius: 999px;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid var(--border);
+    font-size: 13px;
+    color: var(--text-dim);
+  }
+  .download .hero-actions { margin-top: 0; }
+
+  /* Footer */
+  .site-footer { border-top: 1px solid var(--border); padding: 30px 0; }
+  .footer-inner { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
+  .footer-inner p { color: var(--text-dim); font-size: 13px; }
+  .footer-nav { display: flex; gap: 18px; }
+  .footer-nav a { color: var(--text-dim); text-decoration: none; font-size: 13px; }
+  .footer-nav a:hover { color: var(--text); }
+
+  @media (max-width: 800px) {
+    .step-grid { grid-template-columns: 1fr 1fr; }
+  }
+  @media (max-width: 560px) {
+    section { padding: 60px 0; }
+    .hero { padding: 72px 0 56px; }
+    .step-grid { grid-template-columns: 1fr; }
+    .feature-grid { grid-template-columns: 1fr; }
+    .nav-link span { display: none; }
+    .topnav { gap: 12px; }
+  }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <a class="brand" href="#top">
+      <img class="brand-mark" src="assets/icon.png" alt="Lint">
+      <span class="brand-name">Lint</span>
+    </a>
+    <nav class="topnav">
+      <input type="checkbox" id="lang-toggle" class="lang-toggle">
+      <label for="lang-toggle" class="lang-switch" aria-label="Switch language / 切換語言">
+        <span>EN</span><span>中</span>
+      </label>
+      <a class="nav-link" href="https://github.com/davislinyd/Lint" target="_blank" rel="noopener noreferrer">
+        <svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
+        <span>GitHub</span>
+      </a>
+      <a class="btn btn-primary btn-small" href="https://github.com/davislinyd/Lint/releases/latest" target="_blank" rel="noopener noreferrer">
+        <span class="en">Download</span><span class="zh">下載</span>
+      </a>
+    </nav>
+  </div>
+</header>
+
+<main id="top">
+
+  <section class="hero">
+    <div class="wrap hero-inner">
+      <img class="hero-icon" src="assets/icon.png" alt="Lint app icon">
+      <h1>Lint</h1>
+      <p class="hero-tagline">
+        <span class="en">A macOS menu-bar AI writing assistant.</span>
+        <span class="zh">macOS 選單列 AI 寫作助手。</span>
+      </p>
+      <p class="hero-sub">
+        <span class="en">Press a global hotkey to capture the selected text, send it to an LLM, compare the suggestion in a floating panel, then replace or copy it.</span>
+        <span class="zh">全域快捷鍵擷取選取文字，送到 LLM，在浮動面板對比後覆蓋或複製。</span>
+      </p>
+      <div class="hero-actions">
+        <a class="btn btn-primary" href="https://github.com/davislinyd/Lint/releases/latest" target="_blank" rel="noopener noreferrer">
+          <span class="en">Download for Mac</span><span class="zh">下載 Mac 版</span>
+        </a>
+        <a class="btn btn-ghost" href="https://github.com/davislinyd/Lint" target="_blank" rel="noopener noreferrer">
+          <span class="en">View on GitHub</span><span class="zh">查看原始碼</span>
+        </a>
+      </div>
+      <div class="hero-meta">
+        <span class="kbd">⌥⌘K</span>
+        <span class="kbd">⌥⌘L</span>
+        <span class="hero-req">macOS 14+ · Apple Silicon</span>
+      </div>
+    </div>
+  </section>
+
+  <section id="how-it-works">
+    <div class="wrap">
+      <h2><span class="en">How it works</span><span class="zh">運作方式</span></h2>
+      <ol class="step-grid">
+        <li>
+          <span class="step-num">1</span>
+          <p class="en">Select text in any app</p>
+          <p class="zh">在任何 App 裡選取文字</p>
+        </li>
+        <li>
+          <span class="step-num">2</span>
+          <p class="en">Press <span class="kbd-inline">⌥⌘K</span> or <span class="kbd-inline">⌥⌘L</span></p>
+          <p class="zh">按下 <span class="kbd-inline">⌥⌘K</span> 或 <span class="kbd-inline">⌥⌘L</span></p>
+        </li>
+        <li>
+          <span class="step-num">3</span>
+          <p class="en">Compare the suggestion in a floating panel</p>
+          <p class="zh">在浮動面板比對建議</p>
+        </li>
+        <li>
+          <span class="step-num">4</span>
+          <p class="en">Replace the text, or copy it</p>
+          <p class="zh">覆蓋文字，或複製起來</p>
+        </li>
+      </ol>
+    </div>
+  </section>
+
+  <section id="features">
+    <div class="wrap">
+      <h2><span class="en">Features</span><span class="zh">功能</span></h2>
+      <div class="feature-grid">
+        <article class="feature-card">
+          <h3><span class="en">Works everywhere</span><span class="zh">隨處可用</span></h3>
+          <p class="en">Native apps are read through Accessibility. Chromium and Electron apps — browsers, Slack, SeaTalk, ChatGPT — are switched on automatically.</p>
+          <p class="zh">原生 App 透過輔助功能讀取；瀏覽器、Slack、SeaTalk、ChatGPT 等 Chromium／Electron App，Lint 會自動開啟其輔助功能樹。</p>
+        </article>
+        <article class="feature-card">
+          <h3><span class="en">Live background suggestions</span><span class="zh">背景即時建議</span></h3>
+          <p class="en">While you type, Lint watches the focused field and prepares a suggestion in the background, so the hotkey shows it right away.</p>
+          <p class="zh">打字時 Lint 監看目前輸入框，在背景先準備好建議，按下快捷鍵即可立刻顯示。</p>
+        </article>
+        <article class="feature-card">
+          <h3><span class="en">Writing modes</span><span class="zh">寫作模式</span></h3>
+          <p class="en">Proofreading and polishing, formal / concise / professional tone, translation, and a custom prompt.</p>
+          <p class="zh">文法校對與潤飾、正式／簡潔／專業語氣、翻譯，以及自訂 Prompt。</p>
+        </article>
+        <article class="feature-card">
+          <h3><span class="en">Bring your own model</span><span class="zh">自帶模型</span></h3>
+          <p class="en">Local llama.cpp managed by Lint, or OpenAI, Anthropic, Gemini, and any OpenAI-compatible endpoint — Ollama, LM Studio, custom.</p>
+          <p class="zh">本機 llama.cpp（由 Lint 代管），或 OpenAI、Anthropic、Gemini，以及任何 OpenAI 相容端點——Ollama、LM Studio、自訂端點。</p>
+        </article>
+        <article class="feature-card">
+          <h3><span class="en">Rebindable hotkeys</span><span class="zh">快捷鍵可重新綁定</span></h3>
+          <p class="en"><span class="kbd-inline">⌥⌘K</span> and <span class="kbd-inline">⌥⌘L</span> are the defaults — rebind either one in Settings.</p>
+          <p class="zh"><span class="kbd-inline">⌥⌘K</span> 與 <span class="kbd-inline">⌥⌘L</span> 是預設值，可在設定中重新綁定。</p>
+        </article>
+        <article class="feature-card">
+          <h3><span class="en">Keychain-secured</span><span class="zh">Keychain 加密存放</span></h3>
+          <p class="en">API keys are stored in the macOS Keychain, never in plain text.</p>
+          <p class="zh">API Key 存放在 macOS 鑰匙圈，絕不以明文儲存。</p>
+        </article>
+        <article class="feature-card">
+          <h3><span class="en">Optional local learning</span><span class="zh">可選的本機學習</span></h3>
+          <p class="en">Lint can learn writing habits you keep correcting and remember them as short, abstracted rules — off by default, fully inspectable and deletable.</p>
+          <p class="zh">可讓 Lint 記住你反覆修正的寫作習慣，變成簡短規則——預設關閉，隨時可查看與刪除。</p>
+        </article>
+        <article class="feature-card">
+          <h3><span class="en">Fullscreen aware</span><span class="zh">全螢幕感知</span></h3>
+          <p class="en">The suggestion bubble opens on whichever Space you're working in, including fullscreen apps.</p>
+          <p class="zh">浮動視窗會出現在你正在使用的 Space，包含全螢幕 App。</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section class="privacy" id="privacy">
+    <div class="wrap privacy-inner">
+      <h2><span class="en">Learning, kept private</span><span class="zh">學習機制，隱私優先</span></h2>
+      <p>
+        <span class="en">Turn on Settings → Learning and Lint notices writing habits you keep correcting — a word you often misspell, an article you often drop — and remembers them as short rules. It's off by default, and behaves exactly the same either way.</span>
+        <span class="zh">在「設定 → 學習」開啟後，Lint 會留意你反覆修正的寫作習慣（常拼錯的字、常漏掉的冠詞），記成簡短規則；預設關閉，關閉時行為完全不變。</span>
+      </p>
+      <ul class="privacy-list">
+        <li><span class="en">Everything stays on your Mac, in a local database only you can read.</span><span class="zh">全部只存在你的 Mac，僅你本人可讀。</span></li>
+        <li><span class="en">Only abstracted rules are kept — a word or short phrase — never the surrounding text.</span><span class="zh">只保存抽象化後的規則（一個字或一小段詞組），不保存周圍的文字。</span></li>
+        <li><span class="en">Memories fade automatically once a pattern stops showing up.</span><span class="zh">不再出現的規則會自動淡出。</span></li>
+        <li><span class="en">Every memory can be viewed, pinned, disabled, or deleted — or the whole database reset.</span><span class="zh">每一條記憶都能查看、釘選、停用或刪除，也能整個重設。</span></li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="download" id="download">
+    <div class="wrap">
+      <h2><span class="en">Download</span><span class="zh">下載</span></h2>
+      <p>
+        <span class="en">Get the latest DMG from GitHub Releases. Official releases are signed with a Developer ID certificate and notarized by Apple.</span>
+        <span class="zh">到 GitHub Releases 下載最新的 DMG。正式版以 Developer ID 憑證簽署並通過 Apple 公證。</span>
+      </p>
+      <ul class="req-list">
+        <li><span>macOS 14+</span></li>
+        <li><span>Apple Silicon Mac</span></li>
+        <li><span class="en">An LLM backend — local or cloud</span><span class="zh">一個 LLM 後端——本機或雲端</span></li>
+      </ul>
+      <div class="hero-actions">
+        <a class="btn btn-primary" href="https://github.com/davislinyd/Lint/releases/latest" target="_blank" rel="noopener noreferrer">
+          <span class="en">Download for Mac</span><span class="zh">下載 Mac 版</span>
+        </a>
+        <a class="btn btn-ghost" href="https://github.com/davislinyd/Lint#readme" target="_blank" rel="noopener noreferrer">
+          <span class="en">Build from source →</span><span class="zh">從原始碼建置 →</span>
+        </a>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer class="site-footer">
+  <div class="wrap footer-inner">
+    <p>MIT License · © 2026 Davis Lin</p>
+    <nav class="footer-nav">
+      <a href="https://github.com/davislinyd/Lint" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://github.com/davislinyd/Lint/releases" target="_blank" rel="noopener noreferrer">Releases</a>
+      <a href="https://github.com/davislinyd/Lint/issues" target="_blank" rel="noopener noreferrer">Issues</a>
+    </nav>
+  </div>
+</footer>
+
+</body>
+</html>

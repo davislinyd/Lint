@@ -198,6 +198,94 @@ final class LearningCoordinatorTests: XCTestCase {
         XCTAssertEqual(kept.first?.preferredExample, "should discuss the plan")
     }
 
+    // MARK: retrieval
+
+    private func retrieve(_ coordinator: LearningCoordinator, config: LearningConfig? = nil) async -> [WritingMemory] {
+        await coordinator.relevantMemories(
+            for: "we should discuss about the roadmap", mode: .proofread, config: config ?? on
+        )
+    }
+
+    func testLearnedMemoriesAreRetrievedOnlyForRelevantText() async throws {
+        let coordinator = learner()
+        for topic in topics.prefix(3) {
+            await coordinator.recordFeedback(edit(topic), config: on)
+        }
+        let hit = await retrieve(coordinator)
+        XCTAssertEqual(hit.map(\.dedupKey), ["grammar:en:discuss about"])
+        let miss = await coordinator.relevantMemories(
+            for: "the roadmap looks fine to everyone here", mode: .proofread, config: on
+        )
+        XCTAssertTrue(miss.isEmpty)
+    }
+
+    func testPromotionShowsUpInTheNextRetrievalEvenAfterTheCacheWasFilled() async throws {
+        let coordinator = learner()
+        for topic in topics.prefix(2) {
+            await coordinator.recordFeedback(edit(topic), config: on)
+        }
+        let candidate = await retrieve(coordinator)
+        XCTAssertTrue(candidate.isEmpty, "a candidate is not used yet")
+
+        await coordinator.recordFeedback(edit(topics[2]), config: on)
+        let active = await retrieve(coordinator)
+        XCTAssertEqual(active.count, 1)
+    }
+
+    func testEveryChangeShowsUpInTheNextRetrieval() async throws {
+        let (coordinator, id) = try await seeded()
+        let untouched = await retrieve(coordinator)
+        XCTAssertTrue(untouched.isEmpty, "one edit is only a candidate")
+
+        await coordinator.setPinned(true, id: id)
+        let pinned = await retrieve(coordinator)
+        XCTAssertEqual(pinned.count, 1)
+
+        await coordinator.setEnabled(false, id: id)
+        let disabled = await retrieve(coordinator)
+        XCTAssertTrue(disabled.isEmpty)
+
+        await coordinator.setPinned(true, id: id)
+        let repinned = await retrieve(coordinator)
+        XCTAssertEqual(repinned.count, 1)
+
+        await coordinator.deleteMemory(id: id)
+        let deleted = await retrieve(coordinator)
+        XCTAssertTrue(deleted.isEmpty)
+    }
+
+    func testResetAndClearingEmptyTheRetrievalToo() async throws {
+        let (coordinator, id) = try await seeded()
+        await coordinator.setPinned(true, id: id)
+        let before = await retrieve(coordinator)
+        XCTAssertEqual(before.count, 1)
+        await coordinator.deleteAllMemories()
+        let cleared = await retrieve(coordinator)
+        XCTAssertTrue(cleared.isEmpty)
+
+        await coordinator.recordFeedback(edit("budget"), config: on)
+        let relearned = try await onlyMemory(coordinator)
+        await coordinator.setPinned(true, id: relearned.id)
+        let again = await retrieve(coordinator)
+        XCTAssertEqual(again.count, 1)
+        await coordinator.resetAll()
+        let reset = await retrieve(coordinator)
+        XCTAssertTrue(reset.isEmpty)
+    }
+
+    func testNothingIsRetrievedWhileLearningIsOffAndRetrievingNeverCreatesTheDatabase() async throws {
+        let url = try makeStoreURL()
+        let fresh = LearningCoordinator(storeURL: url, hmacKey: testKey())
+        let none = await retrieve(fresh)
+        XCTAssertTrue(none.isEmpty)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: url.path))
+
+        let (coordinator, id) = try await seeded()
+        await coordinator.setPinned(true, id: id)
+        let off = await retrieve(coordinator, config: LearningConfig(enabled: false))
+        XCTAssertTrue(off.isEmpty)
+    }
+
     // MARK: managing memories
 
     private func seeded() async throws -> (LearningCoordinator, UUID) {

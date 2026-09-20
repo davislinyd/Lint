@@ -13,12 +13,7 @@ struct WordToken: Equatable, Sendable {
     let isName: Bool
 
     var isCJK: Bool {
-        text.unicodeScalars.contains { scalar in
-            switch scalar.value {
-            case 0x4E00...0x9FFF, 0x3400...0x4DBF, 0xF900...0xFAFF, 0x3040...0x30FF: true
-            default: false
-            }
-        }
+        text.unicodeScalars.contains(where: Script.isCJK)
     }
 }
 

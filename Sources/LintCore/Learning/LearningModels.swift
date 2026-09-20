@@ -152,6 +152,18 @@ enum LearningPolicy {
     static let activeThreshold = 1.0
     static let maxInstructionLength = 200
 
+    /// What a prompt may carry: a few short reminders, so a small local context window stays free
+    /// for the text itself.
+    static let maxPersonalizedMemories = 5
+    /// Of those, how many may be habits, which are not tied to anything in the text.
+    static let maxHabitMemories = 2
+    static let maxPersonalizationCharacters = 600
+    /// The numbering and line break a memory costs once listed in a prompt.
+    static let personalizationLineOverhead = 4
+    /// A habit only applies to a text that is clearly in its language.
+    static let minHabitLatinLetters = 8
+    static let minHabitCJKCharacters = 4
+
     /// What one observation is worth. An edit is the user's own choice; accepting is a weaker
     /// yes, copying weaker still, and asking again says nothing about what to learn.
     static func evidenceWeight(for action: FeedbackAction) -> Double {

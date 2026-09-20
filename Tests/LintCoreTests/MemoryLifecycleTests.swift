@@ -7,14 +7,11 @@ final class MemoryLifecycleTests: XCTestCase {
 
     private func candidate(
         triggers: [String] = ["discuss about"],
-        instruction: String = "generated wording",
-        negative: String? = nil,
-        preferred: String? = nil
+        instruction: String = "generated wording"
     ) -> MemoryCandidate {
         MemoryCandidate(
             dedupKey: "grammar:en:discuss about", kind: .grammar, language: "en", modeScope: nil,
-            triggers: triggers, instruction: instruction,
-            negativeExample: negative, preferredExample: preferred
+            triggers: triggers, instruction: instruction
         )
     }
 
@@ -92,17 +89,6 @@ final class MemoryLifecycleTests: XCTestCase {
 
         let kept = MemoryLifecycle.merging(candidate(triggers: ["other"]), weight: 0.15, at: day2, into: adopted)
         XCTAssertEqual(kept.triggers, ["big"])
-    }
-
-    func testExamplesAreFilledOnlyWhenMissing() {
-        let first = MemoryLifecycle.merging(candidate(negative: "a", preferred: "b"), weight: 0.35, at: day1, into: nil)
-        let second = MemoryLifecycle.merging(candidate(negative: "c", preferred: "d"), weight: 0.35, at: day2, into: first)
-        XCTAssertEqual(second.negativeExample, "a")
-        XCTAssertEqual(second.preferredExample, "b")
-
-        let bare = MemoryLifecycle.merging(candidate(), weight: 0.35, at: day1, into: nil)
-        let filled = MemoryLifecycle.merging(candidate(negative: "c", preferred: "d"), weight: 0.35, at: day2, into: bare)
-        XCTAssertEqual(filled.negativeExample, "c")
     }
 
     func testWeakeningTakesEvidenceAwayButNeverBelowZero() {

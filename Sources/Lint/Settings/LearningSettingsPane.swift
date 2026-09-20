@@ -12,15 +12,9 @@ struct LearningSettingsPane: View {
             Section {
                 SettingsToggle(
                     title: "啟用個人化學習",
-                    detail: "記住你反覆修正的寫作習慣，之後在相關時提醒模型。資料只存在這台 Mac。",
+                    detail: "記住你反覆修正的寫作習慣，之後在相關時提醒模型。資料只存在這台 Mac，只記抽象的規則，不記原文。Lint 認不出中文人名或全小寫的英文名，被你修正過的名字仍可能被記下；可在「管理記憶」查看並刪除。",
                     isOn: Bindable(app.settings).learningEnabled
                 )
-                SettingsToggle(
-                    title: "儲存範例句",
-                    detail: "關閉時只保存抽象後的規則，不保存任何原文。開啟後，每條記憶還會附一小段前後文（不含數字、網址或疑似人名）。",
-                    isOn: Bindable(app.settings).storeLearningExamples
-                )
-                .disabled(!app.settings.learningEnabled)
             } footer: {
                 Text("關閉時，Lint 的行為與沒有這個功能時完全相同。")
                     .sectionNote()

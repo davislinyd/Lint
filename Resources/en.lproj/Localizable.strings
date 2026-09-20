@@ -213,7 +213,7 @@
 "自訂 Prompt" = "Custom prompt";
 "學習" = "Learning";
 "啟用個人化學習" = "Enable Personalized Learning";
-"記住你反覆修正的寫作習慣，之後在相關時提醒模型。資料只存在這台 Mac。" = "Remembers writing habits you keep correcting and reminds the model when they’re relevant. Data stays on this Mac.";
+"記住你反覆修正的寫作習慣，之後在相關時提醒模型。資料只存在這台 Mac，只記抽象的規則，不記原文。Lint 認不出中文人名或全小寫的英文名，被你修正過的名字仍可能被記下；可在「管理記憶」查看並刪除。" = "Remembers writing habits you keep correcting and reminds the model when they’re relevant. Data stays on this Mac, and only abstract rules are kept, never your text. Lint can’t recognize Chinese names or names typed in lowercase, so a name you corrected may still be remembered; you can review and delete it under Manage Memories.";
 "關閉時，Lint 的行為與沒有這個功能時完全相同。" = "When off, Lint behaves exactly as if this feature didn’t exist.";
 "學習資料" = "Learning Data";
 "啟用中的記憶" = "Active memories";
@@ -250,6 +250,4 @@
 "編輯這條記憶" = "Edit This Memory";
 "最多 %lld 字" = "Up to %lld characters";
 "管理記憶…" = "Manage Memories…";
-"儲存範例句" = "Keep Example Snippets";
-"關閉時只保存抽象後的規則，不保存任何原文。開啟後，每條記憶還會附一小段前後文（不含數字、網址或疑似人名）。" = "When off, only the abstracted rule is kept, never any of your text. When on, each memory also keeps a short stretch of surrounding words (no numbers, addresses or likely names).";
 "在全面板編輯" = "Edit in Full Panel";

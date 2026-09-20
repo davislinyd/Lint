@@ -8,17 +8,12 @@ struct MemoryCandidate: Equatable, Sendable {
     var modeScope: WritingMode?
     var triggers: [String]
     var instruction: String
-    var negativeExample: String?
-    var preferredExample: String?
 }
 
 /// Finds habits in the difference between two versions of a text. Deterministic: the instruction
 /// of every memory is a template filled with words that passed the sanitizer, never model output,
 /// so a memory cannot carry instructions of its own.
 struct MemoryExtractor: Sendable {
-    /// Keep a short, filtered stretch of surrounding words with each memory.
-    var storeExamples = false
-
     private static let articles: Set<String> = ["a", "an", "the"]
     private static let prepositions: Set<String> = [
         "about", "to", "of", "for", "in", "on", "at", "with", "by", "from", "into", "onto", "over",
@@ -39,7 +34,6 @@ struct MemoryExtractor: Sendable {
         "go", "goes", "went", "come", "get", "got", "make", "take", "give", "let", "want", "need",
         "like", "try", "use", "used", "say", "see", "know", "think", "help", "going", "able",
     ]
-    private static let maxExampleLength = 60
 
     private enum Pattern {
         case articles
@@ -115,7 +109,7 @@ struct MemoryExtractor: Sendable {
                 against.append(key)
             }
             guard let pattern = pattern(of: span),
-                  let candidate = candidate(for: pattern, span: span, context: context)
+                  let candidate = candidate(for: pattern, context: context)
             else { continue }
             if !comparison.userChoice, injected.contains(candidate.dedupKey) {
                 if !reminded.contains(candidate.dedupKey) { reminded.append(candidate.dedupKey) }
@@ -247,17 +241,15 @@ struct MemoryExtractor: Sendable {
 
     // MARK: building a candidate
 
-    private func candidate(for pattern: Pattern, span: EditSpan, context: Context) -> MemoryCandidate? {
+    private func candidate(for pattern: Pattern, context: Context) -> MemoryCandidate? {
         let scope = context.mode == .proofread ? nil : context.mode
-        let examples = examples(for: span)
 
         switch pattern {
         case .articles:
             return MemoryCandidate(
                 dedupKey: "grammar:en:articles",
                 kind: .grammar, language: "en", modeScope: nil, triggers: [],
-                instruction: "英文常漏用或誤用冠詞（a／an／the）：請特別檢查單數可數名詞前的冠詞。",
-                negativeExample: examples.negative, preferredExample: examples.preferred
+                instruction: "英文常漏用或誤用冠詞（a／an／the）：請特別檢查單數可數名詞前的冠詞。"
             )
 
         case .spelling(let old, let new):
@@ -268,8 +260,7 @@ struct MemoryExtractor: Sendable {
                 triggers: triggers(for: [old], context: context),
                 instruction: context.userChoice
                     ? "使用者偏好「\(right)」而非「\(wrong)」。"
-                    : "使用者常把「\(right)」誤寫成「\(wrong)」；原文出現「\(wrong)」時請確認是否應為「\(right)」，僅在語意符合時修正。",
-                negativeExample: examples.negative, preferredExample: examples.preferred
+                    : "使用者常把「\(right)」誤寫成「\(wrong)」；原文出現「\(wrong)」時請確認是否應為「\(right)」，僅在語意符合時修正。"
             )
 
         case .extraPreposition(let verb, let preposition):
@@ -278,8 +269,7 @@ struct MemoryExtractor: Sendable {
                 dedupKey: "grammar:en:\(phrase)",
                 kind: .grammar, language: "en", modeScope: nil,
                 triggers: triggers(for: [verb, preposition], context: context),
-                instruction: "「\(phrase)」中的「\(preposition.key)」有時是多餘的（使用者曾刪掉）；請確認是否應寫成「\(verb.key)」，僅在語意需要時修正。",
-                negativeExample: examples.negative, preferredExample: examples.preferred
+                instruction: "「\(phrase)」中的「\(preposition.key)」有時是多餘的（使用者曾刪掉）；請確認是否應寫成「\(verb.key)」，僅在語意需要時修正。"
             )
 
         case .replacement(let old, let new):
@@ -293,8 +283,7 @@ struct MemoryExtractor: Sendable {
                 triggers: triggers(for: old, context: context),
                 instruction: context.userChoice
                     ? "使用者偏好用「\(to)」取代「\(from)」。"
-                    : "使用者接受過把「\(from)」改成「\(to)」；原文出現「\(from)」時可考慮這樣改。",
-                negativeExample: examples.negative, preferredExample: examples.preferred
+                    : "使用者接受過把「\(from)」改成「\(to)」；原文出現「\(from)」時可考慮這樣改。"
             )
 
         case .terminology(let old, let new):
@@ -306,8 +295,7 @@ struct MemoryExtractor: Sendable {
                 dedupKey: Self.key(.terminology, language, scope, "\(from)>\(to)"),
                 kind: .terminology, language: language, modeScope: scope,
                 triggers: triggers(for: old, context: context),
-                instruction: "用詞：請用「\(to)」，不要用「\(from)」。",
-                negativeExample: examples.negative, preferredExample: examples.preferred
+                instruction: "用詞：請用「\(to)」，不要用「\(from)」。"
             )
         }
     }
@@ -330,20 +318,6 @@ struct MemoryExtractor: Sendable {
         let source = context.sourceTokens.map(\.key)
         guard !keys.isEmpty, source.count >= keys.count else { return false }
         return (0...(source.count - keys.count)).contains { Array(source[$0..<($0 + keys.count)]) == keys }
-    }
-
-    private func examples(for span: EditSpan) -> (negative: String?, preferred: String?) {
-        guard storeExamples, MemorySanitizer.isSafe(span.before + span.after) else { return (nil, nil) }
-        let negative = Self.snippet(span.before + span.removed + span.after)
-        let preferred = Self.snippet(span.before + span.added + span.after)
-        guard negative.count <= Self.maxExampleLength, preferred.count <= Self.maxExampleLength else {
-            return (nil, nil)
-        }
-        return (negative, preferred)
-    }
-
-    private static func snippet(_ tokens: [WordToken]) -> String {
-        tokens.map(\.text).joined(separator: tokens.contains(where: \.isCJK) ? "" : " ")
     }
 
     private static func phrase(_ tokens: [WordToken]) -> String {

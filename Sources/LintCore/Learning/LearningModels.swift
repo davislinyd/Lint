@@ -53,8 +53,6 @@ public struct WritingMemory: Codable, Sendable, Equatable, Identifiable {
     /// Words or phrases that make this memory relevant; empty means a general habit.
     public var triggers: [String]
     public var instruction: String
-    public var negativeExample: String?
-    public var preferredExample: String?
     public var evidenceScore: Double
     public var occurrenceCount: Int
     public var state: MemoryState
@@ -152,12 +150,9 @@ public struct PersonalizedPrompt: Sendable, Equatable {
 /// is what crosses into `LearningCoordinator`.
 public struct LearningConfig: Sendable, Equatable {
     public var enabled: Bool
-    /// Keep a short, filtered stretch of surrounding words with each memory.
-    public var storeExamples: Bool
 
-    public init(enabled: Bool, storeExamples: Bool = false) {
+    public init(enabled: Bool) {
         self.enabled = enabled
-        self.storeExamples = storeExamples
     }
 }
 

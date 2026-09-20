@@ -211,19 +211,6 @@ final class LearningCoordinatorTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: url.path))
     }
 
-    func testExamplesAreKeptOnlyWhenAskedFor() async throws {
-        let without = learner()
-        await without.recordFeedback(edit("plan"), config: on)
-        let bare = await without.memories()
-        XCTAssertNil(bare.first?.negativeExample)
-
-        let with = learner()
-        await with.recordFeedback(edit("plan"), config: LearningConfig(enabled: true, storeExamples: true))
-        let kept = await with.memories()
-        XCTAssertEqual(kept.first?.negativeExample, "should discuss about the plan")
-        XCTAssertEqual(kept.first?.preferredExample, "should discuss the plan")
-    }
-
     // MARK: retrieval
 
     private func retrieve(_ coordinator: LearningCoordinator, config: LearningConfig? = nil) async -> [WritingMemory] {
@@ -876,12 +863,12 @@ final class LearningCoordinatorTests: XCTestCase {
             finalText: "we should discuss the quokka schedule.",
             provider: "localLlama", model: "qwen"
         )
-        await coordinator.recordFeedback(secretLine, config: LearningConfig(enabled: true, storeExamples: true))
+        await coordinator.recordFeedback(secretLine, config: on)
 
         let file = try Data(contentsOf: url)
         XCTAssertNotNil(file.range(of: Data("discuss about".utf8)), "sanity: the abstracted trigger is stored")
-        XCTAssertNotNil(file.range(of: Data("quokka".utf8)), "sanity: an example keeps two words of context")
-        XCTAssertNil(file.range(of: Data("schedule".utf8)), "but never the rest of the sentence")
+        XCTAssertNil(file.range(of: Data("quokka".utf8)), "not even the words around the edit")
+        XCTAssertNil(file.range(of: Data("schedule".utf8)))
         XCTAssertNil(file.range(of: Data("we should".utf8)))
     }
 
@@ -912,8 +899,7 @@ final class LearningCoordinatorTests: XCTestCase {
             WritingMemory(
                 id: UUID(), dedupKey: "grammar:en:articles", kind: .grammar, language: "en",
                 modeScope: nil, triggers: [], instruction: "Check articles.",
-                negativeExample: nil, preferredExample: nil, evidenceScore: 1.2,
-                occurrenceCount: 4, state: .active, userEdited: false,
+                evidenceScore: 1.2, occurrenceCount: 4, state: .active, userEdited: false,
                 createdAt: Date(), lastConfirmedAt: Date()
             )
         )

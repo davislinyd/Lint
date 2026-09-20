@@ -32,7 +32,6 @@ final class SettingsStore {
         static let showReadyChipNearField = "app.lint.showReadyChipNearField"
         static let fastMode = "app.lint.fastMode"
         static let learningEnabled = "app.lint.learning.enabled"
-        static let storeLearningExamples = "app.lint.learning.storeExamples"
         static let localServerAutoStart = "app.lint.localServer.autoStart"
         static let localServerBinaryPath = "app.lint.localServer.binaryPath"
         /// Legacy: the `-hf` spec now lives in `model(.localLlama)`; only read by the migration.
@@ -104,10 +103,6 @@ final class SettingsStore {
     var learningEnabled: Bool {
         didSet { defaults.set(learningEnabled, forKey: Keys.learningEnabled) }
     }
-    /// Off: memories hold only abstracted rules. On: each also keeps a short filtered snippet.
-    var storeLearningExamples: Bool {
-        didSet { defaults.set(storeLearningExamples, forKey: Keys.storeLearningExamples) }
-    }
     /// With the local llama.cpp provider, launch llama-server if nothing is listening.
     var localServerAutoStart: Bool {
         didSet { defaults.set(localServerAutoStart, forKey: Keys.localServerAutoStart) }
@@ -176,7 +171,6 @@ final class SettingsStore {
             fastMode = defaults.bool(forKey: Keys.fastMode)
         }
         learningEnabled = defaults.bool(forKey: Keys.learningEnabled)
-        storeLearningExamples = defaults.bool(forKey: Keys.storeLearningExamples)
         if defaults.object(forKey: Keys.localServerAutoStart) == nil {
             localServerAutoStart = true
         } else {
@@ -290,7 +284,7 @@ final class SettingsStore {
     }
 
     var learningConfig: LearningConfig {
-        LearningConfig(enabled: learningEnabled, storeExamples: storeLearningExamples)
+        LearningConfig(enabled: learningEnabled)
     }
 
     /// Local llama.cpp provider — Lint launches and talks to its own llama-server.

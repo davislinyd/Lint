@@ -22,7 +22,6 @@ final class MemoryRetrieverTests: XCTestCase {
             id: UUID(uuidString: String(format: "00000000-0000-0000-0000-%012d", counter))!,
             dedupKey: key, kind: kind, language: language, modeScope: scope, triggers: triggers,
             instruction: instruction ?? "rule for \(key)",
-            negativeExample: nil, preferredExample: nil,
             evidenceScore: evidence, occurrenceCount: count, state: state, userEdited: false,
             createdAt: now, lastConfirmedAt: now
         )
@@ -63,6 +62,15 @@ final class MemoryRetrieverTests: XCTestCase {
         let memories = [memory("軟件", kind: .terminology, language: "zh-Hant", triggers: ["軟件"])]
         XCTAssertEqual(keys(memories, "這個軟件需要更新"), ["軟件"])
         XCTAssertEqual(keys(memories, "這個軟體需要更新"), [])
+    }
+
+    func testAnApostropheMatchesWhicheverWayItIsWritten() {
+        let plain = [memory("cant", kind: .spelling, triggers: ["can't"])]
+        XCTAssertEqual(keys(plain, "We can’t wait until tomorrow."), ["cant"])
+        XCTAssertEqual(keys(plain, "We can't wait until tomorrow."), ["cant"])
+        // A trigger stored the other way still works.
+        let typographic = [memory("cant", kind: .spelling, triggers: ["can’t"])]
+        XCTAssertEqual(keys(typographic, "We can't wait until tomorrow."), ["cant"])
     }
 
     func testATriggerNeedsItsLanguageToShowUpInTheText() {

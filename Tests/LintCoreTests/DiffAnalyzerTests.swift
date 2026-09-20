@@ -19,6 +19,14 @@ final class DiffAnalyzerTests: XCTestCase {
         XCTAssertEqual(tokens[0].text, "We")
     }
 
+    func testKeysWriteTheTypographicApostrophesAsThePlainOne() {
+        for apostrophe in ["\u{2019}", "\u{2018}", "\u{02BC}", "\u{FF07}", "'"] {
+            XCTAssertEqual(WordToken.key(of: "Don\(apostrophe)t"), "don't")
+        }
+        XCTAssertEqual(keys(DiffAnalyzer.tokens(in: "It’s here")), ["it's", "here"])
+        XCTAssertEqual(DiffAnalyzer.tokens(in: "It’s here")[0].text, "It’s", "the text stays as written")
+    }
+
     func testAddressesPathsAndTagsAreGlued() {
         let text = "mail john@acme.com or see https://acme.com/a and notes.txt or #tag now."
         let glued = Set(DiffAnalyzer.tokens(in: text).filter(\.isGlued).map(\.key))
@@ -54,7 +62,6 @@ final class DiffAnalyzerTests: XCTestCase {
         XCTAssertEqual(keys(span.removed), ["prospective"])
         XCTAssertEqual(keys(span.added), ["perspective"])
         XCTAssertEqual(keys(span.before), ["from", "my"])
-        XCTAssertEqual(keys(span.after), ["i", "think"])
     }
 
     func testInsertionAndDeletion() throws {
@@ -76,9 +83,8 @@ final class DiffAnalyzerTests: XCTestCase {
         XCTAssertEqual(found.count, 2)
         XCTAssertEqual(keys(found[0].added), ["to"])
         XCTAssertEqual(keys(found[1].removed), ["about"])
-        // The word between the two spans belongs to the first one's `after` and the second one's
-        // `before`, and neither reaches into the other span.
-        XCTAssertEqual(keys(found[0].after), ["discuss"])
+        // The word between the two spans is the second one's `before`, which does not reach back
+        // into the first span.
         XCTAssertEqual(keys(found[1].before), ["discuss"])
     }
 
@@ -86,6 +92,15 @@ final class DiffAnalyzerTests: XCTestCase {
         XCTAssertTrue(spans("we should wait", "we should wait").isEmpty)
         XCTAssertTrue(spans("i think so", "I think so").isEmpty)
         XCTAssertTrue(spans("", "").isEmpty)
+    }
+
+    func testSwitchingApostropheStyleIsNoEditButARealEditBesideItIs() throws {
+        XCTAssertTrue(spans("We don’t know why it can’t work.", "We don't know why it can't work.").isEmpty)
+        XCTAssertTrue(spans("We don't know why it can't work.", "We don’t know why it can’t work.").isEmpty)
+
+        let found = spans("We don’t recieve it.", "We don't receive it.")
+        XCTAssertEqual(found.count, 1)
+        XCTAssertEqual(keys(try XCTUnwrap(found.first).removed), ["recieve"])
     }
 
     func testChineseWordReplacement() throws {

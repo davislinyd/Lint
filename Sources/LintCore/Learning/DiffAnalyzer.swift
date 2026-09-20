@@ -4,7 +4,8 @@ import NaturalLanguage
 /// A word as written, plus what the extractor needs to judge whether it is safe to remember.
 struct WordToken: Equatable, Sendable {
     let text: String
-    /// Lower-cased. Diffs compare keys, so a capitalisation change is not an edit.
+    /// What diffs and triggers compare (see `key(of:)`), so a capitalisation change, or a switch
+    /// between "don’t" and "don't", is not an edit.
     let key: String
     let isSentenceStart: Bool
     /// Stuck to symbols such as `@`, `/` or `.com`: part of an address, path or code.
@@ -15,15 +16,22 @@ struct WordToken: Equatable, Sendable {
     var isCJK: Bool {
         text.unicodeScalars.contains(where: Script.isCJK)
     }
+
+    private static let typographicApostrophes: Set<Character> = ["\u{2019}", "\u{2018}", "\u{02BC}", "\u{FF07}"]
+
+    /// A word lower-cased, with the typographic apostrophes written as the plain one. Editors and
+    /// models switch between them on their own; that is not a habit of the user's.
+    static func key(of word: String) -> String {
+        String(word.lowercased().map { typographicApostrophes.contains($0) ? "'" : $0 })
+    }
 }
 
-/// One place where two texts differ, with the unchanged words on either side.
+/// One place where two texts differ, with the unchanged words before it.
 struct EditSpan: Equatable, Sendable {
     let removed: [WordToken]
     let added: [WordToken]
-    /// Up to two unchanged words before and after, never reaching into a neighbouring span.
+    /// Up to two unchanged words before it, never reaching into the previous span.
     let before: [WordToken]
-    let after: [WordToken]
 }
 
 enum DiffAnalyzer {
@@ -46,7 +54,7 @@ enum DiffAnalyzer {
             let word = String(text[range])
             return WordToken(
                 text: word,
-                key: word.lowercased(),
+                key: WordToken.key(of: word),
                 isSentenceStart: startsSentence(at: range.lowerBound, in: text),
                 isGlued: isGlued(range, in: text),
                 isName: names.contains { $0.overlaps(range) }
@@ -107,12 +115,10 @@ enum DiffAnalyzer {
 
         return ranges.enumerated().compactMap { index, range in
             let floor = index > 0 ? ranges[index - 1].old.upperBound : 0
-            let ceiling = index + 1 < ranges.count ? ranges[index + 1].old.lowerBound : old.count
             return refined(EditSpan(
                 removed: Array(old[range.old]),
                 added: Array(new[range.new]),
-                before: Array(old[max(floor, range.old.lowerBound - 2)..<range.old.lowerBound]),
-                after: Array(old[range.old.upperBound..<min(ceiling, range.old.upperBound + 2)])
+                before: Array(old[max(floor, range.old.lowerBound - 2)..<range.old.lowerBound])
             ))
         }
     }
@@ -136,8 +142,7 @@ enum DiffAnalyzer {
         return EditSpan(
             removed: covering(oldCore, in: span.removed),
             added: covering(newCore, in: span.added),
-            before: span.before,
-            after: span.after
+            before: span.before
         )
     }
 

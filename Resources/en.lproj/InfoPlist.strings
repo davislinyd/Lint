@@ -1,0 +1,3 @@
+/* English Info.plist strings. Keys are Info.plist keys; the base values in Info.plist are zh-Hant. */
+
+"NSAppleEventsUsageDescription" = "Lint uses System Events to bring your previous app back to the front before it replaces text.";

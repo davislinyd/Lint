@@ -116,9 +116,23 @@ public struct LearningFeedback: Sendable {
 }
 
 extension WritingMemory {
+    /// Evidence as it stands at `date`. It fades once the pattern has not shown up for a while, and
+    /// not at all while the user holds the memory (pinned or disabled).
+    public func evidence(at date: Date) -> Double {
+        evidenceScore * decayFactor(at: date)
+    }
+
     /// 0...1 and rising with evidence; what the settings page shows and retrieval ranks by.
-    public var confidence: Double {
-        evidenceScore / (evidenceScore + 1)
+    public func confidence(at date: Date) -> Double {
+        let evidence = evidence(at: date)
+        return evidence / (evidence + 1)
+    }
+
+    func decayFactor(at date: Date) -> Double {
+        guard state != .pinned, state != .disabled else { return 1 }
+        let days = max(0, date.timeIntervalSince(lastConfirmedAt)) / 86_400
+        let fading = max(0, days - LearningPolicy.evidenceGraceDays)
+        return pow(0.5, fading / LearningPolicy.evidenceHalfLifeDays)
     }
 }
 
@@ -169,6 +183,15 @@ enum LearningPolicy {
     /// An active memory whose evidence falls below this is a candidate again. Lower than the bar
     /// for becoming active, so that a memory does not flip back and forth around it.
     static let demoteThreshold = 0.5
+
+    /// Evidence starts to fade once a memory has gone this many days without its pattern showing up
+    /// again, and then halves every `evidenceHalfLifeDays`. A habit that keeps recurring never fades.
+    static let evidenceGraceDays = 30.0
+    static let evidenceHalfLifeDays = 90.0
+    /// A candidate or active memory whose evidence has faded below this is archived.
+    static let archiveThreshold = 0.1
+    /// How often the memories are looked over for ones that have faded.
+    static let settleInterval: TimeInterval = 24 * 60 * 60
     static let maxInstructionLength = 200
 
     /// What a prompt may carry: a few short reminders, so a small local context window stays free

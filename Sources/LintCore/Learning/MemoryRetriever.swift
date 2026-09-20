@@ -32,17 +32,22 @@ struct MemoryRetriever: Sendable {
 
     private let entries: [Entry]
     private let longestLatinTrigger: Int
+    private let now: Date
 
-    /// Only active and pinned memories can be retrieved, and of two that ask for opposite things
-    /// (`a>b` and `b>a`) only the better-evidenced one: a prompt must not tell the model both.
-    init(memories: [WritingMemory]) {
-        let usable = memories.filter { $0.state == .active || $0.state == .pinned }
+    /// Evidence fades, so every memory is judged as it stands at `now`: only active and pinned ones
+    /// can be retrieved, and of two that ask for opposite things (`a>b` and `b>a`) only the
+    /// better-evidenced one: a prompt must not tell the model both.
+    init(memories: [WritingMemory], now: Date = Date()) {
+        self.now = now
+        let usable = memories
+            .map { MemoryLifecycle.settled($0, at: now) }
+            .filter { $0.state == .active || $0.state == .pinned }
         let byKey = Dictionary(usable.map { ($0.dedupKey, $0) }, uniquingKeysWith: { first, _ in first })
         entries = usable
             .filter { memory in
                 guard let key = MemoryExtractor.reversedKey(of: memory.dedupKey),
                       let opposite = byKey[key] else { return true }
-                return !Self.loses(memory, to: opposite)
+                return !Self.loses(memory, to: opposite, at: now)
             }
             .map { memory in
                 Entry(
@@ -59,11 +64,12 @@ struct MemoryRetriever: Sendable {
     /// A pinned memory is the user's choice and beats an unpinned one (two pinned ones both stay);
     /// otherwise more evidence wins, then the more recently confirmed, then the id, so exactly one
     /// of the pair goes.
-    private static func loses(_ memory: WritingMemory, to opposite: WritingMemory) -> Bool {
+    private static func loses(_ memory: WritingMemory, to opposite: WritingMemory, at now: Date) -> Bool {
         let (pinned, oppositePinned) = (memory.state == .pinned, opposite.state == .pinned)
         if pinned != oppositePinned { return oppositePinned }
         if pinned { return false }
-        if memory.evidenceScore != opposite.evidenceScore { return memory.evidenceScore < opposite.evidenceScore }
+        let (evidence, oppositeEvidence) = (memory.evidence(at: now), opposite.evidence(at: now))
+        if evidence != oppositeEvidence { return evidence < oppositeEvidence }
         if memory.lastConfirmedAt != opposite.lastConfirmedAt { return memory.lastConfirmedAt < opposite.lastConfirmedAt }
         return memory.id.uuidString > opposite.id.uuidString
     }
@@ -114,7 +120,7 @@ struct MemoryRetriever: Sendable {
     /// and mode-specific memories come first.
     private func score(_ memory: WritingMemory, lexical: Bool, mode: WritingMode) -> Double {
         (lexical ? 1.0 : 0)
-            + 0.3 * memory.confidence
+            + 0.3 * memory.confidence(at: now)
             + 0.1 * min(1, Double(memory.occurrenceCount) / 10)
             + (memory.modeScope == mode ? 0.1 : 0)
     }

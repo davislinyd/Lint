@@ -65,6 +65,7 @@ With **Settings → Learning** turned on, Lint notices writing habits you keep c
 - Everything stays on your Mac, in `~/Library/Application Support/Lint/LintLearning.sqlite` (readable only by you).
 - Only abstracted rules are kept: a word, a short phrase or a template sentence, never your text. Words that look like names, numbers, addresses, paths or acronyms are left out. A short stretch of surrounding words is kept only if you turn on "Keep example snippets".
 - What you did with a suggestion (replace, copy, rewrite) is logged as keyed hashes, not text; the key is in the Keychain.
+- Memories fade when the pattern stops showing up: after a month without it the evidence halves every three months, so a memory first drops out of the prompt and is eventually archived (never deleted). Pinned and disabled memories do not fade, and Enable brings an archived one back.
 - Under Settings → Learning → Manage Memories you can read, reword, pin, disable or delete every memory, clear them all, or reset the whole database.
 
 ### Test
@@ -140,6 +141,7 @@ chmod +x Scripts/*.sh
 - 全部只存在你的 Mac：`~/Library/Application Support/Lint/LintLearning.sqlite`（僅你本人可讀）。
 - 只保存抽象後的規則（一個字、一小段詞組或模板句），不保存你的文字。疑似人名、數字、網址、路徑或縮寫的詞不會被記下。只有開啟「儲存範例句」才會附上一小段前後文。
 - 你對建議做了什麼（取代、複製、重寫）只以帶金鑰的雜湊記錄，不含文字；金鑰放在鑰匙圈。
+- 太久沒再出現的記憶會淡出：超過一個月沒出現後，證據每三個月減半，先退出 prompt，最後被封存（不會刪除）。已釘選與已停用的記憶不會淡出，按「啟用」可把封存的記憶還原。
 - 在「設定 → 學習 → 管理記憶」可以查看、改寫、釘選、停用或刪除每一條記憶，也能全部清除或重設整個資料庫。
 
 ### 測試

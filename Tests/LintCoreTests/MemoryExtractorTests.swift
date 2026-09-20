@@ -107,6 +107,30 @@ final class MemoryExtractorTests: XCTestCase {
         )
     }
 
+    func testAPatternTheModelAppliedAsRemindedIsReportedAsSuchNotAsEvidence() {
+        let fixed = feedback(original: "We should discuss about the plan.", generated: "We should discuss the plan.")
+        let reminded = MemoryExtractor().extraction(
+            from: fixed, action: .accepted, injected: ["grammar:en:discuss about"]
+        )
+        XCTAssertTrue(reminded.candidates.isEmpty)
+        XCTAssertEqual(reminded.reminded, ["grammar:en:discuss about"])
+
+        let plain = MemoryExtractor().extraction(from: fixed, action: .accepted)
+        XCTAssertEqual(plain.candidates.map(\.dedupKey), ["grammar:en:discuss about"])
+        XCTAssertTrue(plain.reminded.isEmpty)
+
+        let edited = feedback(
+            original: "We should discuss about the plan.",
+            generated: "We should discuss about the plan.",
+            final: "We should discuss the plan."
+        )
+        let byTheUser = MemoryExtractor().extraction(
+            from: edited, action: .editedAndAccepted, injected: ["grammar:en:discuss about"]
+        )
+        XCTAssertEqual(byTheUser.candidates.map(\.dedupKey), ["grammar:en:discuss about"])
+        XCTAssertTrue(byTheUser.reminded.isEmpty, "the user's own edit is evidence, not a reminder working")
+    }
+
     func testOnlyTheRemindedPatternIsLeftOut() {
         let found = MemoryExtractor().candidates(
             from: feedback(

@@ -1,6 +1,32 @@
 import XCTest
 @testable import LintCore
 
+/// A clock the test moves by hand, so evidence fades exactly as much as the test says.
+private final class TestClock: @unchecked Sendable {
+    private let lock = NSLock()
+    private var current: Date
+
+    init(_ start: Date = Date(timeIntervalSince1970: 1_800_000_000)) {
+        current = start
+    }
+
+    var now: Date {
+        lock.lock()
+        defer { lock.unlock() }
+        return current
+    }
+
+    func advance(days: Double) {
+        lock.lock()
+        current = current.addingTimeInterval(days * 86_400)
+        lock.unlock()
+    }
+
+    var reader: @Sendable () -> Date {
+        { [self] in now }
+    }
+}
+
 final class LearningCoordinatorTests: XCTestCase {
     private func makeStoreURL() throws -> URL {
         let dir = FileManager.default.temporaryDirectory
@@ -117,8 +143,8 @@ final class LearningCoordinatorTests: XCTestCase {
         )
     }
 
-    private func learner() -> LearningCoordinator {
-        LearningCoordinator(storeURL: nil, hmacKey: testKey())
+    private func learner(clock: TestClock = TestClock()) -> LearningCoordinator {
+        LearningCoordinator(storeURL: nil, hmacKey: testKey(), clock: clock.reader)
     }
 
     private func onlyMemory(_ coordinator: LearningCoordinator) async throws -> WritingMemory {
@@ -607,6 +633,143 @@ final class LearningCoordinatorTests: XCTestCase {
         XCTAssertEqual(afterPlain.evidenceScore, backward.evidenceScore - 0.3, accuracy: 1e-9)
         let forwardAfterPlain = try await memory("vocabulary:en:big>large", in: coordinator)
         XCTAssertEqual(forwardAfterPlain.evidenceScore, weakenedForward.evidenceScore + 0.15, accuracy: 1e-9)
+    }
+
+    // MARK: fading
+
+    private let key = "grammar:en:discuss about"
+
+    private func learnedDiscussAbout(clock: TestClock) async throws -> (LearningCoordinator, WritingMemory) {
+        let coordinator = learner(clock: clock)
+        for topic in topics.prefix(3) {
+            await coordinator.recordFeedback(edit(topic), config: on)
+        }
+        return (coordinator, try await onlyMemory(coordinator))
+    }
+
+    func testAMemoryFadesOutOfThePromptThenIsArchivedAndNewEvidenceWakesIt() async throws {
+        let clock = TestClock()
+        let (coordinator, first) = try await learnedDiscussAbout(clock: clock)
+        XCTAssertEqual(first.state, .active)
+        let usedAtFirst = await retrieve(coordinator)
+        XCTAssertEqual(usedAtFirst.count, 1)
+
+        clock.advance(days: 100)
+        let usedAt100 = await retrieve(coordinator)
+        XCTAssertEqual(usedAt100.count, 1, "0.61 of evidence left")
+
+        clock.advance(days: 30)
+        let usedAt130 = await retrieve(coordinator)
+        XCTAssertTrue(usedAt130.isEmpty, "below the bar, so out of the prompt")
+        let demoted = try await onlyMemory(coordinator)
+        XCTAssertEqual(demoted.state, .candidate, "and the sweep makes that official")
+
+        clock.advance(days: 210)
+        let archived = try await onlyMemory(coordinator)
+        XCTAssertEqual(archived.state, .archived)
+
+        // The habit comes back: fresh evidence wakes it, on top of what little was left.
+        await coordinator.recordFeedback(edit("design"), config: on)
+        let woken = try await onlyMemory(coordinator)
+        XCTAssertEqual(woken.state, .candidate)
+        XCTAssertEqual(woken.occurrenceCount, first.occurrenceCount + 1)
+        XCTAssertEqual(woken.evidenceScore, archived.evidence(at: clock.now) + 0.35, accuracy: 1e-9, "on top of what little was left")
+        for topic in topics.prefix(2) {
+            await coordinator.recordFeedback(edit("again \(topic)"), config: on)
+        }
+        let active = try await onlyMemory(coordinator)
+        XCTAssertEqual(active.state, .active)
+        let used = await retrieve(coordinator)
+        XCTAssertEqual(used.count, 1)
+    }
+
+    func testPinnedAndDisabledMemoriesHoldStillAndGiveTheirTimeBackWhenReleased() async throws {
+        let clock = TestClock()
+        let (coordinator, memory) = try await learnedDiscussAbout(clock: clock)
+
+        await coordinator.setPinned(true, id: memory.id)
+        clock.advance(days: 400)
+        let pinned = try await onlyMemory(coordinator)
+        XCTAssertEqual(pinned.state, .pinned)
+        XCTAssertEqual(pinned.evidence(at: clock.now), memory.evidenceScore, accuracy: 1e-9)
+
+        await coordinator.setPinned(false, id: memory.id)
+        let unpinned = try await onlyMemory(coordinator)
+        XCTAssertEqual(unpinned.state, .active, "400 pinned days did not count against it")
+        clock.advance(days: 60)
+        let fading = try await onlyMemory(coordinator)
+        XCTAssertEqual(fading.state, .active)
+        XCTAssertEqual(fading.evidence(at: clock.now), memory.evidenceScore * pow(0.5, 30.0 / 90.0), accuracy: 1e-9)
+
+        await coordinator.setEnabled(false, id: memory.id)
+        clock.advance(days: 400)
+        let disabled = try await onlyMemory(coordinator)
+        XCTAssertEqual(disabled.state, .disabled)
+        await coordinator.setEnabled(true, id: memory.id)
+        let enabled = try await onlyMemory(coordinator)
+        XCTAssertEqual(enabled.state, .candidate, "what it had faded to before it was disabled is under the bar")
+        XCTAssertEqual(enabled.evidence(at: clock.now), memory.evidenceScore * pow(0.5, 30.0 / 90.0), accuracy: 1e-9)
+    }
+
+    func testRestoringAnArchivedMemoryMakesItActiveAgain() async throws {
+        let clock = TestClock()
+        let (coordinator, memory) = try await learnedDiscussAbout(clock: clock)
+        clock.advance(days: 400)
+        let archived = try await onlyMemory(coordinator)
+        XCTAssertEqual(archived.state, .archived)
+
+        await coordinator.setEnabled(true, id: memory.id)
+        let restored = try await onlyMemory(coordinator)
+        XCTAssertEqual(restored.state, .active)
+        XCTAssertEqual(restored.lastConfirmedAt, clock.now)
+        let used = await retrieve(coordinator)
+        XCTAssertEqual(used.count, 1)
+    }
+
+    func testAHabitThatKeepsRecurringDoesNotFadeButOneThatStopsDoes() async throws {
+        let clock = TestClock()
+        let (coordinator, memory) = try await learnedDiscussAbout(clock: clock)
+        let objects = ["alpha", "bravo", "charlie", "delta", "echo", "foxtrot", "golf", "hotel"]
+
+        // Every 25 days the reminded model fixes it and the user takes that as is: 200 days.
+        for object in objects {
+            clock.advance(days: 25)
+            var reminded = accept(object)
+            reminded.usedMemoryIDs = [memory.id]
+            await coordinator.recordFeedback(reminded, config: on)
+        }
+        let alive = try await onlyMemory(coordinator)
+        XCTAssertEqual(alive.state, .active)
+        XCTAssertEqual(alive.evidence(at: clock.now), memory.evidenceScore, accuracy: 1e-9, "not a bit weaker")
+        XCTAssertEqual(alive.occurrenceCount, memory.occurrenceCount, "and not counted as more evidence either")
+        let used = await retrieve(coordinator)
+        XCTAssertEqual(used.count, 1)
+
+        // Then it stops showing up.
+        clock.advance(days: 130)
+        let gone = await retrieve(coordinator)
+        XCTAssertTrue(gone.isEmpty)
+    }
+
+    func testAContradictionCutsIntoWhatHasFadedAndTheFadingGoesOnFromThere() async throws {
+        let clock = TestClock()
+        let (coordinator, memory) = try await learnedDiscussAbout(clock: clock)
+        clock.advance(days: 60)
+        await coordinator.recordFeedback(
+            LearningFeedback(
+                gesture: .replaced, mode: .proofread,
+                originalText: "we should discuss about the plan.",
+                generatedText: "we should discuss the plan.",
+                finalText: "we should discuss about the plan.",
+                provider: "localLlama", model: "qwen", usedMemoryIDs: [memory.id]
+            ),
+            config: on
+        )
+        let after = try await onlyMemory(coordinator)
+        let left = memory.evidenceScore * pow(0.5, 30.0 / 90.0)
+        XCTAssertEqual(after.evidence(at: clock.now), left - 0.7, accuracy: 1e-9)
+        XCTAssertEqual(after.state, .candidate)
+        XCTAssertEqual(after.lastConfirmedAt, memory.lastConfirmedAt, "no confirmation")
     }
 
     // MARK: managing memories

@@ -1,10 +1,15 @@
+import CryptoKit
 import Foundation
 
 /// Entry point of the learning subsystem. Everything here runs off the main actor, and a
 /// disabled feature never touches the disk.
 public actor LearningCoordinator {
+    private static let hmacKeyAccount = "learning.hmacKey"
+
     private let storeURL: URL?
+    private let hmacKeyProvider: @Sendable () throws -> Data
     private var store: (any LearningStore)?
+    private var hmacKey: SymmetricKey?
 
     /// `~/Library/Application Support/Lint/LintLearning.sqlite`
     public static var defaultStoreURL: URL {
@@ -15,7 +20,12 @@ public actor LearningCoordinator {
 
     /// `storeURL == nil` keeps everything in memory (tests).
     public init(storeURL: URL? = LearningCoordinator.defaultStoreURL) {
+        self.init(storeURL: storeURL, hmacKey: { try LearningCoordinator.keychainHMACKey() })
+    }
+
+    init(storeURL: URL?, hmacKey: @escaping @Sendable () throws -> Data) {
         self.storeURL = storeURL
+        self.hmacKeyProvider = hmacKey
     }
 
     /// Creates and migrates the database when learning is on, and trims old events.
@@ -27,6 +37,21 @@ public actor LearningCoordinator {
             try await store.pruneEvents(keepingLast: LearningPolicy.eventRetentionCount, olderThan: cutoff)
         } catch {
             NSLog("Lint learning: prune failed: \(error.localizedDescription)")
+        }
+    }
+
+    /// Records what the user did with a suggestion. Nothing is kept while learning is off, or when
+    /// the suggestion never finished generating.
+    public func recordFeedback(_ feedback: LearningFeedback, config: LearningConfig) async {
+        guard config.enabled, feedback.isLearnable,
+              let key = symmetricKey(),
+              let store = openStore(create: true),
+              let event = FeedbackCollector(key: key).event(for: feedback, now: Date())
+        else { return }
+        do {
+            try await store.insertEvent(event, unlessDuplicateWithin: LearningPolicy.eventDedupeWindow)
+        } catch {
+            NSLog("Lint learning: could not record feedback: \(error.localizedDescription)")
         }
     }
 
@@ -49,6 +74,30 @@ public actor LearningCoordinator {
         } catch {
             NSLog("Lint learning: reset failed: \(error.localizedDescription)")
         }
+    }
+
+    private func symmetricKey() -> SymmetricKey? {
+        if let hmacKey { return hmacKey }
+        do {
+            let key = SymmetricKey(data: try hmacKeyProvider())
+            hmacKey = key
+            return key
+        } catch {
+            NSLog("Lint learning: no HMAC key: \(error)")
+            return nil
+        }
+    }
+
+    /// One random key per install, kept in the Keychain rather than next to the data it protects.
+    private static func keychainHMACKey() throws -> Data {
+        let keychain = KeychainStore()
+        if let stored = try keychain.get(account: hmacKeyAccount),
+           let data = Data(base64Encoded: stored), data.count == 32 {
+            return data
+        }
+        let data = SymmetricKey(size: .bits256).withUnsafeBytes { Data($0) }
+        try keychain.set(data.base64EncodedString(), account: hmacKeyAccount)
+        return data
     }
 
     private func openStore(create: Bool) -> (any LearningStore)? {

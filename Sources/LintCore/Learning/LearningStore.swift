@@ -10,7 +10,10 @@ protocol LearningStore: Sendable {
     func memories() async throws -> [WritingMemory]
     func deleteMemory(id: UUID) async throws
 
-    func insertEvent(_ event: FeedbackEvent) async throws
+    /// With a window, the event is skipped when one with the same source, action and final text was
+    /// recorded that long (or less) before it. Returns whether it was inserted.
+    @discardableResult
+    func insertEvent(_ event: FeedbackEvent, unlessDuplicateWithin window: TimeInterval?) async throws -> Bool
     func eventCount() async throws -> Int
     /// Drops events older than `cutoff`, then everything but the newest `maxCount`.
     func pruneEvents(keepingLast maxCount: Int, olderThan cutoff: Date) async throws

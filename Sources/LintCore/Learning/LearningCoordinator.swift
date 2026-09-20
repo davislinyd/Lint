@@ -11,6 +11,9 @@ public actor LearningCoordinator {
     private var store: (any LearningStore)?
     private var hmacKey: SymmetricKey?
 
+    /// Longest instruction a memory keeps, however it was edited.
+    public static let maxInstructionLength = LearningPolicy.maxInstructionLength
+
     /// `~/Library/Application Support/Lint/LintLearning.sqlite`
     public static var defaultStoreURL: URL {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -49,9 +52,69 @@ public actor LearningCoordinator {
               let event = FeedbackCollector(key: key).event(for: feedback, now: Date())
         else { return }
         do {
-            try await store.insertEvent(event, unlessDuplicateWithin: LearningPolicy.eventDedupeWindow)
+            let inserted = try await store.insertEvent(
+                event, unlessDuplicateWithin: LearningPolicy.eventDedupeWindow
+            )
+            // A repeat of the same feedback is not new evidence.
+            if inserted {
+                await learn(from: feedback, action: event.action, config: config, at: event.createdAt, store: store)
+            }
         } catch {
             NSLog("Lint learning: could not record feedback: \(error.localizedDescription)")
+        }
+    }
+
+    public func memories() async -> [WritingMemory] {
+        guard let store = openStore(create: false) else { return [] }
+        do {
+            return try await store.memories()
+        } catch {
+            NSLog("Lint learning: could not read memories: \(error.localizedDescription)")
+            return []
+        }
+    }
+
+    /// Pinned memories are always eligible; unpinning returns one to the state its evidence earns.
+    public func setPinned(_ pinned: Bool, id: UUID) async {
+        await change(id) { memory in
+            memory.state = pinned ? .pinned : MemoryLifecycle.restingState(evidenceScore: memory.evidenceScore)
+        }
+    }
+
+    public func setEnabled(_ enabled: Bool, id: UUID) async {
+        await change(id) { memory in
+            memory.state = enabled ? MemoryLifecycle.restingState(evidenceScore: memory.evidenceScore) : .disabled
+        }
+    }
+
+    /// The user's own wording replaces the generated one, and is never overwritten by new evidence.
+    public func setInstruction(_ text: String, id: UUID) async {
+        let cleaned = String(
+            text.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+                .prefix(LearningPolicy.maxInstructionLength)
+        )
+        guard !cleaned.isEmpty else { return }
+        await change(id) { memory in
+            memory.instruction = cleaned
+            memory.userEdited = true
+        }
+    }
+
+    public func deleteMemory(id: UUID) async {
+        guard let store = openStore(create: false) else { return }
+        do {
+            try await store.deleteMemory(id: id)
+        } catch {
+            NSLog("Lint learning: could not delete a memory: \(error.localizedDescription)")
+        }
+    }
+
+    public func deleteAllMemories() async {
+        guard let store = openStore(create: false) else { return }
+        do {
+            try await store.deleteAllMemories()
+        } catch {
+            NSLog("Lint learning: could not clear memories: \(error.localizedDescription)")
         }
     }
 
@@ -73,6 +136,36 @@ public actor LearningCoordinator {
             try await store.resetAll()
         } catch {
             NSLog("Lint learning: reset failed: \(error.localizedDescription)")
+        }
+    }
+
+    private func learn(
+        from feedback: LearningFeedback,
+        action: FeedbackAction,
+        config: LearningConfig,
+        at now: Date,
+        store: any LearningStore
+    ) async {
+        let weight = LearningPolicy.evidenceWeight(for: action)
+        guard weight > 0 else { return }
+        let extractor = MemoryExtractor(storeExamples: config.storeExamples)
+        for candidate in extractor.candidates(from: feedback, action: action) {
+            do {
+                try await store.mergeMemory(dedupKey: candidate.dedupKey) { existing in
+                    MemoryLifecycle.merging(candidate, weight: weight, at: now, into: existing)
+                }
+            } catch {
+                NSLog("Lint learning: could not update a memory: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    private func change(_ id: UUID, _ transform: @escaping @Sendable (inout WritingMemory) -> Void) async {
+        guard let store = openStore(create: false) else { return }
+        do {
+            try await store.updateMemory(id: id, transform)
+        } catch {
+            NSLog("Lint learning: could not change a memory: \(error.localizedDescription)")
         }
     }
 

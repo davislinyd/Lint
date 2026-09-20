@@ -83,6 +83,21 @@ struct SQLiteLearningStore: LearningStore {
         }
     }
 
+    func mergeMemory(dedupKey: String, _ transform: @escaping @Sendable (WritingMemory?) -> WritingMemory) async throws {
+        try await dbQueue.write { db in
+            let existing = try MemoryRecord.filter(Column("dedup_key") == dedupKey).fetchOne(db)?.memory
+            try MemoryRecord(transform(existing)).save(db)
+        }
+    }
+
+    func updateMemory(id: UUID, _ transform: @escaping @Sendable (inout WritingMemory) -> Void) async throws {
+        try await dbQueue.write { db in
+            guard var memory = try MemoryRecord.fetchOne(db, key: id.uuidString)?.memory else { return }
+            transform(&memory)
+            try MemoryRecord(memory).save(db)
+        }
+    }
+
     func memory(id: UUID) async throws -> WritingMemory? {
         try await dbQueue.read { db in
             try MemoryRecord.fetchOne(db, key: id.uuidString)?.memory
@@ -104,6 +119,12 @@ struct SQLiteLearningStore: LearningStore {
     func deleteMemory(id: UUID) async throws {
         try await dbQueue.write { db in
             _ = try MemoryRecord.deleteOne(db, key: id.uuidString)
+        }
+    }
+
+    func deleteAllMemories() async throws {
+        try await dbQueue.write { db in
+            try db.execute(sql: "DELETE FROM writing_memory")
         }
     }
 

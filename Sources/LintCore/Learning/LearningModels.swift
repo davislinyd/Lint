@@ -111,13 +111,23 @@ public struct LearningFeedback: Sendable {
     }
 }
 
+extension WritingMemory {
+    /// 0...1 and rising with evidence; what the settings page shows and retrieval ranks by.
+    public var confidence: Double {
+        evidenceScore / (evidenceScore + 1)
+    }
+}
+
 /// Snapshot of the user's learning settings. `SettingsStore` is bound to the main actor, so this
 /// is what crosses into `LearningCoordinator`.
 public struct LearningConfig: Sendable, Equatable {
     public var enabled: Bool
+    /// Keep a short, filtered stretch of surrounding words with each memory.
+    public var storeExamples: Bool
 
-    public init(enabled: Bool) {
+    public init(enabled: Bool, storeExamples: Bool = false) {
         self.enabled = enabled
+        self.storeExamples = storeExamples
     }
 }
 
@@ -138,4 +148,18 @@ enum LearningPolicy {
     static let eventRetentionDays = 180
     /// The same source, action and final text within this window counts once.
     static let eventDedupeWindow: TimeInterval = 24 * 60 * 60
+    /// Evidence at which a candidate becomes active.
+    static let activeThreshold = 1.0
+    static let maxInstructionLength = 200
+
+    /// What one observation is worth. An edit is the user's own choice; accepting is a weaker
+    /// yes, copying weaker still, and asking again says nothing about what to learn.
+    static func evidenceWeight(for action: FeedbackAction) -> Double {
+        switch action {
+        case .accepted: 0.15
+        case .editedAndAccepted: 0.35
+        case .copied: 0.05
+        case .regenerated: 0
+        }
+    }
 }

@@ -92,6 +92,49 @@ final class LearningStoreTests: XCTestCase {
         XCTAssertEqual(remaining, [kept])
     }
 
+    func testMergeMemoryInsertsThenSeesTheExistingRow() async throws {
+        let store = try SQLiteLearningStore(url: nil)
+        let base = memory()
+        try await store.mergeMemory(dedupKey: base.dedupKey) { existing in
+            XCTAssertNil(existing)
+            return base
+        }
+        try await store.mergeMemory(dedupKey: base.dedupKey) { existing in
+            var updated = existing ?? base
+            XCTAssertEqual(existing, base)
+            updated.occurrenceCount += 1
+            return updated
+        }
+        let all = try await store.memories()
+        XCTAssertEqual(all.count, 1)
+        XCTAssertEqual(all.first?.occurrenceCount, base.occurrenceCount + 1)
+    }
+
+    func testUpdateMemoryChangesOneRowAndIgnoresAMissingOne() async throws {
+        let store = try SQLiteLearningStore(url: nil)
+        let target = memory(key: "a")
+        let other = memory(key: "b")
+        try await store.saveMemory(target)
+        try await store.saveMemory(other)
+        try await store.updateMemory(id: target.id) { $0.state = .pinned }
+        try await store.updateMemory(id: UUID()) { $0.state = .disabled }
+        let pinned = try await store.memory(id: target.id)
+        let untouched = try await store.memory(id: other.id)
+        XCTAssertEqual(pinned?.state, .pinned)
+        XCTAssertEqual(untouched, other)
+    }
+
+    func testDeleteAllMemoriesKeepsEvents() async throws {
+        let store = try SQLiteLearningStore(url: nil)
+        try await store.saveMemory(memory(key: "a"))
+        try await store.saveMemory(memory(key: "b"))
+        try await store.insertEvent(event(at: 1), unlessDuplicateWithin: nil)
+        try await store.deleteAllMemories()
+        let stats = try await store.stats()
+        XCTAssertEqual(stats.memoriesByState, [:])
+        XCTAssertEqual(stats.eventCount, 1)
+    }
+
     func testInsertEventsAndCount() async throws {
         let store = try SQLiteLearningStore(url: nil)
         try await store.insertEvent(event(at: 1), unlessDuplicateWithin: nil)

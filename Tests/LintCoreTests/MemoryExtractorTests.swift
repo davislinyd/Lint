@@ -1,0 +1,285 @@
+import XCTest
+@testable import LintCore
+
+final class MemoryExtractorTests: XCTestCase {
+    private func feedback(
+        _ mode: WritingMode = .proofread,
+        original: String,
+        generated: String?,
+        final: String? = nil
+    ) -> LearningFeedback {
+        LearningFeedback(
+            gesture: .replaced, mode: mode, originalText: original, generatedText: generated,
+            finalText: final ?? generated ?? "", provider: "localLlama", model: "qwen"
+        )
+    }
+
+    private func extract(
+        _ action: FeedbackAction,
+        _ feedback: LearningFeedback,
+        storeExamples: Bool = false
+    ) -> [MemoryCandidate] {
+        MemoryExtractor(storeExamples: storeExamples).candidates(from: feedback, action: action)
+    }
+
+    private func keys(_ candidates: [MemoryCandidate]) -> [String] {
+        candidates.map(\.dedupKey)
+    }
+
+    // MARK: golden cases
+
+    func testUnnecessaryPrepositionAfterAVerb() throws {
+        let found = extract(.accepted, feedback(
+            original: "I think we need discuss about this issue.",
+            generated: "I think we need to discuss this issue."
+        ))
+        XCTAssertEqual(keys(found), ["grammar:en:discuss about"])
+        let memory = try XCTUnwrap(found.first)
+        XCTAssertEqual(memory.kind, .grammar)
+        XCTAssertEqual(memory.triggers, ["discuss about"])
+        XCTAssertNil(memory.modeScope)
+        XCTAssertNil(memory.negativeExample)
+        XCTAssertNil(memory.preferredExample)
+        let stored = [memory.instruction] + memory.triggers
+        XCTAssertFalse(stored.contains { $0.contains("think we need") }, "the sentence must not be kept")
+    }
+
+    func testMissingArticle() throws {
+        let found = extract(.accepted, feedback(
+            original: "I have meeting tomorrow.", generated: "I have a meeting tomorrow."
+        ))
+        XCTAssertEqual(keys(found), ["grammar:en:articles"])
+        XCTAssertTrue(try XCTUnwrap(found.first).triggers.isEmpty, "a habit has no trigger")
+    }
+
+    func testTwoMissingArticlesCountAsOnePattern() {
+        let found = extract(.accepted, feedback(
+            original: "I have meeting and need laptop.", generated: "I have a meeting and need a laptop."
+        ))
+        XCTAssertEqual(keys(found), ["grammar:en:articles"])
+    }
+
+    func testMisspelledWord() throws {
+        let found = extract(.accepted, feedback(
+            original: "From my prospective I think we should wait.",
+            generated: "From my perspective I think we should wait."
+        ))
+        XCTAssertEqual(keys(found), ["spelling:en:prospective>perspective"])
+        let memory = try XCTUnwrap(found.first)
+        XCTAssertEqual(memory.kind, .spelling)
+        XCTAssertEqual(memory.triggers, ["prospective"])
+        XCTAssertTrue(memory.instruction.contains("prospective"))
+        XCTAssertTrue(memory.instruction.contains("perspective"))
+    }
+
+    func testChineseTermEditedByTheUserIsTerminology() throws {
+        let found = extract(.editedAndAccepted, feedback(
+            original: "這個軟件需要更新",
+            generated: "這個軟件需要更新",
+            final: "這個軟體需要更新"
+        ))
+        XCTAssertEqual(keys(found), ["terminology:zh-Hant:軟件>軟體"])
+        let memory = try XCTUnwrap(found.first)
+        XCTAssertEqual(memory.kind, .terminology)
+        XCTAssertEqual(memory.language, "zh-Hant")
+        XCTAssertEqual(memory.triggers, ["軟件"], "the word is in the user's own text")
+        XCTAssertNil(memory.modeScope)
+    }
+
+    func testHeavyRewriteTeachesNothing() {
+        XCTAssertTrue(extract(.accepted, feedback(
+            original: "Please kindly help me to check this issue.",
+            generated: "Could you please check this issue?"
+        )).isEmpty)
+    }
+
+    func testWholesaleRewriteTeachesNothingEvenIfEachPartLooksLikeAHabit() {
+        // Three unrelated three-word swaps: each would be a phrase replacement on its own.
+        XCTAssertTrue(extract(.accepted, feedback(
+            original: "cat dog bird and fish frog toad and worm ant bee",
+            generated: "lion wolf hawk and shark newt slug and moth wasp flea"
+        )).isEmpty)
+    }
+
+    func testAddressesNumbersAndPathsAreNeverRemembered() {
+        XCTAssertTrue(extract(.accepted, feedback(
+            original: "Send it to john@acme.com by 5pm.", generated: "Send it to john@acme.com by 6pm."
+        )).isEmpty)
+        XCTAssertTrue(extract(.accepted, feedback(
+            original: "See notes.txt for details.", generated: "See notes.md for details."
+        )).isEmpty)
+        XCTAssertTrue(extract(.accepted, feedback(
+            original: "Ping Sarah about it.", generated: "Ping Sara about it."
+        )).isEmpty, "names are not remembered")
+    }
+
+    // MARK: which feedback teaches what
+
+    func testRegeneratingAndMissingSuggestionsTeachNothing() {
+        let sample = feedback(original: "I have meeting.", generated: "I have a meeting.")
+        XCTAssertTrue(extract(.regenerated, sample).isEmpty)
+        XCTAssertTrue(extract(.accepted, feedback(original: "I have meeting.", generated: nil)).isEmpty)
+    }
+
+    func testTranslationTeachesOnlyThroughTheUsersEdits() throws {
+        let translated = feedback(
+            .translate, original: "This software needs an update.",
+            generated: "這個軟件需要更新", final: "這個軟件需要更新"
+        )
+        XCTAssertTrue(extract(.accepted, translated).isEmpty, "original and translation are different languages")
+
+        let edited = feedback(
+            .translate, original: "This software needs an update.",
+            generated: "這個軟件需要更新", final: "這個軟體需要更新"
+        )
+        let found = extract(.editedAndAccepted, edited)
+        XCTAssertEqual(keys(found), ["terminology:zh-Hant:translate:軟件>軟體"])
+        let memory = try XCTUnwrap(found.first)
+        XCTAssertEqual(memory.modeScope, .translate)
+        XCTAssertTrue(memory.triggers.isEmpty, "the model's word is not in the English source, so it is a general habit")
+    }
+
+    func testToneModesLearnOnlyFromTheUsersEdits() throws {
+        let sample = feedback(
+            .toneFormal, original: "I need a big house",
+            generated: "I need a large house", final: "I need a huge house"
+        )
+        XCTAssertTrue(extract(.accepted, sample).isEmpty)
+        let found = extract(.editedAndAccepted, sample)
+        XCTAssertEqual(keys(found), ["vocabulary:en:toneFormal:large>huge"])
+        XCTAssertEqual(try XCTUnwrap(found.first).modeScope, .toneFormal)
+    }
+
+    func testSpellingAndGrammarStayGlobalInEveryMode() throws {
+        let sample = feedback(
+            .toneConcise, original: "From my perspective we wait",
+            generated: "From my perspective we wait", final: "From my prospective we wait"
+        )
+        let found = extract(.editedAndAccepted, sample)
+        XCTAssertEqual(keys(found), ["spelling:en:perspective>prospective"])
+        XCTAssertNil(try XCTUnwrap(found.first).modeScope)
+    }
+
+    func testCopyingLearnsFromTheDifferenceItActuallyShows() {
+        let unchanged = feedback(original: "I have meeting.", generated: "I have a meeting.")
+        XCTAssertEqual(keys(extract(.copied, unchanged)), ["grammar:en:articles"])
+
+        let edited = feedback(original: "I need a big house", generated: "I need a big house", final: "I need a huge house")
+        XCTAssertEqual(keys(extract(.copied, edited)), ["vocabulary:en:big>huge"])
+    }
+
+    // MARK: triggers
+
+    func testAUserEditOfAModelWordIsATriggerOnlyWhenTheWordIsInTheSource() throws {
+        let inSource = feedback(
+            original: "I need a large house", generated: "I need a large house", final: "I need a huge house"
+        )
+        XCTAssertEqual(try XCTUnwrap(extract(.editedAndAccepted, inSource).first).triggers, ["large"])
+
+        let notInSource = feedback(
+            original: "I need a big house", generated: "I need a large house", final: "I need a huge house"
+        )
+        XCTAssertTrue(try XCTUnwrap(extract(.editedAndAccepted, notInSource).first).triggers.isEmpty)
+    }
+
+    func testAcceptedReplacementIsRemembered() throws {
+        let found = extract(.accepted, feedback(
+            original: "This is very big news.", generated: "This is very large news."
+        ))
+        let memory = try XCTUnwrap(found.first)
+        XCTAssertEqual(memory.dedupKey, "vocabulary:en:big>large")
+        XCTAssertEqual(memory.triggers, ["big"])
+    }
+
+    func testPhraseReplacementIsStyle() throws {
+        let found = extract(.editedAndAccepted, feedback(
+            original: "We must act now to fix it.",
+            generated: "We must act now to fix it.",
+            final: "We should act now to fix it."
+        ))
+        XCTAssertEqual(keys(found), ["vocabulary:en:must>should"])
+        let phrase = extract(.editedAndAccepted, feedback(
+            original: "I will send it. Kindly request your help.",
+            generated: "I will send it. Kindly request your help.",
+            final: "I will send it. Could you help."
+        ))
+        XCTAssertEqual(try XCTUnwrap(phrase.first).kind, .style)
+    }
+
+    func testSwapsOfFunctionWordsAreGrammarInContextNotAPreference() {
+        XCTAssertTrue(extract(.accepted, feedback(
+            original: "The server is down since yesterday.", generated: "The server has been down since yesterday."
+        )).isEmpty)
+    }
+
+    func testTenseAndAgreementFixesAreNotSpellingSlips() {
+        XCTAssertTrue(extract(.accepted, feedback(
+            original: "We has a meeting yesterday.", generated: "We had a meeting yesterday."
+        )).isEmpty)
+    }
+
+    func testAVeryCommonWordIsNeverATrigger() throws {
+        let found = extract(.accepted, feedback(original: "Thanks for you reply.", generated: "Thanks for your reply."))
+        XCTAssertEqual(keys(found), ["spelling:en:you>your"])
+        XCTAssertTrue(try XCTUnwrap(found.first).triggers.isEmpty, "\"you\" would match nearly every text")
+    }
+
+    func testAPrepositionAfterAPronounOrACommonVerbIsLeftAlone() {
+        XCTAssertTrue(extract(.accepted, feedback(
+            original: "Could you help me to check this?", generated: "Could you help me check this?"
+        )).isEmpty)
+        XCTAssertTrue(extract(.accepted, feedback(
+            original: "I will go to home now.", generated: "I will go home now."
+        )).isEmpty)
+    }
+
+    func testFunctionWordsAloneAreNoTrigger() {
+        XCTAssertTrue(extract(.accepted, feedback(original: "It is in the box.", generated: "It is on the box.")).isEmpty)
+        XCTAssertEqual(
+            keys(extract(.accepted, feedback(original: "It is a box.", generated: "It is the box."))),
+            ["grammar:en:articles"]
+        )
+    }
+
+    // MARK: examples
+
+    func testExamplesAreOnlyKeptWhenAskedForAndWhenTheirContextIsSafe() throws {
+        let sample = feedback(
+            original: "From my prospective I think we should wait.",
+            generated: "From my perspective I think we should wait."
+        )
+        XCTAssertNil(try XCTUnwrap(extract(.accepted, sample).first).negativeExample)
+
+        let withExamples = try XCTUnwrap(extract(.accepted, sample, storeExamples: true).first)
+        XCTAssertEqual(withExamples.negativeExample, "From my prospective I think")
+        XCTAssertEqual(withExamples.preferredExample, "From my perspective I think")
+
+        let risky = feedback(
+            original: "From my prospective on 2026 we should wait.",
+            generated: "From my perspective on 2026 we should wait."
+        )
+        let riskyFound = try XCTUnwrap(extract(.accepted, risky, storeExamples: true).first)
+        XCTAssertNil(riskyFound.negativeExample, "a number in the surrounding words keeps the example out")
+        XCTAssertEqual(riskyFound.dedupKey, "spelling:en:prospective>perspective", "the memory itself is still learned")
+    }
+
+    // MARK: safety of what is stored
+
+    func testStoredTextOnlyHasSafeCharactersAndIsShort() {
+        let samples = [
+            feedback(original: "I think we need discuss about this issue.", generated: "I think we need to discuss this issue."),
+            feedback(original: "From my prospective we wait.", generated: "From my perspective we wait."),
+            feedback(original: "I have meeting.", generated: "I have a meeting."),
+        ]
+        for sample in samples {
+            for memory in extract(.accepted, sample, storeExamples: true) {
+                XCTAssertLessThanOrEqual(memory.instruction.count, 200)
+                for trigger in memory.triggers {
+                    XCTAssertLessThanOrEqual(trigger.count, MemorySanitizer.maxPhraseLength)
+                    XCTAssertTrue(trigger.allSatisfy { $0.isLetter || $0 == " " || $0 == "'" || $0 == "-" }, trigger)
+                }
+                XCTAssertFalse(memory.instruction.contains("\n"))
+            }
+        }
+    }
+}

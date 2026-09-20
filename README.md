@@ -58,6 +58,15 @@ Without permission the app still works, but falls back to simulated ⌘C / ⌘V 
 
 Proofreading and polishing, formal / concise / professional tone, translation, custom prompt.
 
+### Learning and privacy (optional, off by default)
+
+With **Settings → Learning** turned on, Lint notices writing habits you keep correcting (a word you often misspell, an article you often drop) and remembers them as short rules. While it is off, Lint behaves exactly as before. Memories are collected but not yet sent to the model.
+
+- Everything stays on your Mac, in `~/Library/Application Support/Lint/LintLearning.sqlite` (readable only by you).
+- Only abstracted rules are kept: a word, a short phrase or a template sentence, never your text. Words that look like names, numbers, addresses, paths or acronyms are left out. A short stretch of surrounding words is kept only if you turn on "Keep example snippets".
+- What you did with a suggestion (replace, copy, rewrite) is logged as keyed hashes, not text; the key is in the Keychain.
+- Under Settings → Learning → Manage Memories you can read, reword, pin, disable or delete every memory, clear them all, or reset the whole database.
+
 ### Test
 
 ```sh
@@ -123,6 +132,15 @@ chmod +x Scripts/*.sh
 ### 寫作模式
 
 文法校對與潤飾、正式／簡潔／專業語氣、翻譯、自訂 Prompt。
+
+### 學習與隱私（選用，預設關閉）
+
+在「設定 → 學習」開啟後，Lint 會留意你反覆修正的寫作習慣（常拼錯的字、常漏掉的冠詞），記成簡短的規則。關閉時，Lint 的行為與以前完全相同。目前記憶只會被收集，還不會送給模型。
+
+- 全部只存在你的 Mac：`~/Library/Application Support/Lint/LintLearning.sqlite`（僅你本人可讀）。
+- 只保存抽象後的規則（一個字、一小段詞組或模板句），不保存你的文字。疑似人名、數字、網址、路徑或縮寫的詞不會被記下。只有開啟「儲存範例句」才會附上一小段前後文。
+- 你對建議做了什麼（取代、複製、重寫）只以帶金鑰的雜湊記錄，不含文字；金鑰放在鑰匙圈。
+- 在「設定 → 學習 → 管理記憶」可以查看、改寫、釘選、停用或刪除每一條記憶，也能全部清除或重設整個資料庫。
 
 ### 測試
 

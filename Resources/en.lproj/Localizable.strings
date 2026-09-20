@@ -211,3 +211,14 @@
 "語氣：專業" = "Tone: Professional";
 "翻譯" = "Translate";
 "自訂 Prompt" = "Custom prompt";
+"學習" = "Learning";
+"啟用個人化學習" = "Enable Personalized Learning";
+"記住你反覆修正的寫作習慣，之後在相關時提醒模型。資料只存在這台 Mac。" = "Remembers writing habits you keep correcting and reminds the model when they’re relevant. Data stays on this Mac.";
+"關閉時，Lint 的行為與沒有這個功能時完全相同。" = "When off, Lint behaves exactly as if this feature didn’t exist.";
+"學習資料" = "Learning Data";
+"啟用中的記憶" = "Active memories";
+"候選記憶" = "Candidate memories";
+"重設學習資料庫…" = "Reset Learning Database…";
+"重設學習資料庫？" = "Reset the learning database?";
+"重設" = "Reset";
+"這會刪除所有已學到的記憶與回饋紀錄，無法復原。" = "This deletes every learned memory and feedback record. This can’t be undone.";

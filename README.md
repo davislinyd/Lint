@@ -11,7 +11,7 @@ A macOS menu-bar AI writing assistant. Press a global hotkey to capture the sele
 ### Requirements
 
 - macOS 14+
-- Xcode / Swift 6 toolchain
+- Xcode / Swift 6.1+ toolchain
 - An LLM backend: an OpenAI-compatible endpoint (default `http://127.0.0.1:8000/v1`, e.g. `llama-server`, Ollama, LM Studio), or OpenAI / Anthropic / Gemini
 
 ### Run
@@ -77,7 +77,7 @@ macOS 選單列 AI 寫作助手：全域快捷鍵擷取選取文字，送到 LLM
 ### 需求
 
 - macOS 14+
-- Xcode / Swift 6 工具鏈
+- Xcode / Swift 6.1+ 工具鏈
 - LLM 後端：OpenAI 相容 API（預設 `http://127.0.0.1:8000/v1`，例如 `llama-server`、Ollama、LM Studio），或 OpenAI / Anthropic / Gemini
 
 ### 啟動

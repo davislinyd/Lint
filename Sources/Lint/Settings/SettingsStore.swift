@@ -31,6 +31,7 @@ final class SettingsStore {
         static let liveWatchWhileTyping = "app.lint.liveWatchWhileTyping"
         static let showReadyChipNearField = "app.lint.showReadyChipNearField"
         static let fastMode = "app.lint.fastMode"
+        static let learningEnabled = "app.lint.learning.enabled"
         static let localServerAutoStart = "app.lint.localServer.autoStart"
         static let localServerBinaryPath = "app.lint.localServer.binaryPath"
         /// Legacy: the `-hf` spec now lives in `model(.localLlama)`; only read by the migration.
@@ -97,6 +98,10 @@ final class SettingsStore {
     }
     var fastMode: Bool {
         didSet { defaults.set(fastMode, forKey: Keys.fastMode) }
+    }
+    /// Personalized learning is opt-in; while off, nothing is recorded and prompts are untouched.
+    var learningEnabled: Bool {
+        didSet { defaults.set(learningEnabled, forKey: Keys.learningEnabled) }
     }
     /// With the local llama.cpp provider, launch llama-server if nothing is listening.
     var localServerAutoStart: Bool {
@@ -165,6 +170,7 @@ final class SettingsStore {
         } else {
             fastMode = defaults.bool(forKey: Keys.fastMode)
         }
+        learningEnabled = defaults.bool(forKey: Keys.learningEnabled)
         if defaults.object(forKey: Keys.localServerAutoStart) == nil {
             localServerAutoStart = true
         } else {
@@ -275,6 +281,10 @@ final class SettingsStore {
         var copy = systemPromptOverrides
         copy.removeValue(forKey: mode.rawValue)
         systemPromptOverrides = copy
+    }
+
+    var learningConfig: LearningConfig {
+        LearningConfig(enabled: learningEnabled)
     }
 
     /// Local llama.cpp provider — Lint launches and talks to its own llama-server.

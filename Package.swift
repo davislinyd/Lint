@@ -8,11 +8,15 @@ let package = Package(
         .executable(name: "Lint", targets: ["Lint"])
     ],
     dependencies: [
-        .package(url: "https://github.com/sindresorhus/KeyboardShortcuts", from: "2.0.0")
+        .package(url: "https://github.com/sindresorhus/KeyboardShortcuts", from: "2.0.0"),
+        .package(url: "https://github.com/groue/GRDB.swift", from: "7.0.0")
     ],
     targets: [
         .target(
             name: "LintCore",
+            dependencies: [
+                .product(name: "GRDB", package: "GRDB.swift")
+            ],
             path: "Sources/LintCore",
             linkerSettings: [
                 .linkedFramework("Security"),

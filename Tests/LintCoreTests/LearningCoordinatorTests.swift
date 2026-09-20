@@ -435,6 +435,180 @@ final class LearningCoordinatorTests: XCTestCase {
         XCTAssertNotNil(file.range(of: Data(usedNowhereElse.uuidString.utf8)))
     }
 
+    // MARK: opposites and contradictions
+
+    /// The user keeps replacing `from` with `to` in what the model left alone, one object at a time.
+    private func swaps(from: String, to: String, _ objects: [String]) -> [LearningFeedback] {
+        objects.map { object in
+            LearningFeedback(
+                gesture: .replaced, mode: .proofread,
+                originalText: "I need a \(from) \(object).",
+                generatedText: "I need a \(from) \(object).",
+                finalText: "I need a \(to) \(object).",
+                provider: "localLlama", model: "qwen"
+            )
+        }
+    }
+
+    private func memory(_ key: String, in coordinator: LearningCoordinator) async throws -> WritingMemory {
+        let all = await coordinator.memories()
+        return try XCTUnwrap(all.first { $0.dedupKey == key }, key)
+    }
+
+    func testDoingTheOppositeWeakensTheEstablishedMemory() async throws {
+        let coordinator = learner()
+        for feedback in swaps(from: "big", to: "large", ["house", "office", "garage"]) {
+            await coordinator.recordFeedback(feedback, config: on)
+        }
+        let forward = try await memory("vocabulary:en:big>large", in: coordinator)
+        XCTAssertEqual(forward.state, .active)
+
+        for feedback in swaps(from: "large", to: "big", ["kitchen"]) {
+            await coordinator.recordFeedback(feedback, config: on)
+        }
+        let weakened = try await memory("vocabulary:en:big>large", in: coordinator)
+        XCTAssertEqual(weakened.state, .candidate, "one undo takes 0.7 of its 1.05")
+        XCTAssertEqual(weakened.evidenceScore, forward.evidenceScore - 0.7, accuracy: 1e-9)
+        XCTAssertEqual(weakened.occurrenceCount, forward.occurrenceCount, "no confirmation")
+        XCTAssertEqual(weakened.lastConfirmedAt, forward.lastConfirmedAt)
+
+        let opposite = try await memory("vocabulary:en:large>big", in: coordinator)
+        XCTAssertEqual(opposite.state, .candidate)
+        XCTAssertEqual(opposite.occurrenceCount, 1)
+    }
+
+    func testTheDirectionTheUserKeepsWinsAndTheOtherLeavesThePrompt() async throws {
+        let coordinator = learner()
+        let text = "We need a big house and a large office."
+        for feedback in swaps(from: "big", to: "large", ["house", "office", "garage"]) {
+            await coordinator.recordFeedback(feedback, config: on)
+        }
+        let before = await coordinator.relevantMemories(for: text, mode: .proofread, config: on)
+        XCTAssertEqual(before.map(\.dedupKey), ["vocabulary:en:big>large"])
+
+        for feedback in swaps(from: "large", to: "big", ["kitchen", "attic", "cellar"]) {
+            await coordinator.recordFeedback(feedback, config: on)
+        }
+        let flipped = await coordinator.relevantMemories(for: text, mode: .proofread, config: on)
+        XCTAssertEqual(flipped.map(\.dedupKey), ["vocabulary:en:large>big"])
+        let old = try await memory("vocabulary:en:big>large", in: coordinator)
+        XCTAssertEqual(old.evidenceScore, 0, accuracy: 1e-9, "never below zero")
+    }
+
+    func testPuttingAPrepositionBackWeakensTheMemoryThatDroppedIt() async throws {
+        let (coordinator, memory) = try await learnedDiscussAbout()
+        let primed = await retrieve(coordinator)
+        XCTAssertEqual(primed.count, 1, "the memory is in use, and the retrieval cache is filled")
+
+        // The model, reminded, dropped "about"; the user put it back.
+        await coordinator.recordFeedback(
+            LearningFeedback(
+                gesture: .replaced, mode: .proofread,
+                originalText: "we should discuss about the plan.",
+                generatedText: "we should discuss the plan.",
+                finalText: "we should discuss about the plan.",
+                provider: "localLlama", model: "qwen", usedMemoryIDs: [memory.id]
+            ),
+            config: on
+        )
+        let after = try await onlyMemory(coordinator)
+        XCTAssertEqual(after.state, .candidate)
+        XCTAssertEqual(after.evidenceScore, memory.evidenceScore - 0.7, accuracy: 1e-9)
+        XCTAssertEqual(after.occurrenceCount, memory.occurrenceCount)
+        let used = await retrieve(coordinator)
+        XCTAssertTrue(used.isEmpty, "it left the prompt at once")
+    }
+
+    /// The exact situation of copying from the full panel: a pinned memory with a single copy's worth of
+    /// evidence, a reminded model that dropped "about", and a copy of the text with it put back.
+    private func remindedCopy(_ memory: WritingMemory, edited: Bool) -> LearningFeedback {
+        LearningFeedback(
+            gesture: .copied, mode: .proofread,
+            originalText: "we must discuss about the schedule tomorrow.",
+            generatedText: "we must discuss the schedule tomorrow.",
+            finalText: edited ? "we must discuss about the schedule tomorrow." : "we must discuss the schedule tomorrow.",
+            provider: "localLlama", model: "qwen", usedMemoryIDs: [memory.id]
+        )
+    }
+
+    func testCopyingAnEditThatPutsThePrepositionBackWeakensAPinnedMemoryToo() async throws {
+        let coordinator = learner()
+        await coordinator.recordFeedback(accept("plan", gesture: .copied), config: on)
+        let first = try await onlyMemory(coordinator)
+        XCTAssertEqual(first.evidenceScore, 0.05, accuracy: 1e-9)
+        await coordinator.setPinned(true, id: first.id)
+
+        await coordinator.recordFeedback(remindedCopy(first, edited: true), config: on)
+        let after = try await onlyMemory(coordinator)
+        XCTAssertEqual(after.evidenceScore, 0, accuracy: 1e-9, "0.05 minus 0.1, floored")
+        XCTAssertEqual(after.state, .pinned)
+        XCTAssertEqual(after.occurrenceCount, first.occurrenceCount)
+    }
+
+    func testCopyingTheRemindedSuggestionUneditedLeavesTheMemoryAlone() async throws {
+        let coordinator = learner()
+        await coordinator.recordFeedback(accept("plan", gesture: .copied), config: on)
+        let first = try await onlyMemory(coordinator)
+        await coordinator.setPinned(true, id: first.id)
+
+        await coordinator.recordFeedback(remindedCopy(first, edited: false), config: on)
+        let after = try await onlyMemory(coordinator)
+        XCTAssertEqual(after.evidenceScore, first.evidenceScore, accuracy: 1e-9, "a reminder that worked is no evidence")
+        XCTAssertEqual(after.occurrenceCount, first.occurrenceCount)
+    }
+
+    func testAContradictionOfAMemoryThatDoesNotExistCreatesNothing() async throws {
+        let coordinator = learner()
+        await coordinator.recordFeedback(
+            LearningFeedback(
+                gesture: .replaced, mode: .proofread,
+                originalText: "we should discuss about the plan.",
+                generatedText: "we should discuss the plan.",
+                finalText: "we should discuss about the plan.",
+                provider: "localLlama", model: "qwen"
+            ),
+            config: on
+        )
+        let memories = await coordinator.memories()
+        XCTAssertTrue(memories.isEmpty)
+    }
+
+    func testAReminderThatWorkedIsNeitherSupportNorOpposition() async throws {
+        let coordinator = learner()
+        for feedback in swaps(from: "big", to: "large", ["house", "office", "garage"]) {
+            await coordinator.recordFeedback(feedback, config: on)
+        }
+        let forward = try await memory("vocabulary:en:big>large", in: coordinator)
+        // One flip back: the opposite now exists, and the forward memory drops to a candidate.
+        for feedback in swaps(from: "large", to: "big", ["kitchen"]) {
+            await coordinator.recordFeedback(feedback, config: on)
+        }
+        let backward = try await memory("vocabulary:en:large>big", in: coordinator)
+        let weakenedForward = try await memory("vocabulary:en:big>large", in: coordinator)
+
+        // The model, reminded of big>large, made that change and the user took it as is.
+        func modelSwap(_ object: String, reminded: Bool) -> LearningFeedback {
+            LearningFeedback(
+                gesture: .replaced, mode: .proofread,
+                originalText: "I need a big \(object).", generatedText: "I need a large \(object).",
+                finalText: "I need a large \(object).", provider: "localLlama", model: "qwen",
+                usedMemoryIDs: reminded ? [forward.id] : []
+            )
+        }
+        await coordinator.recordFeedback(modelSwap("garage", reminded: true), config: on)
+        let afterReminded = try await memory("vocabulary:en:large>big", in: coordinator)
+        XCTAssertEqual(afterReminded.evidenceScore, backward.evidenceScore, accuracy: 1e-9)
+        let forwardAfterReminded = try await memory("vocabulary:en:big>large", in: coordinator)
+        XCTAssertEqual(forwardAfterReminded.evidenceScore, weakenedForward.evidenceScore, accuracy: 1e-9)
+
+        // Without the reminder it is an ordinary observation: it supports one and opposes the other.
+        await coordinator.recordFeedback(modelSwap("attic", reminded: false), config: on)
+        let afterPlain = try await memory("vocabulary:en:large>big", in: coordinator)
+        XCTAssertEqual(afterPlain.evidenceScore, backward.evidenceScore - 0.3, accuracy: 1e-9)
+        let forwardAfterPlain = try await memory("vocabulary:en:big>large", in: coordinator)
+        XCTAssertEqual(forwardAfterPlain.evidenceScore, weakenedForward.evidenceScore + 0.15, accuracy: 1e-9)
+    }
+
     // MARK: managing memories
 
     private func seeded() async throws -> (LearningCoordinator, UUID) {

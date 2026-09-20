@@ -204,15 +204,40 @@ public actor LearningCoordinator {
         guard weight > 0 else { return }
         let extractor = MemoryExtractor(storeExamples: config.storeExamples)
         let injected = await injectedKeys(feedback.usedMemoryIDs, store: store)
-        for candidate in extractor.candidates(from: feedback, action: action, injected: injected) {
+        let extraction = extractor.extraction(from: feedback, action: action, injected: injected)
+        let against = LearningPolicy.contradictionWeight(for: action)
+        var changed = false
+        for candidate in extraction.candidates {
             do {
                 try await store.mergeMemory(dedupKey: candidate.dedupKey) { existing in
                     MemoryLifecycle.merging(candidate, weight: weight, at: now, into: existing)
                 }
-                invalidateMemories()
+                changed = true
             } catch {
                 NSLog("Lint learning: could not update a memory: \(error.localizedDescription)")
             }
+            // Wanting `b` where a memory asks for `a` is evidence against that memory.
+            if let opposite = MemoryExtractor.reversedKey(of: candidate.dedupKey),
+               await weaken(opposite, by: against, store: store) {
+                changed = true
+            }
+        }
+        for key in extraction.contradicted where await weaken(key, by: against, store: store) {
+            changed = true
+        }
+        if changed { invalidateMemories() }
+    }
+
+    /// Does nothing if there is no such memory. False if it could not be written.
+    private func weaken(_ dedupKey: String, by amount: Double, store: any LearningStore) async -> Bool {
+        do {
+            try await store.updateMemory(dedupKey: dedupKey) { memory in
+                memory = MemoryLifecycle.weakened(memory, by: amount)
+            }
+            return true
+        } catch {
+            NSLog("Lint learning: could not weaken a memory: \(error.localizedDescription)")
+            return false
         }
     }
 

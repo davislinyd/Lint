@@ -170,6 +170,60 @@ final class MemoryRetrieverTests: XCTestCase {
         XCTAssertEqual(forward, ["m0", "m1", "m2", "m3", "m4"], "equal scores fall back to the id")
     }
 
+    // MARK: opposites
+
+    private let bothWords = "We need a big house and a large office."
+
+    private func opposites(forward: Double, backward: Double) -> (WritingMemory, WritingMemory) {
+        (
+            memory("vocabulary:en:big>large", kind: .vocabulary, triggers: ["big"], evidence: forward),
+            memory("vocabulary:en:large>big", kind: .vocabulary, triggers: ["large"], evidence: backward)
+        )
+    }
+
+    func testOfTwoMemoriesAskingForOppositeThingsOnlyTheBetterEvidencedIsUsed() {
+        let (forward, backward) = opposites(forward: 3, backward: 1.2)
+        XCTAssertEqual(keys([forward, backward], bothWords), ["vocabulary:en:big>large"])
+        XCTAssertEqual(keys([backward, forward], bothWords), ["vocabulary:en:big>large"], "input order is irrelevant")
+        let (weakForward, strongBackward) = opposites(forward: 1.2, backward: 3)
+        XCTAssertEqual(keys([weakForward, strongBackward], bothWords), ["vocabulary:en:large>big"])
+    }
+
+    func testAPinnedMemoryBeatsItsOppositeAndTwoPinnedOnesBothStay() {
+        var (forward, backward) = opposites(forward: 0.2, backward: 9)
+        forward.state = .pinned
+        XCTAssertEqual(keys([forward, backward], bothWords), ["vocabulary:en:big>large"])
+        backward.state = .pinned
+        XCTAssertEqual(Set(keys([forward, backward], bothWords)), ["vocabulary:en:big>large", "vocabulary:en:large>big"])
+    }
+
+    func testATieGoesToTheMoreRecentlyConfirmedThenToTheId() {
+        var (forward, backward) = opposites(forward: 2, backward: 2)
+        backward.lastConfirmedAt = Date(timeIntervalSince1970: 100)
+        XCTAssertEqual(keys([forward, backward], bothWords), ["vocabulary:en:large>big"])
+        backward.lastConfirmedAt = forward.lastConfirmedAt
+        let first = keys([forward, backward], bothWords)
+        XCTAssertEqual(first.count, 1, "exactly one of a tied pair stays")
+        XCTAssertEqual(first, keys([backward, forward], bothWords))
+    }
+
+    func testAnOppositeThatCannotBeUsedDoesNotSuppressAnything() {
+        var (forward, backward) = opposites(forward: 1.2, backward: 50)
+        for state in [MemoryState.candidate, .disabled, .archived] {
+            backward.state = state
+            XCTAssertEqual(keys([forward, backward], bothWords), ["vocabulary:en:big>large"], "\(state)")
+        }
+    }
+
+    func testMemoriesWithoutADirectionNeverSuppressEachOther() {
+        let memories = [
+            memory("grammar:en:discuss about", triggers: ["discuss about"]),
+            memory("grammar:en:articles"),
+        ]
+        XCTAssertEqual(Set(keys(memories, "We should discuss about the plan and buy laptop today."))
+            , ["grammar:en:discuss about", "grammar:en:articles"])
+    }
+
     // MARK: scale
 
     func testTheRightMemoryWinsAmongThousandsAndItIsFast() {

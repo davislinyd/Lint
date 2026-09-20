@@ -33,10 +33,17 @@ struct MemoryRetriever: Sendable {
     private let entries: [Entry]
     private let longestLatinTrigger: Int
 
-    /// Only active and pinned memories can be retrieved.
+    /// Only active and pinned memories can be retrieved, and of two that ask for opposite things
+    /// (`a>b` and `b>a`) only the better-evidenced one: a prompt must not tell the model both.
     init(memories: [WritingMemory]) {
-        entries = memories
-            .filter { $0.state == .active || $0.state == .pinned }
+        let usable = memories.filter { $0.state == .active || $0.state == .pinned }
+        let byKey = Dictionary(usable.map { ($0.dedupKey, $0) }, uniquingKeysWith: { first, _ in first })
+        entries = usable
+            .filter { memory in
+                guard let key = MemoryExtractor.reversedKey(of: memory.dedupKey),
+                      let opposite = byKey[key] else { return true }
+                return !Self.loses(memory, to: opposite)
+            }
             .map { memory in
                 Entry(
                     memory: memory,
@@ -47,6 +54,18 @@ struct MemoryRetriever: Sendable {
         longestLatinTrigger = min(
             4, entries.flatMap(\.latinTriggers).map { $0.split(separator: " ").count }.max() ?? 0
         )
+    }
+
+    /// A pinned memory is the user's choice and beats an unpinned one (two pinned ones both stay);
+    /// otherwise more evidence wins, then the more recently confirmed, then the id, so exactly one
+    /// of the pair goes.
+    private static func loses(_ memory: WritingMemory, to opposite: WritingMemory) -> Bool {
+        let (pinned, oppositePinned) = (memory.state == .pinned, opposite.state == .pinned)
+        if pinned != oppositePinned { return oppositePinned }
+        if pinned { return false }
+        if memory.evidenceScore != opposite.evidenceScore { return memory.evidenceScore < opposite.evidenceScore }
+        if memory.lastConfirmedAt != opposite.lastConfirmedAt { return memory.lastConfirmedAt < opposite.lastConfirmedAt }
+        return memory.id.uuidString > opposite.id.uuidString
     }
 
     func select(for query: Query) -> [WritingMemory] {

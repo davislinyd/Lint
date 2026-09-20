@@ -252,3 +252,4 @@
 "管理記憶…" = "Manage Memories…";
 "儲存範例句" = "Keep Example Snippets";
 "關閉時只保存抽象後的規則，不保存任何原文。開啟後，每條記憶還會附一小段前後文（不含數字、網址或疑似人名）。" = "When off, only the abstracted rule is kept, never any of your text. When on, each memory also keeps a short stretch of surrounding words (no numbers, addresses or likely names).";
+"在全面板編輯" = "Edit in Full Panel";

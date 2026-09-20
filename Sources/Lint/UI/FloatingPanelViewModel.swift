@@ -22,6 +22,9 @@ final class FloatingPanelViewModel {
     var lastUsage: TokenUsage?
     /// Compact bubble session — use lowest latency settings.
     private(set) var isAutoSuggestSession = false
+    /// Bumped to ask the full panel to open its result editor with the focus in it. A count rather
+    /// than a flag, so that asking again while the editor is already open still fires.
+    private(set) var resultEditRequest = 0
 
     let settings: SettingsStore
     private let capture: TextCaptureService
@@ -228,6 +231,19 @@ final class FloatingPanelViewModel {
         generateFromOriginal()
     }
 
+    /// A finished suggestion is on screen, so it can be handed to the full panel to edit.
+    var canEditInFullPanel: Bool {
+        !isStreaming && !resultText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    /// The bubble hands its suggestion to the full panel. Nothing is regenerated or reset: the
+    /// panel shows what the bubble showed, with the result ready to edit. From here it is a
+    /// full-panel session, so a retry follows the settings and not the bubble's low-latency shortcuts.
+    func handOffForEditing() {
+        isAutoSuggestSession = false
+        resultEditRequest += 1
+    }
+
     /// Run the model on whatever is currently in `originalText` (selection or typed).
     func generateFromOriginal() {
         // Running again on the same text and mode is a rejection; a new text or mode is not.
@@ -258,12 +274,6 @@ final class FloatingPanelViewModel {
         pb.clearContents()
         pb.setString(resultText, forType: .string)
         recordFeedback(.copied)
-    }
-
-    func replaceOriginal() {
-        Task {
-            _ = await replaceOriginalReturningError()
-        }
     }
 
     @discardableResult

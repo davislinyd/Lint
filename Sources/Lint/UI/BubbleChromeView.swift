@@ -7,7 +7,13 @@ import SwiftUI
 final class BubbleChromeView: NSView {
     var onReplace: (() -> Void)?
     var onRewrite: (() -> Void)?
+    var onEdit: (() -> Void)?
     var onDismiss: (() -> Void)?
+    /// The controller turns the edit button off when the bubble is shown without activating Lint:
+    /// opening the full panel would activate it, and closing the bubble hands the focus back.
+    var offersFullPanelEdit = true {
+        didSet { editButton.isHidden = !offersFullPanelEdit }
+    }
     /// Fired when the user starts dragging the bubble (not a button).
     var onDragBegan: (() -> Void)?
     /// Panel wires this for Enter / R / Esc while chrome is first responder.
@@ -34,6 +40,7 @@ final class BubbleChromeView: NSView {
     private let rewriteButton = NSButton(title: String(localized: "重寫"), target: nil, action: nil)
     private let closeButton = NSButton(title: String(localized: "關閉"), target: nil, action: nil)
     private let xButton = NSButton(image: NSImage(systemSymbolName: "xmark", accessibilityDescription: String(localized: "關閉")) ?? NSImage(), target: nil, action: nil)
+    private let editButton = NSButton(image: NSImage(systemSymbolName: "square.and.pencil", accessibilityDescription: String(localized: "在全面板編輯")) ?? NSImage(), target: nil, action: nil)
     private let card = NSVisualEffectView()
     private var widthConstraint: NSLayoutConstraint!
     private var dragStartScreen: NSPoint?
@@ -102,7 +109,13 @@ final class BubbleChromeView: NSView {
         xButton.target = self
         xButton.action = #selector(tapDismiss)
 
-        for v in [titleLabel, statusLabel, bodyLabel, translationLabel, spinner, replaceButton, rewriteButton, closeButton, xButton] {
+        editButton.isBordered = false
+        editButton.imagePosition = .imageOnly
+        editButton.toolTip = String(localized: "在全面板編輯")
+        editButton.target = self
+        editButton.action = #selector(tapEdit)
+
+        for v in [titleLabel, statusLabel, bodyLabel, translationLabel, spinner, replaceButton, rewriteButton, closeButton, xButton, editButton] {
             v.translatesAutoresizingMaskIntoConstraints = false
             card.addSubview(v)
         }
@@ -127,6 +140,11 @@ final class BubbleChromeView: NSView {
             xButton.centerYAnchor.constraint(equalTo: titleLabel.centerYAnchor),
             xButton.widthAnchor.constraint(equalToConstant: 24),
             xButton.heightAnchor.constraint(equalToConstant: 24),
+
+            editButton.trailingAnchor.constraint(equalTo: xButton.leadingAnchor, constant: -2),
+            editButton.centerYAnchor.constraint(equalTo: titleLabel.centerYAnchor),
+            editButton.widthAnchor.constraint(equalToConstant: 24),
+            editButton.heightAnchor.constraint(equalToConstant: 24),
 
             statusLabel.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 14),
             statusLabel.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -14),
@@ -205,6 +223,7 @@ final class BubbleChromeView: NSView {
         closeButton.title = String(localized: "關閉 esc")
         replaceButton.isEnabled = canReplace
         rewriteButton.isEnabled = !viewModel.originalText.isEmpty && !viewModel.isStreaming
+        editButton.isEnabled = viewModel.canEditInFullPanel
 
         // Compact width for short text; grow height (not width) as content wraps.
         let targetWidth = Self.idealCardWidth(viewModel: viewModel)
@@ -243,8 +262,9 @@ final class BubbleChromeView: NSView {
         let transW = translation.isEmpty
             ? 0
             : (translation as NSString).size(withAttributes: [.font: transFont]).width
+        // Room beside the title for the spinner and the two icon buttons (edit, close).
         let titleW = (viewModel.mode.title as NSString)
-            .size(withAttributes: [.font: NSFont.systemFont(ofSize: 13, weight: .semibold)]).width + 48
+            .size(withAttributes: [.font: NSFont.systemFont(ofSize: 13, weight: .semibold)]).width + 72
 
         // Buttons + gaps + side padding (~取代 ⏎ / 重寫 R / 關閉 esc).
         let b1 = (String(localized: "取代 ⏎") as NSString).size(withAttributes: [.font: buttonFont]).width + 24
@@ -263,6 +283,10 @@ final class BubbleChromeView: NSView {
 
     @objc private func tapRewrite() {
         onRewrite?()
+    }
+
+    @objc private func tapEdit() {
+        onEdit?()
     }
 
     @objc private func tapDismiss() {

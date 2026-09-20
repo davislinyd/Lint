@@ -83,22 +83,30 @@ struct FloatingPanelView: View {
             }
 
             HStack {
-                Button("覆蓋取代") {
+                Button {
                     viewModel.replaceOriginal()
+                } label: {
+                    Text("覆蓋取代") + shortcutHint("⌘⏎")
                 }
                 .disabled(viewModel.resultText.isEmpty || viewModel.isStreaming)
                 .keyboardShortcut(.return, modifiers: [.command])
 
-                Button("複製") {
+                Button {
                     viewModel.copyResult()
+                } label: {
+                    Text("複製") + shortcutHint("⌥⌘C")
                 }
                 .disabled(viewModel.resultText.isEmpty)
+                // ⌘C stays with the original-text editor (copies the selection).
+                .keyboardShortcut("c", modifiers: [.command, .option])
 
-                Button(viewModel.resultText.isEmpty ? String(localized: "產生") : String(localized: "重試")) {
+                Button {
                     viewModel.generateFromOriginal()
+                } label: {
+                    Text(viewModel.resultText.isEmpty ? String(localized: "產生") : String(localized: "重試")) + shortcutHint("⌥⌘⏎")
                 }
                 .disabled(viewModel.originalText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || viewModel.isStreaming)
-                .keyboardShortcut(.return, modifiers: [.command, .shift])
+                .keyboardShortcut(.return, modifiers: [.command, .option])
                 .buttonStyle(.borderedProminent)
 
                 Spacer()
@@ -111,6 +119,10 @@ struct FloatingPanelView: View {
                 originalFocused = true
             }
         }
+    }
+
+    private func shortcutHint(_ keys: String) -> Text {
+        Text(verbatim: " \(keys)").foregroundStyle(.secondary)
     }
 
     private func column(title: LocalizedStringKey, @ViewBuilder content: () -> some View) -> some View {

@@ -5,10 +5,13 @@ name: Release
 # must never run on pull requests (no pull_request / pull_request_target trigger).
 # Maintainer setup and the release procedure: docs/RELEASING.md
 
+# Only exact vX.Y.Z tags are official releases. A tag with a suffix (v0.2.0-preview.1) is an
+# unsigned preview published by hand and must never start this workflow.
 on:
   push:
     tags:
       - "v*.*.*"
+      - "!v*.*.*-*"
   workflow_dispatch:
     inputs:
       tag:

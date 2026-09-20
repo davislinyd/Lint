@@ -3,6 +3,8 @@ import XCTest
 
 final class MemoryRetrieverTests: XCTestCase {
     private var counter = 0
+    /// The fixtures were last confirmed now, so nothing has faded unless a test says so.
+    private let now = Date(timeIntervalSince1970: 1_800_000_000)
 
     private func memory(
         _ key: String,
@@ -22,7 +24,7 @@ final class MemoryRetrieverTests: XCTestCase {
             instruction: instruction ?? "rule for \(key)",
             negativeExample: nil, preferredExample: nil,
             evidenceScore: evidence, occurrenceCount: count, state: state, userEdited: false,
-            createdAt: Date(timeIntervalSince1970: 0), lastConfirmedAt: Date(timeIntervalSince1970: 0)
+            createdAt: now, lastConfirmedAt: now
         )
     }
 
@@ -32,7 +34,7 @@ final class MemoryRetrieverTests: XCTestCase {
         mode: WritingMode = .proofread,
         outputLanguage: String? = nil
     ) -> [String] {
-        MemoryRetriever(memories: memories)
+        MemoryRetriever(memories: memories, now: now)
             .select(for: .init(text: text, mode: mode, outputLanguage: outputLanguage))
             .map(\.dedupKey)
     }
@@ -156,7 +158,7 @@ final class MemoryRetrieverTests: XCTestCase {
             memory("B", triggers: ["prospective"], evidence: 5, instruction: longer),
             memory("C", triggers: ["prospective"], evidence: 1, instruction: short),
         ]
-        let picked = MemoryRetriever(memories: memories).select(for: .init(text: english, mode: .proofread))
+        let picked = MemoryRetriever(memories: memories, now: now).select(for: .init(text: english, mode: .proofread))
         XCTAssertEqual(picked.map(\.dedupKey), ["A", "C"])
         let used = picked.reduce(0) { $0 + $1.instruction.count + LearningPolicy.personalizationLineOverhead }
         XCTAssertLessThanOrEqual(used, LearningPolicy.maxPersonalizationCharacters)
@@ -199,7 +201,7 @@ final class MemoryRetrieverTests: XCTestCase {
 
     func testATieGoesToTheMoreRecentlyConfirmedThenToTheId() {
         var (forward, backward) = opposites(forward: 2, backward: 2)
-        backward.lastConfirmedAt = Date(timeIntervalSince1970: 100)
+        backward.lastConfirmedAt = now.addingTimeInterval(100)
         XCTAssertEqual(keys([forward, backward], bothWords), ["vocabulary:en:large>big"])
         backward.lastConfirmedAt = forward.lastConfirmedAt
         let first = keys([forward, backward], bothWords)
@@ -222,6 +224,48 @@ final class MemoryRetrieverTests: XCTestCase {
         ]
         XCTAssertEqual(Set(keys(memories, "We should discuss about the plan and buy laptop today."))
             , ["grammar:en:discuss about", "grammar:en:articles"])
+    }
+
+    // MARK: fading
+
+    private func daysLater(_ days: Double) -> Date {
+        now.addingTimeInterval(days * 86_400)
+    }
+
+    private func keys(_ memories: [WritingMemory], _ text: String, at date: Date) -> [String] {
+        MemoryRetriever(memories: memories, now: date)
+            .select(for: .init(text: text, mode: .proofread, outputLanguage: nil))
+            .map(\.dedupKey)
+    }
+
+    func testAMemoryThatHasFadedBelowTheBarIsNoLongerUsed() {
+        let memory = memory("faded", triggers: ["prospective"], evidence: 1.05)
+        XCTAssertEqual(keys([memory], english, at: daysLater(100)), ["faded"], "0.61 is still enough")
+        XCTAssertEqual(keys([memory], english, at: daysLater(130)), [], "0.49 is not")
+    }
+
+    func testPinnedMemoriesNeverFade() {
+        let pinned = memory("pinned", triggers: ["prospective"], state: .pinned, evidence: 0.2)
+        XCTAssertEqual(keys([pinned], english, at: daysLater(3_000)), ["pinned"])
+    }
+
+    func testFadedEvidenceLowersTheRank() {
+        let old = memory("old", triggers: ["prospective"], evidence: 3, count: 3)
+        var recent = memory("recent", triggers: ["prospective"], evidence: 1.2, count: 3)
+        recent.lastConfirmedAt = daysLater(190)
+        // Stored, the old one is stronger (3 against 1.2) and leads while nothing has faded...
+        XCTAssertEqual(keys([old, recent], english, at: now), ["old", "recent"])
+        // ...but by day 200 it has faded to 0.81, and the one confirmed ten days ago leads.
+        XCTAssertEqual(keys([old, recent], english, at: daysLater(200)), ["recent", "old"])
+    }
+
+    func testOppositesAreJudgedOnWhatHasFaded() {
+        var forward = memory("vocabulary:en:big>large", kind: .vocabulary, triggers: ["big"], evidence: 3)
+        var backward = memory("vocabulary:en:large>big", kind: .vocabulary, triggers: ["large"], evidence: 1.2)
+        forward.lastConfirmedAt = now
+        backward.lastConfirmedAt = daysLater(190)
+        XCTAssertEqual(keys([forward, backward], bothWords, at: now), ["vocabulary:en:big>large"])
+        XCTAssertEqual(keys([forward, backward], bothWords, at: daysLater(200)), ["vocabulary:en:large>big"])
     }
 
     // MARK: scale
@@ -252,7 +296,7 @@ final class MemoryRetrieverTests: XCTestCase {
         memories.append(memory("articles", evidence: 3, count: 5))
         XCTAssertGreaterThanOrEqual(memories.count, 2_000)
 
-        let retriever = MemoryRetriever(memories: memories)
+        let retriever = MemoryRetriever(memories: memories, now: now)
         let text = String(repeating: english + " ", count: 45) // about 500 words
         let query = MemoryRetriever.Query(text: text, mode: .proofread, outputLanguage: nil)
 

@@ -89,10 +89,12 @@ struct MemoryManagementView: View {
     }
 
     private func row(_ memory: WritingMemory) -> some View {
-        HStack(alignment: .top, spacing: 8) {
+        // Disabled by the user, or faded away and archived: not in use, and enabling brings it back.
+        let dormant = memory.state == .disabled || memory.state == .archived
+        return HStack(alignment: .top, spacing: 8) {
             VStack(alignment: .leading, spacing: 4) {
                 Text(memory.instruction)
-                    .foregroundStyle(memory.state == .disabled ? .secondary : .primary)
+                    .foregroundStyle(dormant ? .secondary : .primary)
                     .textSelection(.enabled)
                 caption(memory)
             }
@@ -101,8 +103,8 @@ struct MemoryManagementView: View {
                 Button(memory.state == .pinned ? LocalizedStringKey("取消釘選") : LocalizedStringKey("釘選")) {
                     perform { await app.learning.setPinned(memory.state != .pinned, id: memory.id) }
                 }
-                Button(memory.state == .disabled ? LocalizedStringKey("啟用") : LocalizedStringKey("停用")) {
-                    perform { await app.learning.setEnabled(memory.state == .disabled, id: memory.id) }
+                Button(dormant ? LocalizedStringKey("啟用") : LocalizedStringKey("停用")) {
+                    perform { await app.learning.setEnabled(dormant, id: memory.id) }
                 }
                 Button("編輯…") { editing = memory }
                 Divider()
@@ -120,7 +122,7 @@ struct MemoryManagementView: View {
     }
 
     private func caption(_ memory: WritingMemory) -> some View {
-        let filled = min(5, Int((memory.confidence * 5).rounded()))
+        let filled = min(5, Int((memory.confidence(at: Date()) * 5).rounded()))
         let stars = String(repeating: "★", count: filled) + String(repeating: "☆", count: 5 - filled)
         let confirmed = memory.lastConfirmedAt.formatted(.relative(presentation: .named))
         return HStack(spacing: 4) {

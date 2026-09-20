@@ -66,6 +66,9 @@ struct MemoryExtractor: Sendable {
         /// Memories (by `dedupKey`) the user's own edit argues against: a preposition a memory says
         /// to drop, put back. Never one that the same feedback also supports.
         var contradicted: [String]
+        /// Patterns the prompt reminded the model of, which it then applied and the user accepted.
+        /// The habit is still there, but the fix is no evidence that it is wanted.
+        var reminded: [String] = []
     }
 
     /// The patterns in a piece of feedback.
@@ -106,19 +109,25 @@ struct MemoryExtractor: Sendable {
         var seen = Set<String>()
         var found: [MemoryCandidate] = []
         var against: [String] = []
+        var reminded: [String] = []
         for span in spans {
             if comparison.userChoice, let key = contradictedKey(by: span), !against.contains(key) {
                 against.append(key)
             }
             guard let pattern = pattern(of: span),
-                  let candidate = candidate(for: pattern, span: span, context: context),
-                  comparison.userChoice || !injected.contains(candidate.dedupKey),
-                  seen.insert(candidate.dedupKey).inserted
+                  let candidate = candidate(for: pattern, span: span, context: context)
             else { continue }
+            if !comparison.userChoice, injected.contains(candidate.dedupKey) {
+                if !reminded.contains(candidate.dedupKey) { reminded.append(candidate.dedupKey) }
+                continue
+            }
+            guard seen.insert(candidate.dedupKey).inserted else { continue }
             found.append(candidate)
         }
         // Editing a pattern both ways in one text is no reversal; it is left out.
-        return Extraction(candidates: found, contradicted: against.filter { !seen.contains($0) })
+        return Extraction(
+            candidates: found, contradicted: against.filter { !seen.contains($0) }, reminded: reminded
+        )
     }
 
     /// The key of the memory that asks for the opposite: `a>b` becomes `b>a`. Nil for a memory

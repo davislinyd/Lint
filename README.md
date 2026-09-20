@@ -10,7 +10,9 @@ A macOS menu-bar AI writing assistant. Press a global hotkey to capture the sele
 
 ### Download
 
-Get the latest `Lint-<version>-macOS-arm64.dmg` from [GitHub Releases](https://github.com/davislinyd/Lint/releases). Release builds are signed with a Developer ID certificate and notarized by Apple. They need macOS 14+ on an Apple Silicon Mac.
+Get the latest `Lint-<version>-macOS-arm64.dmg` from [GitHub Releases](https://github.com/davislinyd/Lint/releases). Official releases are signed with a Developer ID certificate and notarized by Apple. They need macOS 14+ on an Apple Silicon Mac.
+
+> **Preview builds:** until the first notarized release, Releases carries unsigned previews (`Lint-<version>-macOS-arm64-preview.dmg`, marked Pre-release). macOS blocks a preview the first time you open it: go to System Settings → Privacy & Security and click **Open Anyway**, or run `xattr -dr com.apple.quarantine /Applications/Lint.app`. Allow Accessibility again after installing each new preview.
 
 1. Open the DMG and drag **Lint** into **Applications**.
 2. Launch Lint from Applications. A pencil icon appears in the menu bar.
@@ -102,6 +104,8 @@ macOS 選單列 AI 寫作助手：全域快捷鍵擷取選取文字，送到 LLM
 ### 下載
 
 到 [GitHub Releases](https://github.com/davislinyd/Lint/releases) 下載最新的 `Lint-<版本>-macOS-arm64.dmg`。正式版以 Developer ID 憑證簽署並通過 Apple 公證，需要 macOS 14+ 與 Apple Silicon Mac。
+
+> **預覽版：** 第一個公證版發佈之前，Releases 提供未簽章的預覽版（`Lint-<版本>-macOS-arm64-preview.dmg`，標示為 Pre-release）。第一次開啟時 macOS 會擋下：到 系統設定 → 隱私權與安全性 按「仍要打開」，或執行 `xattr -dr com.apple.quarantine /Applications/Lint.app`。每安裝一個新的預覽版，輔助功能都要重新允許。
 
 1. 開啟 DMG，把 **Lint** 拖進 **Applications**。
 2. 從「應用程式」開啟 Lint，選單列會出現鉛筆圖示。

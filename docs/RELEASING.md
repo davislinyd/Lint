@@ -22,6 +22,24 @@ Apple Developer Program 核准之前發不出正式版（Developer ID + 公證�
 - 每換一個新的預覽 DMG，macOS 都會當成新的程式，**輔助功能**等授權要重新允許。
 - 檔名固定帶 `-preview`，不會被當成正式版。正式版的流程、驗證與 secrets 完全不受影響。
 
+### 發佈預覽版 pre-release
+
+預覽版手動發佈，tag 用 `v<版本>-preview.<n>`：有後綴的 tag 不會觸發 `release.yml`，只有恰好是 `vX.Y.Z` 的 tag 才走正式流程。DMG 直接取 `main` 上該 commit 的 CI artifact（不在本機另外建），tag 打在同一個 commit：
+
+```sh
+gh run download <run-id> --repo davislinyd/Lint -n Lint-preview-<n> -D /tmp/lint-preview
+```
+
+```sh
+git tag -a v0.2.0-preview.1 <commit> -m "Lint 0.2.0 preview 1" && git push origin v0.2.0-preview.1
+```
+
+```sh
+gh release create v0.2.0-preview.1 /tmp/lint-preview/*.dmg /tmp/lint-preview/*.sha256 --verify-tag --prerelease --generate-notes --title "Lint 0.2.0 preview 1 (unsigned)"
+```
+
+Release 說明要寫明未簽章、怎麼開啟、以及每個預覽版都要重新允許輔助功能。
+
 核准之後：照下方「一次性設定」補上憑證與 6 個 secrets，先在本機跑 `LINT_SKIP_NOTARIZE=1 ./Scripts/release.sh` 確認簽章，再用 `v` tag 走正式流程。不需要改任何程式。
 
 ## 一次性設定

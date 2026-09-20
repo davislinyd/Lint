@@ -67,6 +67,31 @@ public actor LearningCoordinator {
         }
     }
 
+    /// `prompt` with the memories relevant to `text` added at its end, and the memories used.
+    /// It comes back untouched while learning is off or nothing is relevant, and also when this
+    /// takes longer than `timeout`: a suggestion must never wait on the learning.
+    /// `translateTarget` only matters in translation, where it says which language is written.
+    public nonisolated func personalize(
+        prompt: String,
+        for text: String,
+        mode: WritingMode,
+        translateTarget: String = "",
+        config: LearningConfig,
+        timeout: Duration = .milliseconds(150)
+    ) async -> PersonalizedPrompt {
+        let unchanged = PersonalizedPrompt(systemPrompt: prompt, usedMemoryIDs: [])
+        guard config.enabled else { return unchanged }
+        return await withTimeout(timeout, fallback: unchanged) {
+            let memories = await self.relevantMemories(
+                for: text,
+                mode: mode,
+                outputLanguage: mode == .translate ? TextProfile.languageTag(forTarget: translateTarget) : nil,
+                config: config
+            )
+            return PromptComposer.compose(base: prompt, memories: memories)
+        }
+    }
+
     /// The few memories worth reminding the model about for this text: active or pinned ones whose
     /// trigger is in it, plus general habits that fit its language. Empty while learning is off.
     /// `outputLanguage` is the language written when it differs from the text's (translation).
@@ -178,7 +203,8 @@ public actor LearningCoordinator {
         let weight = LearningPolicy.evidenceWeight(for: action)
         guard weight > 0 else { return }
         let extractor = MemoryExtractor(storeExamples: config.storeExamples)
-        for candidate in extractor.candidates(from: feedback, action: action) {
+        let injected = await injectedKeys(feedback.usedMemoryIDs, store: store)
+        for candidate in extractor.candidates(from: feedback, action: action, injected: injected) {
             do {
                 try await store.mergeMemory(dedupKey: candidate.dedupKey) { existing in
                     MemoryLifecycle.merging(candidate, weight: weight, at: now, into: existing)
@@ -188,6 +214,15 @@ public actor LearningCoordinator {
                 NSLog("Lint learning: could not update a memory: \(error.localizedDescription)")
             }
         }
+    }
+
+    /// The patterns of the memories the prompt carried. A memory deleted since is simply not counted.
+    private func injectedKeys(_ ids: [UUID], store: any LearningStore) async -> Set<String> {
+        var keys = Set<String>()
+        for id in ids {
+            if let memory = try? await store.memory(id: id) { keys.insert(memory.dedupKey) }
+        }
+        return keys
     }
 
     private func invalidateMemories() {

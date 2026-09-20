@@ -74,6 +74,13 @@ final class FeedbackCollectorTests: XCTestCase {
         XCTAssertTrue(event.usedMemoryIDs.isEmpty)
     }
 
+    func testEventRecordsWhichMemoriesWereInThePrompt() throws {
+        var sample = feedback()
+        sample.usedMemoryIDs = [UUID(), UUID()]
+        let event = try XCTUnwrap(collector().event(for: sample, now: now))
+        XCTAssertEqual(event.usedMemoryIDs, sample.usedMemoryIDs)
+    }
+
     func testHashesAreKeyedStableAndHideTheText() throws {
         let one = try XCTUnwrap(collector().event(for: feedback(), now: now))
         let again = try XCTUnwrap(collector().event(for: feedback(), now: now))

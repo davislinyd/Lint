@@ -58,6 +58,20 @@ struct TextProfile: Sendable {
         }
     }
 
+    /// The language tag of a translation target as the user wrote it ("繁體中文", "English"). A
+    /// language no memory is kept in gives `other`, so that no memory applies.
+    static func languageTag(forTarget name: String) -> String {
+        let target = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let lowered = target.lowercased()
+        // Empty is the translation prompt's own default.
+        if target.isEmpty { return "zh-Hant" }
+        if lowered.contains("english") || target.contains("英") { return "en" }
+        if lowered.contains("simplified") || target.contains("簡") || target.contains("简") { return "zh-Hans" }
+        if lowered.contains("traditional") || lowered.contains("chinese")
+            || target.contains("繁") || target.contains("中文") { return "zh-Hant" }
+        return "other"
+    }
+
     static func chineseVariant(of text: String) -> String? {
         let recognizer = NLLanguageRecognizer()
         recognizer.processString(text)

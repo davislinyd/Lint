@@ -60,7 +60,7 @@ Proofreading and polishing, formal / concise / professional tone, translation, c
 
 ### Learning and privacy (optional, off by default)
 
-With **Settings → Learning** turned on, Lint notices writing habits you keep correcting (a word you often misspell, an article you often drop) and remembers them as short rules. While it is off, Lint behaves exactly as before. Memories are collected but not yet sent to the model.
+With **Settings → Learning** turned on, Lint notices writing habits you keep correcting (a word you often misspell, an article you often drop) and remembers them as short rules. While it is off, Lint behaves exactly as before. The few memories that fit what you are writing (at most five short lines) are added to the end of the prompt sent to your model; with a local model that stays on your Mac.
 
 - Everything stays on your Mac, in `~/Library/Application Support/Lint/LintLearning.sqlite` (readable only by you).
 - Only abstracted rules are kept: a word, a short phrase or a template sentence, never your text. Words that look like names, numbers, addresses, paths or acronyms are left out. A short stretch of surrounding words is kept only if you turn on "Keep example snippets".
@@ -135,7 +135,7 @@ chmod +x Scripts/*.sh
 
 ### 學習與隱私（選用，預設關閉）
 
-在「設定 → 學習」開啟後，Lint 會留意你反覆修正的寫作習慣（常拼錯的字、常漏掉的冠詞），記成簡短的規則。關閉時，Lint 的行為與以前完全相同。目前記憶只會被收集，還不會送給模型。
+在「設定 → 學習」開啟後，Lint 會留意你反覆修正的寫作習慣（常拼錯的字、常漏掉的冠詞），記成簡短的規則。關閉時，Lint 的行為與以前完全相同。符合你正在寫的內容的少數記憶（最多五行短句）會加在送給模型的 prompt 結尾；使用本機模型時，這些都留在你的 Mac 上。
 
 - 全部只存在你的 Mac：`~/Library/Application Support/Lint/LintLearning.sqlite`（僅你本人可讀）。
 - 只保存抽象後的規則（一個字、一小段詞組或模板句），不保存你的文字。疑似人名、數字、網址、路徑或縮寫的詞不會被記下。只有開啟「儲存範例句」才會附上一小段前後文。

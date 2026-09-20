@@ -36,6 +36,19 @@ final class TextProfileTests: XCTestCase {
         XCTAssertFalse(TextProfile("我覺得 this is a long english sentence with a few words").dominates("zh-Hant"))
     }
 
+    func testATranslationTargetBecomesALanguageTag() {
+        XCTAssertEqual(TextProfile.languageTag(forTarget: "繁體中文"), "zh-Hant")
+        XCTAssertEqual(TextProfile.languageTag(forTarget: "中文"), "zh-Hant")
+        XCTAssertEqual(TextProfile.languageTag(forTarget: "  "), "zh-Hant", "empty is the translation prompt's default")
+        XCTAssertEqual(TextProfile.languageTag(forTarget: "Traditional Chinese"), "zh-Hant")
+        XCTAssertEqual(TextProfile.languageTag(forTarget: "簡體中文"), "zh-Hans")
+        XCTAssertEqual(TextProfile.languageTag(forTarget: "Simplified Chinese"), "zh-Hans")
+        XCTAssertEqual(TextProfile.languageTag(forTarget: "English"), "en")
+        XCTAssertEqual(TextProfile.languageTag(forTarget: "英文"), "en")
+        XCTAssertEqual(TextProfile.languageTag(forTarget: "日文"), "other")
+        XCTAssertEqual(TextProfile.languageTag(forTarget: "French"), "other")
+    }
+
     func testJapaneseIsNotTakenForChinese() {
         let japanese = TextProfile("これはテストです。明日また話しましょう")
         XCTAssertFalse(japanese.dominates("zh-Hant"))

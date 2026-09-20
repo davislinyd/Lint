@@ -36,6 +36,8 @@ final class FloatingPanelViewModel {
         let source: String
         let text: String
         let mode: WritingMode
+        /// Memories that were in the prompt that produced it.
+        let usedMemoryIDs: [UUID]
     }
     private var generated: GeneratedSuggestion?
 
@@ -43,6 +45,7 @@ final class FloatingPanelViewModel {
     private var prefetchTask: Task<Void, Never>?
     private var prefetchSourceText: String?
     private var prefetchBuffer = ""
+    private var prefetchUsedMemoryIDs: [UUID] = []
     private var prefetchFinished = false
     private var prefetchError: String?
     private var prefetchAttachedToUI = false
@@ -130,6 +133,7 @@ final class FloatingPanelViewModel {
         isPrefetchReady = false
         prefetchSourceText = nil
         prefetchBuffer = ""
+        prefetchUsedMemoryIDs = []
         prefetchFinished = false
         prefetchError = nil
         prefetchAttachedToUI = false
@@ -156,7 +160,9 @@ final class FloatingPanelViewModel {
                 isPrefetching = false
                 onPrefetchStateChange?()
                 if prefetchError == nil, !resultText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    generated = GeneratedSuggestion(source: text, text: resultText, mode: mode)
+                    generated = GeneratedSuggestion(
+                        source: text, text: resultText, mode: mode, usedMemoryIDs: prefetchUsedMemoryIDs
+                    )
                     if let gloss = prefetchTranslation {
                         cancelTranslation()
                         translationText = gloss
@@ -270,6 +276,19 @@ final class FloatingPanelViewModel {
         return nil
     }
 
+    /// The prompt with the user's learned habits added; untouched, and without a moment's delay,
+    /// while learning is off. The lookup runs off the main actor and is cut short rather than let
+    /// it hold a suggestion back.
+    private func personalize(_ prompt: String, for text: String, mode: WritingMode) async -> PersonalizedPrompt {
+        guard settings.learningEnabled else {
+            return PersonalizedPrompt(systemPrompt: prompt, usedMemoryIDs: [])
+        }
+        return await learning.personalize(
+            prompt: prompt, for: text, mode: mode,
+            translateTarget: settings.translateTarget, config: settings.learningConfig
+        )
+    }
+
     /// Tells the learning subsystem what the user did with the suggestion on screen. Fire and
     /// forget; a suggestion that never finished streaming is passed as nil and ignored there.
     private func recordFeedback(_ gesture: UserGesture) {
@@ -281,7 +300,8 @@ final class FloatingPanelViewModel {
             generatedText: generated?.text,
             finalText: resultText,
             provider: settings.providerKind.rawValue,
-            model: settings.model
+            model: settings.model,
+            usedMemoryIDs: generated?.usedMemoryIDs ?? []
         )
         let config = settings.learningConfig
         Task { [learning] in
@@ -318,9 +338,13 @@ final class FloatingPanelViewModel {
 
         do {
             let config = try settings.runtimeConfig()
+            let personalized = await personalize(prefetchSystemPrompt, for: result.text, mode: settings.lastMode)
+            // More typing cancels this prefetch; do not send the model a request for stale text.
+            if Task.isCancelled { return }
+            prefetchUsedMemoryIDs = personalized.usedMemoryIDs
             let request = ChatRequest(
                 model: config.model,
-                systemPrompt: prefetchSystemPrompt,
+                systemPrompt: personalized.systemPrompt,
                 userText: result.text,
                 reasoningEffort: .low,
                 fastMode: settings.fastMode
@@ -350,7 +374,10 @@ final class FloatingPanelViewModel {
                 isStreaming = false
                 errorMessage = prefetchBuffer.isEmpty ? (prefetchError ?? String(localized: "沒有收到建議。")) : nil
                 if errorMessage == nil {
-                    generated = GeneratedSuggestion(source: result.text, text: prefetchBuffer, mode: settings.lastMode)
+                    generated = GeneratedSuggestion(
+                        source: result.text, text: prefetchBuffer, mode: settings.lastMode,
+                        usedMemoryIDs: personalized.usedMemoryIDs
+                    )
                     scheduleTranslationOfResult()
                 }
             } else if isPrefetchReady {
@@ -535,6 +562,7 @@ final class FloatingPanelViewModel {
         lastUsage = nil
         isStreaming = true
         defer { isStreaming = false }
+        var usedMemoryIDs: [UUID] = []
         do {
             let config = try settings.runtimeConfig()
             let effort: ReasoningEffort = forceLowReasoning ? .low : settings.reasoningEffort
@@ -545,10 +573,13 @@ final class FloatingPanelViewModel {
             } else {
                 systemPrompt = settings.effectiveSystemPrompt(for: mode)
             }
+            let personalized = await personalize(systemPrompt, for: generationSource, mode: generationMode)
+            if Task.isCancelled { return }
+            usedMemoryIDs = personalized.usedMemoryIDs
             let request = ChatRequest(
                 model: config.model,
-                systemPrompt: systemPrompt,
-                userText: originalText,
+                systemPrompt: personalized.systemPrompt,
+                userText: generationSource,
                 reasoningEffort: effort,
                 fastMode: settings.fastMode
             )
@@ -569,7 +600,9 @@ final class FloatingPanelViewModel {
             return
         }
         if !Task.isCancelled, errorMessage == nil, !resultText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            generated = GeneratedSuggestion(source: generationSource, text: resultText, mode: generationMode)
+            generated = GeneratedSuggestion(
+                source: generationSource, text: resultText, mode: generationMode, usedMemoryIDs: usedMemoryIDs
+            )
             scheduleTranslationOfResult()
         }
     }

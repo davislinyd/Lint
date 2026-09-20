@@ -60,7 +60,16 @@ struct MemoryExtractor: Sendable {
     }
 
     /// Each pattern is reported once per feedback, however often it occurs in the text.
-    func candidates(from feedback: LearningFeedback, action: FeedbackAction) -> [MemoryCandidate] {
+    ///
+    /// `injected` holds the patterns (by `dedupKey`) the prompt already reminded the model of. If
+    /// the model then fixed the text and the user accepted it, that is the reminder working, not
+    /// new evidence: counting it would let a memory keep confirming itself. An edit by the user is
+    /// still their own choice, so it counts either way.
+    func candidates(
+        from feedback: LearningFeedback,
+        action: FeedbackAction,
+        injected: Set<String> = []
+    ) -> [MemoryCandidate] {
         guard let comparison = comparison(for: feedback, action: action) else { return [] }
         let oldTokens = DiffAnalyzer.tokens(in: comparison.old)
         let newTokens = DiffAnalyzer.tokens(in: comparison.new)
@@ -82,6 +91,7 @@ struct MemoryExtractor: Sendable {
         for span in spans {
             guard let pattern = pattern(of: span),
                   let candidate = candidate(for: pattern, span: span, context: context),
+                  comparison.userChoice || !injected.contains(candidate.dedupKey),
                   seen.insert(candidate.dedupKey).inserted
             else { continue }
             found.append(candidate)

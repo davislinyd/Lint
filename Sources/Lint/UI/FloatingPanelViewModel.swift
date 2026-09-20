@@ -26,8 +26,18 @@ final class FloatingPanelViewModel {
     let settings: SettingsStore
     private let capture: TextCaptureService
     private let llm: LLMService
+    private let learning: LearningCoordinator
     private var translationTask: Task<Void, Never>?
     private var streamTask: Task<Void, Never>?
+
+    /// A finished suggestion, kept apart from `resultText` (which the user may edit) so feedback can
+    /// compare the two. nil while streaming or after a failure, so half-streamed text never counts.
+    private struct GeneratedSuggestion {
+        let source: String
+        let text: String
+        let mode: WritingMode
+    }
+    private var generated: GeneratedSuggestion?
 
     // Background prefetch while the selection chip is visible.
     private var prefetchTask: Task<Void, Never>?
@@ -44,10 +54,11 @@ final class FloatingPanelViewModel {
     /// Called when prefetch state flips (chip label can refresh).
     var onPrefetchStateChange: (() -> Void)?
 
-    init(settings: SettingsStore, capture: TextCaptureService, llm: LLMService) {
+    init(settings: SettingsStore, capture: TextCaptureService, llm: LLMService, learning: LearningCoordinator) {
         self.settings = settings
         self.capture = capture
         self.llm = llm
+        self.learning = learning
         self.mode = settings.lastMode
     }
 
@@ -131,6 +142,7 @@ final class FloatingPanelViewModel {
         if prefetchSourceText == text {
             errorMessage = nil
             statusNote = nil
+            generated = nil
             isAutoSuggestSession = true
             mode = settings.lastMode
             originalText = text
@@ -144,6 +156,7 @@ final class FloatingPanelViewModel {
                 isPrefetching = false
                 onPrefetchStateChange?()
                 if prefetchError == nil, !resultText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    generated = GeneratedSuggestion(source: text, text: resultText, mode: mode)
                     if let gloss = prefetchTranslation {
                         cancelTranslation()
                         translationText = gloss
@@ -174,6 +187,7 @@ final class FloatingPanelViewModel {
     func prepareAutoSuggestUI(with result: TextCaptureService.CaptureResult) {
         errorMessage = nil
         resultText = ""
+        generated = nil
         clearTranslation()
         statusNote = nil
         isAutoSuggestSession = true
@@ -198,6 +212,7 @@ final class FloatingPanelViewModel {
         isAutoSuggestSession = true
         originalText = ""
         resultText = ""
+        generated = nil
         lastUsage = nil
         errorMessage = message
         statusNote = nil
@@ -209,6 +224,10 @@ final class FloatingPanelViewModel {
 
     /// Run the model on whatever is currently in `originalText` (selection or typed).
     func generateFromOriginal() {
+        // Running again on the same text and mode is a rejection; a new text or mode is not.
+        if let generated, generated.source == originalText, generated.mode == mode {
+            recordFeedback(.regenerated)
+        }
         streamTask?.cancel()
         cancelPrefetch()
         errorMessage = nil
@@ -232,6 +251,7 @@ final class FloatingPanelViewModel {
         let pb = NSPasteboard.general
         pb.clearContents()
         pb.setString(resultText, forType: .string)
+        recordFeedback(.copied)
     }
 
     func replaceOriginal() {
@@ -246,7 +266,27 @@ final class FloatingPanelViewModel {
             errorMessage = message
             return message
         }
+        recordFeedback(.replaced)
         return nil
+    }
+
+    /// Tells the learning subsystem what the user did with the suggestion on screen. Fire and
+    /// forget; a suggestion that never finished streaming is passed as nil and ignored there.
+    private func recordFeedback(_ gesture: UserGesture) {
+        guard settings.learningEnabled else { return }
+        let feedback = LearningFeedback(
+            gesture: gesture,
+            mode: generated?.mode ?? mode,
+            originalText: generated?.source ?? originalText,
+            generatedText: generated?.text,
+            finalText: resultText,
+            provider: settings.providerKind.rawValue,
+            model: settings.model
+        )
+        let config = settings.learningConfig
+        Task { [learning] in
+            await learning.recordFeedback(feedback, config: config)
+        }
     }
 
     func testConnection() {
@@ -310,6 +350,7 @@ final class FloatingPanelViewModel {
                 isStreaming = false
                 errorMessage = prefetchBuffer.isEmpty ? (prefetchError ?? String(localized: "沒有收到建議。")) : nil
                 if errorMessage == nil {
+                    generated = GeneratedSuggestion(source: result.text, text: prefetchBuffer, mode: settings.lastMode)
                     scheduleTranslationOfResult()
                 }
             } else if isPrefetchReady {
@@ -354,6 +395,7 @@ final class FloatingPanelViewModel {
         }
         errorMessage = nil
         resultText = ""
+        generated = nil
         originalText = ""
         statusNote = nil
         isAutoSuggestSession = false
@@ -484,8 +526,11 @@ final class FloatingPanelViewModel {
             return
         }
         settings.lastMode = mode
+        let generationSource = originalText
+        let generationMode = mode
         errorMessage = nil
         resultText = ""
+        generated = nil
         clearTranslation()
         lastUsage = nil
         isStreaming = true
@@ -524,6 +569,7 @@ final class FloatingPanelViewModel {
             return
         }
         if !Task.isCancelled, errorMessage == nil, !resultText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            generated = GeneratedSuggestion(source: generationSource, text: resultText, mode: generationMode)
             scheduleTranslationOfResult()
         }
     }

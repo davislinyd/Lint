@@ -107,9 +107,25 @@ struct SQLiteLearningStore: LearningStore {
         }
     }
 
-    func insertEvent(_ event: FeedbackEvent) async throws {
+    @discardableResult
+    func insertEvent(_ event: FeedbackEvent, unlessDuplicateWithin window: TimeInterval?) async throws -> Bool {
         try await dbQueue.write { db in
+            if let window {
+                let duplicate = try Bool.fetchOne(
+                    db,
+                    sql: """
+                    SELECT EXISTS(SELECT 1 FROM feedback_event
+                        WHERE source_hmac = ? AND action = ? AND final_hmac IS ? AND created_at >= ?)
+                    """,
+                    arguments: [
+                        event.sourceHMAC, event.action.rawValue, event.finalHMAC,
+                        event.createdAt.timeIntervalSince1970 - window,
+                    ]
+                ) ?? false
+                if duplicate { return false }
+            }
             try EventRecord(event).insert(db)
+            return true
         }
     }
 

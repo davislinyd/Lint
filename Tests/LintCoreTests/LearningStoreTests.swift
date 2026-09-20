@@ -94,16 +94,51 @@ final class LearningStoreTests: XCTestCase {
 
     func testInsertEventsAndCount() async throws {
         let store = try SQLiteLearningStore(url: nil)
-        try await store.insertEvent(event(at: 1))
-        try await store.insertEvent(event(at: 2, action: .editedAndAccepted))
+        try await store.insertEvent(event(at: 1), unlessDuplicateWithin: nil)
+        try await store.insertEvent(event(at: 2, action: .editedAndAccepted), unlessDuplicateWithin: nil)
         let count = try await store.eventCount()
         XCTAssertEqual(count, 2)
+    }
+
+    func testDuplicateWithinWindowIsSkippedAndLaterOneIsKept() async throws {
+        let store = try SQLiteLearningStore(url: nil)
+        let hour: TimeInterval = 3_600
+        let window = 24 * hour
+        let first = try await store.insertEvent(event(at: 0), unlessDuplicateWithin: window)
+        let sameDay = try await store.insertEvent(event(at: 12 * hour), unlessDuplicateWithin: window)
+        let nextDay = try await store.insertEvent(event(at: 30 * hour), unlessDuplicateWithin: window)
+        XCTAssertTrue(first)
+        XCTAssertFalse(sameDay, "same source, action and (empty) final text within 24 h")
+        XCTAssertTrue(nextDay)
+        let count = try await store.eventCount()
+        XCTAssertEqual(count, 2)
+    }
+
+    func testDedupeKeepsDifferentActionsAndFinalTexts() async throws {
+        let store = try SQLiteLearningStore(url: nil)
+        let window: TimeInterval = 24 * 3_600
+        var edited = event(at: 0, action: .editedAndAccepted)
+        edited.finalHMAC = "final-a"
+        var otherFinal = event(at: 60, action: .editedAndAccepted)
+        otherFinal.finalHMAC = "final-b"
+        var otherAction = event(at: 120, action: .accepted)
+        otherAction.finalHMAC = "final-a"
+        var repeatedEdit = event(at: 180, action: .editedAndAccepted)
+        repeatedEdit.finalHMAC = "final-a"
+
+        let results = [
+            try await store.insertEvent(edited, unlessDuplicateWithin: window),
+            try await store.insertEvent(otherFinal, unlessDuplicateWithin: window),
+            try await store.insertEvent(otherAction, unlessDuplicateWithin: window),
+            try await store.insertEvent(repeatedEdit, unlessDuplicateWithin: window),
+        ]
+        XCTAssertEqual(results, [true, true, true, false])
     }
 
     func testPruneDropsOldEventsThenKeepsNewest() async throws {
         let store = try SQLiteLearningStore(url: nil)
         for seconds in [100, 200, 300, 400, 500] {
-            try await store.insertEvent(event(at: TimeInterval(seconds)))
+            try await store.insertEvent(event(at: TimeInterval(seconds)), unlessDuplicateWithin: nil)
         }
         try await store.pruneEvents(keepingLast: 10, olderThan: Date(timeIntervalSince1970: 250))
         let afterCutoff = try await store.eventCount()
@@ -118,7 +153,7 @@ final class LearningStoreTests: XCTestCase {
         try await store.saveMemory(memory(key: "a", state: .candidate))
         try await store.saveMemory(memory(key: "b", state: .candidate))
         try await store.saveMemory(memory(key: "c", state: .active))
-        try await store.insertEvent(event(at: 1))
+        try await store.insertEvent(event(at: 1), unlessDuplicateWithin: nil)
         let stats = try await store.stats()
         XCTAssertEqual(stats.count(.candidate), 2)
         XCTAssertEqual(stats.count(.active), 1)
@@ -129,7 +164,7 @@ final class LearningStoreTests: XCTestCase {
     func testResetAllEmptiesTheStoreAndStaysUsable() async throws {
         let store = try SQLiteLearningStore(url: nil)
         try await store.saveMemory(memory())
-        try await store.insertEvent(event(at: 1))
+        try await store.insertEvent(event(at: 1), unlessDuplicateWithin: nil)
         try await store.resetAll()
         let stats = try await store.stats()
         XCTAssertEqual(stats, .empty)

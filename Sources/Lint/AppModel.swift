@@ -20,7 +20,7 @@ final class AppModel: NSObject, NSWindowDelegate {
         let keychain = KeychainStore()
         let settings = SettingsStore(keychain: keychain)
         self.settings = settings
-        let viewModel = FloatingPanelViewModel(settings: settings, capture: capture, llm: llm)
+        let viewModel = FloatingPanelViewModel(settings: settings, capture: capture, llm: llm, learning: learning)
         self.panel = FloatingPanelController(viewModel: viewModel)
         super.init()
         let monitor = SelectionMonitor(

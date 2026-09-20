@@ -10,6 +10,7 @@ final class AppModel: NSObject, NSWindowDelegate {
     let settings: SettingsStore
     let capture = TextCaptureService()
     let llm = LLMService()
+    let learning = LearningCoordinator()
     let panel: FloatingPanelController
     var accessibilityTrusted = AccessibilityPermission.isTrusted
     private var settingsWindow: NSWindow?
@@ -50,6 +51,7 @@ final class AppModel: NSObject, NSWindowDelegate {
             }
         }
         monitor.start()
+        Task { await self.learning.prepare(config: self.settings.learningConfig) }
         Task {
             await self.promptInstallLlamaIfNeeded()
             await self.ensureLocalServerIfNeeded()

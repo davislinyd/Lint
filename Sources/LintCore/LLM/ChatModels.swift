@@ -41,7 +41,7 @@ public enum ProviderKind: String, Codable, CaseIterable, Sendable, Identifiable 
     public var defaultModel: String {
         switch self {
         case .openai: "gpt-4o"
-        case .localLlama, .openaiCompatible: "Qwen/Qwen2.5-7B-Instruct-GGUF:q4_k_m"
+        case .localLlama, .openaiCompatible: ModelCatalog.recommended.huggingFaceSpec
         case .anthropic: "claude-3-5-sonnet-latest"
         case .gemini: "gemini-2.0-flash"
         case .chatgptAccount: "gpt-5.6-luna"
@@ -127,6 +127,8 @@ public struct ChatRequest: Sendable {
     public var maxTokens: Int
     /// OpenAI-compatible `reasoning_effort`. Nil omits the field.
     public var reasoningEffort: ReasoningEffort?
+    /// Sampling temperature for OpenAI-compatible endpoints. Nil omits the field, so the server's own default applies.
+    public var temperature: Double?
     /// Prefer Fast mode / priority tier when the backend supports it.
     public var fastMode: Bool
 
@@ -136,6 +138,7 @@ public struct ChatRequest: Sendable {
         userText: String,
         maxTokens: Int = 4096,
         reasoningEffort: ReasoningEffort? = .low,
+        temperature: Double? = nil,
         fastMode: Bool = true
     ) {
         self.model = model
@@ -143,6 +146,7 @@ public struct ChatRequest: Sendable {
         self.userText = userText
         self.maxTokens = maxTokens
         self.reasoningEffort = reasoningEffort
+        self.temperature = temperature
         self.fastMode = fastMode
     }
 }

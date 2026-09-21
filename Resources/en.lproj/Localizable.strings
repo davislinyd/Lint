@@ -258,7 +258,7 @@
 "自動（Lint 內建）" = "Automatic (built into Lint)";
 "自訂 llama-server" = "Custom llama-server";
 "額外參數" = "Extra arguments";
-"建議（Apple Silicon 校對）：--jinja --no-skip-chat-parsing -ngl 99 -fa on -c 4096 -np 1 -t 6。長文可把 -c 改 8192。服務一律只綁定 127.0.0.1，額外參數裡的 --host 會被忽略。" = "Recommended (tuned for Apple Silicon): --jinja --no-skip-chat-parsing -ngl 99 -fa on -c 4096 -np 1 -t 6. Use -c 8192 for long documents. The server always binds to 127.0.0.1; any --host in the extra arguments is ignored.";
+"建議（Apple Silicon 校對）：--jinja --no-skip-chat-parsing -ngl 99 -fa on -c 4096 -np 1 -t 6 --reasoning off。長文可把 -c 改 8192。--reasoning off 會關閉 Gemma 4 的思考，否則每段要等數十秒。服務一律只綁定 127.0.0.1，額外參數裡的 --host 會被忽略。" = "Recommended (tuned for Apple Silicon): --jinja --no-skip-chat-parsing -ngl 99 -fa on -c 4096 -np 1 -t 6 --reasoning off. Use -c 8192 for long documents. --reasoning off turns off Gemma 4’s thinking; without it every reply takes tens of seconds. The server always binds to 127.0.0.1; any --host in the extra arguments is ignored.";
 "詳細資訊" = "Details";
 
 /* Local AI setup (bundled runtime, managed model) */

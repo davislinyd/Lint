@@ -16,6 +16,14 @@ public actor LearningCoordinator {
     /// Bumped by every change to the memories, so a read that raced with a change is not cached.
     private var memoryVersion = 0
     private var lastSettled: Date?
+    /// Whether the user is waiting on a suggestion (see `setInteractiveActivity`). Held outside the
+    /// actor, so that reporting it never waits for anything the coordinator is busy with.
+    private let gate = InteractiveGate()
+    private let organizingSleep: @Sendable (Duration) async throws -> Void
+    private var organizer: MemoryDreamCoordinator?
+    private var scheduler: DreamScheduler?
+    /// Learning is on, so organizing may run in the background.
+    private var organizingAllowed = false
 
     /// Longest instruction a memory keeps, however it was edited.
     public static let maxInstructionLength = LearningPolicy.maxInstructionLength
@@ -35,17 +43,24 @@ public actor LearningCoordinator {
     init(
         storeURL: URL?,
         hmacKey: @escaping @Sendable () throws -> Data,
-        clock: @escaping @Sendable () -> Date = { Date() }
+        clock: @escaping @Sendable () -> Date = { Date() },
+        organizingSleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
     ) {
         self.storeURL = storeURL
         self.hmacKeyProvider = hmacKey
         self.clock = clock
+        self.organizingSleep = organizingSleep
     }
 
     /// Creates and migrates the database when learning is on, trims old events and archives
     /// memories that have faded. Does nothing otherwise.
     public func prepare(config: LearningConfig) async {
-        guard config.enabled, let store = openStore(create: true) else { return }
+        organizingAllowed = config.enabled
+        guard config.enabled else {
+            await scheduler?.cancelPending()
+            return
+        }
+        guard let store = openStore(create: true) else { return }
         let cutoff = clock().addingTimeInterval(-Double(LearningPolicy.eventRetentionDays) * 86_400)
         do {
             try await store.pruneEvents(keepingLast: LearningPolicy.eventRetentionCount, olderThan: cutoff)
@@ -53,11 +68,15 @@ public actor LearningCoordinator {
             NSLog("Lint learning: prune failed: \(error.localizedDescription)")
         }
         await settleIfDue(store: store)
+        let lastPass = (try? await store.lastCompletedDreamRun())?.finishedAt
+        await scheduler?.noteStartup(lastCompletedPass: lastPass)
+        await noteMemoryPressure(store: store)
     }
 
     /// Records what the user did with a suggestion. Nothing is kept while learning is off, or when
     /// the suggestion never finished generating.
     public func recordFeedback(_ feedback: LearningFeedback, config: LearningConfig) async {
+        organizingAllowed = config.enabled
         guard config.enabled, feedback.isLearnable,
               let key = symmetricKey(),
               let store = openStore(create: true),
@@ -69,7 +88,11 @@ public actor LearningCoordinator {
             )
             // A repeat of the same feedback is not new evidence.
             if inserted {
-                await learn(from: feedback, action: event.action, at: event.createdAt, store: store)
+                let changes = await learn(from: feedback, action: event.action, at: event.createdAt, store: store)
+                if changes > 0 {
+                    await scheduler?.noteChanges(changes)
+                    await noteMemoryPressure(store: store)
+                }
             }
         } catch {
             NSLog("Lint learning: could not record feedback: \(error.localizedDescription)")
@@ -138,6 +161,46 @@ public actor LearningCoordinator {
             return try await store.memories()
         } catch {
             NSLog("Lint learning: could not read memories: \(error.localizedDescription)")
+            return []
+        }
+    }
+
+    /// Says whether the user is waiting on a suggestion right now. Organizing the memories does not
+    /// start while they are, or shortly after, and one that is running gives way. Does not wait.
+    public nonisolated func setInteractiveActivity(_ active: Bool) {
+        gate.set(active)
+    }
+
+    /// Organizes the memories now, on the user's request: it does not wait for a quiet moment. Only
+    /// what is on this Mac is used, and nothing is started or downloaded for it.
+    public func organizeMemories(config: LearningConfig) async -> MemoryOrganizationOutcome {
+        guard config.enabled, openStore(create: false) != nil, let organizer else { return .unavailable }
+        let run = await organizer.run()
+        invalidateMemories()
+        guard let run else { return .alreadyRunning }
+        guard run.status == .completed else { return .failed }
+        await scheduler?.didRun()
+        return .finished(newRules: run.generatedCount, coveredMemories: run.supersededCount)
+    }
+
+    /// How many memories each generalized or core memory was derived from.
+    public func sourceCounts() async -> [UUID: Int] {
+        guard let store = openStore(create: false) else { return [:] }
+        do {
+            return try await store.sourceCounts()
+        } catch {
+            NSLog("Lint learning: could not read the sources: \(error.localizedDescription)")
+            return [:]
+        }
+    }
+
+    /// The specific memories a generalized or core memory was derived from, oldest first.
+    public func sources(of id: UUID) async -> [WritingMemory] {
+        guard let store = openStore(create: false) else { return [] }
+        do {
+            return try await store.sources(ofParent: id)
+        } catch {
+            NSLog("Lint learning: could not read the sources: \(error.localizedDescription)")
             return []
         }
     }
@@ -219,26 +282,29 @@ public actor LearningCoordinator {
         }
     }
 
+    /// Returns how many memories were learned from or weakened: what counts towards organizing them.
     private func learn(
         from feedback: LearningFeedback,
         action: FeedbackAction,
         at now: Date,
         store: any LearningStore
-    ) async {
+    ) async -> Int {
         let weight = LearningPolicy.evidenceWeight(for: action)
-        guard weight > 0 else { return }
+        guard weight > 0 else { return 0 }
         await countUse(of: feedback.usedMemoryIDs, at: now, store: store)
         let extractor = MemoryExtractor()
         let injected = await injectedPatterns(feedback.usedMemoryIDs, store: store)
         let extraction = extractor.extraction(from: feedback, action: action, injected: Set(injected.keys))
         let against = LearningPolicy.contradictionWeight(for: action)
         var changed = false
+        var changes = 0
         for candidate in extraction.candidates {
             do {
                 try await store.mergeMemory(dedupKey: candidate.dedupKey) { existing in
                     MemoryLifecycle.merging(candidate, weight: weight, at: now, into: existing)
                 }
                 changed = true
+                changes += 1
                 // Seen again, so seen again by the rule that stands in for it too.
                 if await support(parentOf: candidate.dedupKey, weight: weight, at: now, store: store) {
                     changed = true
@@ -250,10 +316,12 @@ public actor LearningCoordinator {
             if let opposite = MemoryExtractor.reversedKey(of: candidate.dedupKey),
                await weaken(opposite, by: against, at: now, store: store) {
                 changed = true
+                changes += 1
             }
         }
         for key in extraction.contradicted where await weaken(key, by: against, at: now, store: store) {
             changed = true
+            changes += 1
         }
         // The habit was still there, and the model handled it as reminded: keep the memory alive,
         // and count the reminder as having worked for whichever memory in the prompt gave it.
@@ -271,6 +339,21 @@ public actor LearningCoordinator {
             }
         }
         if changed { invalidateMemories() }
+        return changes
+    }
+
+    /// Memories that are candidates or in use pile up: organizing them may thin them out.
+    private func noteMemoryPressure(store: any LearningStore) async {
+        guard let stats = try? await store.stats() else { return }
+        await scheduler?.notePressure(memories: stats.count(.candidate) + stats.count(.active))
+    }
+
+    /// The scheduled pass: not while learning is off, and it gives way to the user.
+    private func runScheduledOrganizing() async -> DreamRunStatus? {
+        guard organizingAllowed, let organizer else { return .completed }
+        let run = await organizer.run(yieldingTo: gate)
+        invalidateMemories()
+        return run?.status
     }
 
     /// The suggestion that carried these memories was used, so they were: counted once each. That
@@ -424,6 +507,10 @@ public actor LearningCoordinator {
         do {
             let opened = try SQLiteLearningStore(url: storeURL)
             store = opened
+            organizer = MemoryDreamCoordinator(store: opened, clock: clock)
+            scheduler = DreamScheduler(gate: gate, clock: clock, sleep: organizingSleep) { [weak self] in
+                await self?.runScheduledOrganizing()
+            }
             return opened
         } catch {
             NSLog("Lint learning: cannot open store: \(error.localizedDescription)")

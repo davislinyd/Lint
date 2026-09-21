@@ -32,9 +32,10 @@ actor MemoryDreamCoordinator {
     }
 
     /// One pass over the memories. Nil if another pass is still running. Cancelling the task ends the
-    /// pass at the next cluster; what was written by then stays, since each cluster is all or nothing.
+    /// pass at the next cluster, and so does the user waiting on a suggestion when a `gate` is given;
+    /// what was written by then stays, since each cluster is all or nothing.
     @discardableResult
-    func run() async -> DreamRun? {
+    func run(yieldingTo gate: InteractiveGate? = nil) async -> DreamRun? {
         guard !isRunning else { return nil }
         isRunning = true
         defer { isRunning = false }
@@ -46,7 +47,7 @@ actor MemoryDreamCoordinator {
         )
         await save(record)
         do {
-            try await organize(&record)
+            try await organize(&record, gate: gate)
             record.status = .completed
         } catch is CancellationError {
             record.status = .cancelled
@@ -59,7 +60,14 @@ actor MemoryDreamCoordinator {
         return record
     }
 
-    private func organize(_ record: inout DreamRun) async throws {
+    /// The places where a pass may stop: between clusters, never in the middle of one.
+    private static func checkpoint(_ gate: InteractiveGate?) throws {
+        try Task.checkCancellation()
+        if gate?.isBusy == true { throw CancellationError() }
+    }
+
+    private func organize(_ record: inout DreamRun, gate: InteractiveGate?) async throws {
+        try Self.checkpoint(gate)
         let now = clock()
         let memories = try await store.memories()
         record.inputMemoryCount = memories.count
@@ -81,7 +89,7 @@ actor MemoryDreamCoordinator {
 
         let minimum = LearningPolicy.dreamMinClusterSize
         for cluster in await clusterer.clusters(from: candidates, at: now) {
-            try Task.checkCancellation()
+            try Self.checkpoint(gate)
             if cluster.members.count < minimum {
                 // Too few for a rule of its own, but enough to join one that exists.
                 guard let key = consolidator.ruleParentKey(for: cluster),
@@ -107,16 +115,16 @@ actor MemoryDreamCoordinator {
                 record.supersededCount += covered
             }
         }
-        try await maintainParents(at: now)
+        try await maintainParents(at: now, gate: gate)
     }
 
     /// A generalized memory with too few sources left is put away (its sources are free again), and
     /// one that has proved itself is promoted. Memories the user holds or has reworded are left as
     /// they are.
-    private func maintainParents(at now: Date) async throws {
+    private func maintainParents(at now: Date, gate: InteractiveGate?) async throws {
         let counts = try await store.sourceCounts()
         for parent in try await store.memories() where parent.level != .specific {
-            try Task.checkCancellation()
+            try Self.checkpoint(gate)
             guard parent.state == .active || parent.state == .candidate, !parent.userEdited else { continue }
             let count = counts[parent.id] ?? 0
             if count < LearningPolicy.dreamMinClusterSize {

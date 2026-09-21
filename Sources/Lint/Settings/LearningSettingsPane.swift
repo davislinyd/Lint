@@ -6,6 +6,8 @@ struct LearningSettingsPane: View {
     @State private var stats = LearningStats.empty
     @State private var confirmReset = false
     @State private var showMemories = false
+    @State private var organizing = false
+    @State private var organizeOutcome: MemoryOrganizationOutcome?
 
     var body: some View {
         Form {
@@ -34,6 +36,48 @@ struct LearningSettingsPane: View {
                     confirmReset = true
                 }
             }
+
+            Section {
+                LabeledContent("上次整理") {
+                    if let organized = stats.lastOrganizedAt {
+                        Text(organized.formatted(.relative(presentation: .named)))
+                    } else {
+                        Text("尚未整理")
+                    }
+                }
+                LabeledContent("核心記憶") {
+                    Text("\(stats.count(.core))")
+                }
+                LabeledContent("一般記憶") {
+                    Text("\(stats.count(.generalized))")
+                }
+                LabeledContent("具體記憶") {
+                    Text("\(stats.count(.specific))")
+                }
+                LabeledContent("已被涵蓋的記憶") {
+                    Text("\(stats.supersededCount)")
+                }
+                HStack {
+                    Button("立即整理記憶") {
+                        organize()
+                    }
+                    .disabled(!app.settings.learningEnabled || organizing)
+                    if organizing {
+                        ProgressView()
+                            .controlSize(.small)
+                    }
+                }
+                if let organizeOutcome {
+                    organizeMessage(organizeOutcome)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            } header: {
+                Text("記憶整理")
+            } footer: {
+                Text("把相近的具體記憶歸納成較少的一般規則。原本的記憶都會保留，隨時可還原；整理只在這台 Mac 上進行，不會連線。")
+                    .sectionNote()
+            }
         }
         .formStyle(.grouped)
         .task {
@@ -59,6 +103,31 @@ struct LearningSettingsPane: View {
             }
         } message: {
             Text("這會刪除所有已學到的記憶與回饋紀錄，無法復原。")
+        }
+    }
+
+    private func organize() {
+        Task {
+            organizing = true
+            organizeOutcome = await app.learning.organizeMemories(config: app.settings.learningConfig)
+            stats = await app.learning.stats()
+            organizing = false
+        }
+    }
+
+    @ViewBuilder
+    private func organizeMessage(_ outcome: MemoryOrganizationOutcome) -> some View {
+        switch outcome {
+        case .finished(let rules, let covered) where rules == 0 && covered == 0:
+            Text("沒有需要整理的記憶。")
+        case .finished(let rules, let covered):
+            Text("已整理：新增 \(rules) 條一般記憶，涵蓋 \(covered) 條具體記憶。")
+        case .alreadyRunning:
+            Text("整理正在進行中。")
+        case .failed:
+            Text("整理失敗，稍後會再試。")
+        case .unavailable:
+            EmptyView()
         }
     }
 }

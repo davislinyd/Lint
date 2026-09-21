@@ -8,28 +8,48 @@
 
 A macOS menu-bar AI writing assistant. Press a global hotkey to capture the selected text, send it to an LLM, compare the suggestion in a floating panel, then replace or copy it.
 
-### Download
+### Install
+
+#### Recommended: the official DMG (no Homebrew)
 
 Get the latest `Lint-<version>-macOS-arm64.dmg` from [GitHub Releases](https://github.com/davislinyd/Lint/releases). Official releases are signed with a Developer ID certificate and notarized by Apple. They need macOS 14+ on an Apple Silicon Mac.
 
 > **Preview builds:** until the first notarized release, Releases carries unsigned previews (`Lint-<version>-macOS-arm64-preview.dmg`, marked Pre-release). macOS blocks a preview the first time you open it: go to System Settings → Privacy & Security and click **Open Anyway**, or run `xattr -dr com.apple.quarantine /Applications/Lint.app`. Allow Accessibility again after installing each new preview.
 
 1. Open the DMG and drag **Lint** into **Applications**.
-2. Launch Lint from Applications. A pencil icon appears in the menu bar.
-3. Enable **Lint** under System Settings → Privacy & Security → Accessibility.
-4. Optional: verify the download with `shasum -a 256 -c Lint-<version>-macOS-arm64.dmg.sha256`, run in the folder that holds both files.
+2. Launch Lint from Applications. A pencil icon appears in the menu bar and the **Set Up Local AI** window opens.
+3. It reports the Local AI runtime as ready, because llama.cpp is already inside Lint. The AI model is the one thing still missing: Lint shows its size (about 4.7 GB) and where it is stored, and starts downloading only after you click **Download and Install**. It shows progress, verifies the download, then starts the local server.
+4. Allow **Lint** under System Settings → Privacy & Security → Accessibility (the setup window guides you and updates when it is on).
+5. Optional: verify the download with `shasum -a 256 -c Lint-<version>-macOS-arm64.dmg.sha256`, run in the folder that holds both files.
 
 While replacing text, macOS may ask whether Lint may control "System Events". Allow it: Lint uses it only to bring your previous app back to the front, which makes Replace reliable in browsers and Electron apps.
 
-The DMG contains Lint only, not a model. To run a model on your Mac, choose **Local llama.cpp** in Settings → Model: Lint asks before it installs `llama.cpp` with Homebrew (Homebrew must already be installed), and `llama-server` downloads the model on first use. You can also point Lint at an OpenAI-compatible endpoint or a cloud provider.
+What is inside the app and what is downloaded:
 
-To build from source instead, see Requirements and Run below.
+- **Bundled in the official DMG:** a pinned llama.cpp runtime (`llama-server` and its libraries, MIT-licensed, build b11046; its license notices are in the app). It is signed and notarized together with Lint, so nothing executable is downloaded after you install. Runtime updates arrive with Lint updates.
+- **Downloaded after you agree:** the GGUF model. It is not in the DMG. It is checked against a pinned SHA-256 and stored under `~/Library/Application Support/Lint/Models`; you can remove it in Settings → Model. The network is only needed for this download.
+- **Not needed:** Homebrew, Python, CMake, Ollama, or a llama.cpp of your own.
+
+#### Developer / source install (no Homebrew)
+
+```sh
+git clone https://github.com/davislinyd/Lint.git && cd Lint    # or download the ZIP from GitHub and unzip it
+./Scripts/install.sh
+```
+
+Needs macOS 14+ and Apple's Command Line Tools (`xcode-select --install`; the script tells you if they are missing). Homebrew is **not** required. The script downloads the pinned llama.cpp runtime over HTTPS and verifies its SHA-256, builds Lint in release mode, installs it to `~/Applications/Lint.app` (no `sudo`; `./Scripts/install.sh --system` installs to `/Applications`), and opens it. The same in-app setup then continues with the model download. `./Scripts/install.sh --dry-run` only checks the prerequisites.
+
+A source build is signed with your Apple Development identity if you have one, otherwise ad-hoc. It is not the notarized release, and macOS may ask you to allow Accessibility again after a rebuild.
+
+#### Advanced: your own backend
+
+Settings → Model → Advanced lets you point Lint at another `llama-server` (a Homebrew or self-built one), or at a Hugging Face model that `llama-server` downloads itself (`-hf`). You can also choose an OpenAI-compatible endpoint (Ollama, LM Studio, custom) or a cloud provider as the model source. None of this is needed for the default setup.
 
 ### Requirements
 
 - macOS 14+
-- Xcode / Swift 6.1+ toolchain
-- An LLM backend: an OpenAI-compatible endpoint (default `http://127.0.0.1:8000/v1`, e.g. `llama-server`, Ollama, LM Studio), or OpenAI / Anthropic / Gemini
+- To build from source: Apple's Command Line Tools with a Swift 6.1+ toolchain (Xcode also works)
+- An LLM backend: by default nothing extra, since Lint bundles llama.cpp and downloads its own model. Alternatively an OpenAI-compatible endpoint (default `http://127.0.0.1:8000/v1`, e.g. `llama-server`, Ollama, LM Studio), or OpenAI / Anthropic / Gemini
 
 ### Run
 
@@ -41,7 +61,7 @@ chmod +x Scripts/*.sh
 ./Scripts/run-dev.sh
 ```
 
-A pencil icon appears in the menu bar.
+A pencil icon appears in the menu bar. Packaging fetches the pinned llama.cpp runtime on first use (`Scripts/fetch-llama-runtime.sh`, hash-verified, cached under `.build/`); to try a development build without touching your real models, set `LINT_APP_SUPPORT_DIR` to another folder.
 
 | Hotkey | Action |
 |--------|--------|
@@ -69,7 +89,15 @@ Without permission the app still works, but falls back to simulated ⌘C / ⌘V 
 - API keys are stored in Keychain (service `app.lint.assistant`)
 - Default endpoint: `http://127.0.0.1:8000/v1`
 - Ollama: `http://127.0.0.1:11434/v1`; LM Studio: `http://127.0.0.1:1234/v1`
-- Local llama.cpp: pick it as the source in Settings → Model to manage `llama-server` (start / stop / restart, model, port) on the same page
+- Local llama.cpp: pick it as the source in Settings → Model. The same page shows the bundled runtime, the model (download / remove / show in Finder) and the server (start / stop / restart, port); Advanced holds the runtime source (automatic or a custom `llama-server`), the model source and extra arguments. The server only listens on `127.0.0.1`.
+
+### Local AI notes
+
+- **Not set up yet:** if you ask for a suggestion before the model is installed, Lint shows "Local AI has not been set up yet" with a **Set Up Local AI** button (and a shortcut to pick another model source) instead of a connection error. The menu-bar item **Set Up Local AI…** reopens the setup window at any time; **Later** on the first-run screen only stops it from opening by itself.
+- **Downloads are safe to interrupt:** cancel, lose the connection or even quit Lint, and the partial file stays under `~/Library/Application Support/Lint/Downloads`; downloading again continues from where it stopped. A file that fails its size, GGUF-header or SHA-256 check is deleted and never used, and the model only appears under `Models/` once every file has passed, in one step.
+- **Disk space:** before downloading, Lint checks for about 1.2× what is still missing and tells you how much it needs and how much the Mac has.
+- **Slow first start:** loading a 4–5 GB model can take minutes on a Mac that is short of memory. Lint waits up to 10 minutes and, if the server is still loading, leaves it running instead of starting over. If it fails, Settings → Model → Details shows the last lines it printed.
+- **Upgrading:** a model that is already in the Hugging Face cache (from `llama-server -hf`) keeps being used, so nothing is downloaded twice. The old Homebrew `llama-server` paths in Settings switch to the built-in runtime; a path you chose yourself stays as a custom runtime.
 
 ### Writing modes
 
@@ -92,9 +120,11 @@ With **Settings → Learning** turned on, Lint notices writing habits you keep c
 swift test
 ```
 
+Downloading a model is never done by the tests. `LINT_LIVE_DOWNLOAD=1 swift test --filter LiveModelDownloadTests` additionally downloads a 1.2 MB public file from Hugging Face to check redirects and resume against the real service.
+
 ### License
 
-[MIT](./LICENSE)
+[MIT](./LICENSE). The bundled llama.cpp runtime is MIT-licensed as well; its license files are inside the app (`Contents/Resources/LlamaRuntime/<arch>/licenses`, also reachable from Settings → About).
 
 ---
 
@@ -102,28 +132,48 @@ swift test
 
 macOS 選單列 AI 寫作助手：全域快捷鍵擷取選取文字，送到 LLM，在浮動面板對比後覆蓋或複製。
 
-### 下載
+### 安裝
+
+#### 建議：官方 DMG（不需要 Homebrew）
 
 到 [GitHub Releases](https://github.com/davislinyd/Lint/releases) 下載最新的 `Lint-<版本>-macOS-arm64.dmg`。正式版以 Developer ID 憑證簽署並通過 Apple 公證，需要 macOS 14+ 與 Apple Silicon Mac。
 
 > **預覽版：** 第一個公證版發佈之前，Releases 提供未簽章的預覽版（`Lint-<版本>-macOS-arm64-preview.dmg`，標示為 Pre-release）。第一次開啟時 macOS 會擋下：到 系統設定 → 隱私權與安全性 按「仍要打開」，或執行 `xattr -dr com.apple.quarantine /Applications/Lint.app`。每安裝一個新的預覽版，輔助功能都要重新允許。
 
 1. 開啟 DMG，把 **Lint** 拖進 **Applications**。
-2. 從「應用程式」開啟 Lint，選單列會出現鉛筆圖示。
-3. 到 系統設定 → 隱私權與安全性 → 輔助功能，勾選 **Lint**。
-4. 選用：在放有 DMG 與 `.sha256` 的資料夾執行 `shasum -a 256 -c Lint-<版本>-macOS-arm64.dmg.sha256` 驗證下載。
+2. 從「應用程式」開啟 Lint，選單列會出現鉛筆圖示，並開啟「設定本機 AI」視窗。
+3. 視窗會顯示本機 AI 執行環境已就緒，因為 llama.cpp 已經在 Lint 裡面。還缺的只有 AI 模型：Lint 會列出大小（約 4.7 GB）與存放位置，按下**下載並安裝**之後才開始下載，並顯示進度、驗證檔案，再啟動本機服務。
+4. 到 系統設定 → 隱私權與安全性 → 輔助功能，勾選 **Lint**（設定視窗會引導，開啟後自動更新）。
+5. 選用：在放有 DMG 與 `.sha256` 的資料夾執行 `shasum -a 256 -c Lint-<版本>-macOS-arm64.dmg.sha256` 驗證下載。
 
 取代文字時，macOS 可能會詢問是否允許 Lint 控制「系統事件」。請允許：Lint 只用它把你原本使用的 App 帶回最前面，這樣在瀏覽器與 Electron App 裡取代才會穩定。
 
-DMG 只含 Lint，不含模型。要在自己的 Mac 上跑模型，請在「設定 → 模型」選「本機 llama.cpp」：Lint 會先詢問，再用 Homebrew 安裝 `llama.cpp`（需已安裝 Homebrew），`llama-server` 會在第一次使用時下載模型。也可以改連 OpenAI 相容端點或雲端 provider。
+App 裡有什麼、之後才下載什麼：
 
-要從原始碼建置，見下方「需求」與「啟動」。
+- **官方 DMG 內建：**固定版本的 llama.cpp 執行環境（`llama-server` 與其函式庫，MIT 授權，build b11046；授權文件在 App 內）。它和 Lint 一起簽署並公證，所以安裝之後不會再下載任何可執行檔。執行環境隨 Lint 更新一起更新。
+- **同意後才下載：**GGUF 模型。它不在 DMG 裡，下載後會以固定的 SHA-256 驗證，存放在 `~/Library/Application Support/Lint/Models`，可在「設定 → 模型」移除。只有這一步需要網路。
+- **不需要：**Homebrew、Python、CMake、Ollama，或自行安裝的 llama.cpp。
+
+#### 開發者／從原始碼安裝（不需要 Homebrew）
+
+```sh
+git clone https://github.com/davislinyd/Lint.git && cd Lint    # 或從 GitHub 下載 ZIP 並解壓縮
+./Scripts/install.sh
+```
+
+需要 macOS 14+ 與 Apple 的 Command Line Tools（`xcode-select --install`，缺少時腳本會告訴你）。**不需要** Homebrew。腳本會以 HTTPS 下載固定版本的 llama.cpp 執行環境並驗證 SHA-256、以 release 模式建置 Lint、安裝到 `~/Applications/Lint.app`（不需要 `sudo`；`./Scripts/install.sh --system` 則安裝到 `/Applications`），然後開啟它。接著由 App 內的同一套設定畫面繼續下載模型。`./Scripts/install.sh --dry-run` 只檢查前置條件。
+
+原始碼建置會用你的 Apple Development 憑證簽署，沒有的話用 ad-hoc。它不是公證過的正式版，重新建置後 macOS 可能要求再次允許輔助功能。
+
+#### 進階：使用自己的後端
+
+「設定 → 模型 → 進階」可以改用另一個 `llama-server`（Homebrew 或自行編譯的版本），或改用由 `llama-server` 自己下載的 Hugging Face 模型（`-hf`）。也可以把 OpenAI 相容端點（Ollama、LM Studio、自訂）或雲端 provider 當作模型來源。預設設定完全用不到這些。
 
 ### 需求
 
 - macOS 14+
-- Xcode / Swift 6.1+ 工具鏈
-- LLM 後端：OpenAI 相容 API（預設 `http://127.0.0.1:8000/v1`，例如 `llama-server`、Ollama、LM Studio），或 OpenAI / Anthropic / Gemini
+- 從原始碼建置：Apple 的 Command Line Tools，含 Swift 6.1+ 工具鏈（裝 Xcode 也可以）
+- LLM 後端：預設不需要額外安裝，Lint 內建 llama.cpp 並自行下載模型。也可以改用 OpenAI 相容 API（預設 `http://127.0.0.1:8000/v1`，例如 `llama-server`、Ollama、LM Studio），或 OpenAI / Anthropic / Gemini
 
 ### 啟動
 
@@ -135,7 +185,7 @@ chmod +x Scripts/*.sh
 ./Scripts/run-dev.sh
 ```
 
-選單列會出現鉛筆圖示。
+選單列會出現鉛筆圖示。組包時第一次會下載固定版本的 llama.cpp 執行環境（`Scripts/fetch-llama-runtime.sh`，驗證雜湊後快取在 `.build/`）；想試用開發版又不動到真正的模型，可把 `LINT_APP_SUPPORT_DIR` 設成別的資料夾。
 
 | 快捷鍵 | 行為 |
 |--------|------|
@@ -163,7 +213,15 @@ chmod +x Scripts/*.sh
 - API Key 存在 Keychain（service `app.lint.assistant`）
 - 預設 Endpoint：`http://127.0.0.1:8000/v1`
 - Ollama：`http://127.0.0.1:11434/v1`；LM Studio：`http://127.0.0.1:1234/v1`
-- 本機 llama.cpp：在「設定 → 模型」選擇該來源，即可在同頁管理 `llama-server`（啟動／停止／重啟、模型、埠）
+- 本機 llama.cpp：在「設定 → 模型」選擇該來源。同一頁會顯示內建的執行環境、模型（下載／移除／在 Finder 顯示）與服務（啟動／停止／重啟、埠）；「進階」有執行環境來源（自動或自訂 `llama-server`）、模型來源與額外參數。服務只監聽 `127.0.0.1`。
+
+### 本機 AI 補充說明
+
+- **尚未設定：**還沒安裝模型就要求建議時，Lint 會顯示「本機 AI 尚未設定」與「設定本機 AI」按鈕（以及改用其他模型來源的捷徑），而不是連線錯誤。選單列的「設定本機 AI…」可隨時重新開啟設定視窗；首次畫面按「稍後」只是不再自動彈出。
+- **下載可以安全中斷：**取消、斷線甚至結束 Lint，已下載的部分都會留在 `~/Library/Application Support/Lint/Downloads`，再次下載會從中斷處接續。大小、GGUF 標頭或 SHA-256 任一項驗證失敗的檔案會被刪除、絕不使用；所有檔案都通過之後，模型才會一次出現在 `Models/`。
+- **磁碟空間：**下載前會檢查是否有「還缺的部分 ×1.2」的可用空間，並告訴你需要多少、這台 Mac 有多少。
+- **第一次啟動較慢：**在記憶體吃緊的 Mac 上，載入 4–5 GB 的模型可能要數分鐘。Lint 最多等 10 分鐘，若伺服器仍在載入，會讓它繼續跑而不是重來。失敗時，「設定 → 模型 → 詳細資訊」會顯示它最後印出的幾行。
+- **升級：**已在 Hugging Face 快取（`llama-server -hf` 下載的）裡的模型會繼續使用，不會重複下載。設定裡舊的 Homebrew `llama-server` 路徑會改為使用內建執行環境；你自己選的路徑則保留為自訂執行環境。
 
 ### 寫作模式
 
@@ -186,6 +244,8 @@ chmod +x Scripts/*.sh
 swift test
 ```
 
+測試不會下載模型。`LINT_LIVE_DOWNLOAD=1 swift test --filter LiveModelDownloadTests` 會另外從 Hugging Face 下載一個 1.2 MB 的公開檔案，用真實服務檢查轉址與續傳。
+
 ### 授權
 
-[MIT](./LICENSE)
+[MIT](./LICENSE)。內建的 llama.cpp 執行環境同為 MIT 授權，授權文件在 App 內（`Contents/Resources/LlamaRuntime/<arch>/licenses`，也可從「設定 → 關於」開啟）。

@@ -42,6 +42,20 @@ enum MemoryLifecycle {
         return memory
     }
 
+    /// Another observation of a pattern that a generalized memory stands for: it counts for that
+    /// memory too, as if it had been seen there. The wording, and the state the user gave it, stay.
+    static func supported(_ memory: WritingMemory, weight: Double, at now: Date) -> WritingMemory {
+        var memory = memory
+        memory.evidenceScore = memory.evidence(at: now) + weight
+        memory.occurrenceCount += 1
+        memory.lastConfirmedAt = now
+        if memory.state == .archived { memory.state = .candidate }
+        if memory.state == .candidate {
+            memory.state = restingState(evidenceScore: memory.evidenceScore)
+        }
+        return memory
+    }
+
     /// Takes evidence away, because the user undid what the memory asks for. An active memory that
     /// falls well below the bar is a candidate again; pinned, disabled and archived ones keep their
     /// state. This is no confirmation, so the clock is not restarted: the stored value is set so
@@ -51,6 +65,7 @@ enum MemoryLifecycle {
         let factor = memory.decayFactor(at: now)
         let remaining = max(0, memory.evidence(at: now) - amount)
         memory.evidenceScore = factor > 0 ? remaining / factor : 0
+        memory.contradictionCount += 1
         if memory.state == .active, remaining < LearningPolicy.demoteThreshold {
             memory.state = .candidate
         }

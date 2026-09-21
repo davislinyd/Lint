@@ -7,6 +7,12 @@ import NaturalLanguage
 ///
 /// Two channels: a memory whose trigger appears in the text, and a habit (no trigger) that fits
 /// the text's language. Both are ranked, and the result stays within the prompt budget.
+///
+/// A specific memory that a generalized or core memory stands in for (`supersededBy`, and that
+/// memory is in use right now) is left out, since the rule already says it. It is only brought back
+/// by its own trigger in the text, which is more precise than the rule, and then it takes the rule's
+/// place in the prompt rather than being told alongside it. Once the rule is not in use (faded,
+/// disabled, deleted), nothing is left out on its account.
 struct MemoryRetriever: Sendable {
     struct Query: Sendable {
         var text: String
@@ -20,6 +26,8 @@ struct MemoryRetriever: Sendable {
         /// Lower-cased, words separated by single spaces.
         let latinTriggers: [String]
         let cjkTriggers: [String]
+        /// The generalized or core memory in use that stands in for this one.
+        let coveredBy: UUID?
 
         var isHabit: Bool { latinTriggers.isEmpty && cjkTriggers.isEmpty }
     }
@@ -28,6 +36,7 @@ struct MemoryRetriever: Sendable {
         let memory: WritingMemory
         let isLexical: Bool
         let score: Double
+        let coveredBy: UUID?
     }
 
     private let entries: [Entry]
@@ -43,6 +52,7 @@ struct MemoryRetriever: Sendable {
             .map { MemoryLifecycle.settled($0, at: now) }
             .filter { $0.state == .active || $0.state == .pinned }
         let byKey = Dictionary(usable.map { ($0.dedupKey, $0) }, uniquingKeysWith: { first, _ in first })
+        let rulesInUse = Set(usable.filter { $0.level != .specific }.map(\.id))
         entries = usable
             .filter { memory in
                 guard let key = MemoryExtractor.reversedKey(of: memory.dedupKey),
@@ -55,7 +65,10 @@ struct MemoryRetriever: Sendable {
                     latinTriggers: memory.triggers
                         .filter { !$0.isEmpty && !$0.unicodeScalars.contains(where: Script.isCJK) }
                         .map(WordToken.key(of:)),
-                    cjkTriggers: memory.triggers.filter { $0.unicodeScalars.contains(where: Script.isCJK) }
+                    cjkTriggers: memory.triggers.filter { $0.unicodeScalars.contains(where: Script.isCJK) },
+                    coveredBy: memory.level == .specific
+                        ? memory.supersededBy.flatMap { rulesInUse.contains($0) ? $0 : nil }
+                        : nil
                 )
             }
         longestLatinTrigger = min(
@@ -85,12 +98,20 @@ struct MemoryRetriever: Sendable {
             let memory = entry.memory
             guard memory.modeScope == nil || memory.modeScope == query.mode else { continue }
             if entry.isHabit {
+                // Covered, and with no trigger of its own to bring it back.
+                guard entry.coveredBy == nil else { continue }
                 guard languageFits(memory, query: query, profile: profile, habit: true) else { continue }
-                candidates.append(Candidate(memory: memory, isLexical: false, score: score(memory, lexical: false, mode: query.mode)))
+                candidates.append(Candidate(
+                    memory: memory, isLexical: false, score: score(memory, lexical: false, mode: query.mode),
+                    coveredBy: nil
+                ))
             } else if entry.latinTriggers.contains(where: grams.contains)
                         || entry.cjkTriggers.contains(where: query.text.contains),
                       languageFits(memory, query: query, profile: profile, habit: false) {
-                candidates.append(Candidate(memory: memory, isLexical: true, score: score(memory, lexical: true, mode: query.mode)))
+                candidates.append(Candidate(
+                    memory: memory, isLexical: true, score: score(memory, lexical: true, mode: query.mode),
+                    coveredBy: entry.coveredBy
+                ))
             }
         }
 
@@ -103,7 +124,21 @@ struct MemoryRetriever: Sendable {
             return lhs.memory.id.uuidString < rhs.memory.id.uuidString
         }
 
-        var picked: [WritingMemory] = []
+        // A memory picked for its own trigger says more than the rule that covers it, so the rule
+        // is left out (unless the user pinned it) and what it made room for goes to the next in line.
+        var displaced = Set<UUID>()
+        while true {
+            let picked = pick(from: candidates.filter { !displaced.contains($0.memory.id) })
+            let rules = Set(picked.compactMap(\.coveredBy)).subtracting(displaced)
+                .filter { rule in !candidates.contains { $0.memory.id == rule && $0.memory.state == .pinned } }
+            if rules.isEmpty { return picked.map(\.memory) }
+            displaced.formUnion(rules)
+        }
+    }
+
+    /// The best of `candidates` (already in order) that fit the prompt budget.
+    private func pick(from candidates: [Candidate]) -> [Candidate] {
+        var picked: [Candidate] = []
         var habits = 0
         var characters = 0
         for candidate in candidates {
@@ -111,17 +146,27 @@ struct MemoryRetriever: Sendable {
             if !candidate.isLexical, habits >= LearningPolicy.maxHabitMemories { continue }
             let cost = LearningPolicy.promptCost(of: candidate.memory)
             guard characters + cost <= LearningPolicy.maxPersonalizationCharacters else { continue }
-            picked.append(candidate.memory)
+            picked.append(candidate)
             characters += cost
             if !candidate.isLexical { habits += 1 }
         }
         return picked
     }
 
-    /// A trigger in the text outweighs everything else; otherwise better-evidenced, more often seen
-    /// and mode-specific memories come first.
+    /// A trigger in the text outweighs everything else, and a memory that sums up several others
+    /// outweighs a single one of the same kind, though never a single memory whose trigger is in
+    /// the text; after that better-evidenced, more often seen and mode-specific memories come first.
+    /// (The tiers are further apart than the rest can add up to.)
     private func score(_ memory: WritingMemory, lexical: Bool, mode: WritingMode) -> Double {
-        (lexical ? 1.0 : 0)
+        let tier: Double = switch (memory.level, lexical) {
+        case (.specific, true): 2.0
+        case (.core, true): 1.4
+        case (.generalized, true): 1.3
+        case (.core, false): 0.7
+        case (.generalized, false): 0.6
+        case (.specific, false): 0
+        }
+        return tier
             + 0.3 * memory.confidence(at: now)
             + 0.1 * min(1, Double(memory.occurrenceCount) / 10)
             + (memory.modeScope == mode ? 0.1 : 0)

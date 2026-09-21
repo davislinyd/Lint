@@ -83,6 +83,47 @@ struct SQLiteLearningStore: LearningStore {
                 t.drop(column: "preferred_example")
             }
         }
+        // Organizing memories: a memory gets a level and usage counters, and a generalized memory
+        // keeps a record of the specific ones it stands in for. Every new column has a default, so an
+        // existing database loads as it was (all `specific`). The relation rows go with either end
+        // of the relation, but deleting a parent never deletes what it was derived from.
+        migrator.registerMigration("v3_dreaming") { db in
+            try db.alter(table: "writing_memory") { t in
+                t.add(column: "level", .text).notNull().defaults(to: MemoryLevel.specific.rawValue)
+                t.add(column: "superseded_by", .text)
+                t.add(column: "retrieval_count", .integer).notNull().defaults(to: 0)
+                t.add(column: "successful_use_count", .integer).notNull().defaults(to: 0)
+                t.add(column: "contradiction_count", .integer).notNull().defaults(to: 0)
+                t.add(column: "last_used_at", .double)
+                t.add(column: "last_consolidated_at", .double)
+            }
+            try db.create(index: "writing_memory_superseded_by", on: "writing_memory", columns: ["superseded_by"])
+            try db.create(table: "memory_relation") { t in
+                t.column("parent_id", .text).notNull().references("writing_memory", onDelete: .cascade)
+                t.column("child_id", .text).notNull().references("writing_memory", onDelete: .cascade)
+                t.column("relation", .text).notNull()
+                t.column("created_at", .double).notNull()
+                t.primaryKey(["parent_id", "child_id"])
+            }
+            try db.create(index: "memory_relation_child", on: "memory_relation", columns: ["child_id"])
+            // Numbers only, never text.
+            try db.create(table: "dream_run") { t in
+                t.column("id", .text).primaryKey()
+                t.column("started_at", .double).notNull()
+                t.column("finished_at", .double)
+                t.column("algorithm_version", .integer).notNull()
+                t.column("input_memory_count", .integer).notNull()
+                t.column("cluster_count", .integer).notNull()
+                t.column("generated_count", .integer).notNull()
+                t.column("superseded_count", .integer).notNull()
+                t.column("status", .text).notNull()
+            }
+            // Patterns the user deleted after they were derived; a `dedup_key`, never any text.
+            try db.create(table: "dream_veto") { t in
+                t.column("dedup_key", .text).primaryKey()
+                t.column("created_at", .double).notNull()
+            }
+        }
         return migrator
     }
 
@@ -136,6 +177,18 @@ struct SQLiteLearningStore: LearningStore {
 
     func deleteMemory(id: UUID) async throws {
         try await dbQueue.write { db in
+            guard let memory = try MemoryRecord.fetchOne(db, key: id.uuidString)?.memory else { return }
+            if memory.level != .specific {
+                try db.execute(
+                    sql: "INSERT OR IGNORE INTO dream_veto (dedup_key, created_at) VALUES (?, ?)",
+                    arguments: [memory.dedupKey, Date().timeIntervalSince1970]
+                )
+            }
+            // The memories it stood in for must not stay hidden behind something that is gone.
+            try db.execute(
+                sql: "UPDATE writing_memory SET superseded_by = NULL WHERE superseded_by = ?",
+                arguments: [id.uuidString]
+            )
             _ = try MemoryRecord.deleteOne(db, key: id.uuidString)
         }
     }
@@ -143,6 +196,65 @@ struct SQLiteLearningStore: LearningStore {
     func deleteAllMemories() async throws {
         try await dbQueue.write { db in
             try db.execute(sql: "DELETE FROM writing_memory")
+            try db.execute(sql: "DELETE FROM dream_veto")
+        }
+    }
+
+    func sources(ofParent parentID: UUID) async throws -> [WritingMemory] {
+        try await dbQueue.read { db in
+            try MemoryRecord.fetchAll(
+                db,
+                sql: """
+                SELECT m.* FROM writing_memory m
+                    JOIN memory_relation r ON r.child_id = m.id
+                    WHERE r.parent_id = ?
+                    ORDER BY m.created_at, m.id
+                """,
+                arguments: [parentID.uuidString]
+            ).map(\.memory)
+        }
+    }
+
+    func sourceCounts() async throws -> [UUID: Int] {
+        try await dbQueue.read { db in
+            var counts: [UUID: Int] = [:]
+            let rows = try Row.fetchAll(
+                db, sql: "SELECT parent_id, COUNT(*) AS n FROM memory_relation GROUP BY parent_id"
+            )
+            for row in rows {
+                let parent: String = row["parent_id"]
+                if let id = UUID(uuidString: parent) { counts[id] = row["n"] }
+            }
+            return counts
+        }
+    }
+
+    func isVetoed(dedupKey: String) async throws -> Bool {
+        try await dbQueue.read { db in
+            try Bool.fetchOne(
+                db,
+                sql: "SELECT EXISTS(SELECT 1 FROM dream_veto WHERE dedup_key = ?)",
+                arguments: [dedupKey]
+            ) ?? false
+        }
+    }
+
+    func recordDreamRun(_ run: DreamRun) async throws {
+        try await dbQueue.write { db in
+            try DreamRunRecord(run).save(db)
+        }
+    }
+
+    func lastCompletedDreamRun() async throws -> DreamRun? {
+        try await dbQueue.read { db in
+            try DreamRunRecord.fetchOne(
+                db,
+                sql: """
+                SELECT * FROM dream_run WHERE status = ? AND finished_at IS NOT NULL
+                    ORDER BY finished_at DESC LIMIT 1
+                """,
+                arguments: [DreamRunStatus.completed.rawValue]
+            )?.run
         }
     }
 
@@ -202,7 +314,37 @@ struct SQLiteLearningStore: LearningStore {
                     counts[state] = row["n"]
                 }
             }
-            return LearningStats(memoriesByState: counts, eventCount: try EventRecord.fetchCount(db))
+            var levels: [MemoryLevel: Int] = [:]
+            for row in try Row.fetchAll(
+                db, sql: "SELECT level, COUNT(*) AS n FROM writing_memory GROUP BY level"
+            ) {
+                let raw: String = row["level"]
+                if let level = MemoryLevel(rawValue: raw) {
+                    levels[level] = row["n"]
+                }
+            }
+            // Counted by what is usable now, so a memory whose parent has faded is not "covered".
+            let superseded = try Int.fetchOne(
+                db,
+                sql: """
+                SELECT COUNT(*) FROM writing_memory child
+                    JOIN writing_memory parent ON child.superseded_by = parent.id
+                    WHERE parent.state IN (?, ?)
+                """,
+                arguments: [MemoryState.active.rawValue, MemoryState.pinned.rawValue]
+            ) ?? 0
+            let lastOrganized = try Double.fetchOne(
+                db,
+                sql: "SELECT MAX(finished_at) FROM dream_run WHERE status = ?",
+                arguments: [DreamRunStatus.completed.rawValue]
+            )
+            return LearningStats(
+                memoriesByState: counts,
+                eventCount: try EventRecord.fetchCount(db),
+                memoriesByLevel: levels,
+                supersededCount: superseded,
+                lastOrganizedAt: lastOrganized.map { Date(timeIntervalSince1970: $0) }
+            )
         }
     }
 
@@ -210,6 +352,8 @@ struct SQLiteLearningStore: LearningStore {
         try await dbQueue.write { db in
             try db.execute(sql: "DELETE FROM writing_memory")
             try db.execute(sql: "DELETE FROM feedback_event")
+            try db.execute(sql: "DELETE FROM dream_run")
+            try db.execute(sql: "DELETE FROM dream_veto")
         }
         try await dbQueue.vacuum()
     }
@@ -232,12 +376,24 @@ private struct MemoryRecord: FetchableRecord, PersistableRecord {
         let state: String = row["state"]
         let modeScope: String? = row["mode_scope"]
         let triggers: String = row["triggers"]
+        let level: String = row["level"]
+        let supersededBy: String? = row["superseded_by"]
         guard let uuid = UUID(uuidString: id),
               let kind = MemoryKind(rawValue: kind),
-              let state = MemoryState(rawValue: state)
+              let state = MemoryState(rawValue: state),
+              let level = MemoryLevel(rawValue: level)
         else {
             throw LearningStoreError.invalidRow("writing_memory \(id)")
         }
+        var parent: UUID?
+        if let supersededBy {
+            guard let uuid = UUID(uuidString: supersededBy) else {
+                throw LearningStoreError.invalidRow("writing_memory.superseded_by \(supersededBy)")
+            }
+            parent = uuid
+        }
+        let lastUsedAt: Double? = row["last_used_at"]
+        let lastConsolidatedAt: Double? = row["last_consolidated_at"]
         var scope: WritingMode?
         if let modeScope {
             guard let mode = WritingMode(rawValue: modeScope) else {
@@ -258,7 +414,14 @@ private struct MemoryRecord: FetchableRecord, PersistableRecord {
             state: state,
             userEdited: row["user_edited"],
             createdAt: Date(timeIntervalSince1970: row["created_at"]),
-            lastConfirmedAt: Date(timeIntervalSince1970: row["last_confirmed_at"])
+            lastConfirmedAt: Date(timeIntervalSince1970: row["last_confirmed_at"]),
+            level: level,
+            supersededBy: parent,
+            retrievalCount: row["retrieval_count"],
+            successfulUseCount: row["successful_use_count"],
+            contradictionCount: row["contradiction_count"],
+            lastUsedAt: lastUsedAt.map { Date(timeIntervalSince1970: $0) },
+            lastConsolidatedAt: lastConsolidatedAt.map { Date(timeIntervalSince1970: $0) }
         )
     }
 
@@ -276,6 +439,55 @@ private struct MemoryRecord: FetchableRecord, PersistableRecord {
         container["user_edited"] = memory.userEdited
         container["created_at"] = memory.createdAt.timeIntervalSince1970
         container["last_confirmed_at"] = memory.lastConfirmedAt.timeIntervalSince1970
+        container["level"] = memory.level.rawValue
+        container["superseded_by"] = memory.supersededBy?.uuidString
+        container["retrieval_count"] = memory.retrievalCount
+        container["successful_use_count"] = memory.successfulUseCount
+        container["contradiction_count"] = memory.contradictionCount
+        container["last_used_at"] = memory.lastUsedAt?.timeIntervalSince1970
+        container["last_consolidated_at"] = memory.lastConsolidatedAt?.timeIntervalSince1970
+    }
+}
+
+private struct DreamRunRecord: FetchableRecord, PersistableRecord {
+    static let databaseTableName = "dream_run"
+
+    var run: DreamRun
+
+    init(_ run: DreamRun) {
+        self.run = run
+    }
+
+    init(row: Row) throws {
+        let id: String = row["id"]
+        let status: String = row["status"]
+        guard let uuid = UUID(uuidString: id), let status = DreamRunStatus(rawValue: status) else {
+            throw LearningStoreError.invalidRow("dream_run \(id)")
+        }
+        let finishedAt: Double? = row["finished_at"]
+        run = DreamRun(
+            id: uuid,
+            startedAt: Date(timeIntervalSince1970: row["started_at"]),
+            finishedAt: finishedAt.map { Date(timeIntervalSince1970: $0) },
+            algorithmVersion: row["algorithm_version"],
+            inputMemoryCount: row["input_memory_count"],
+            clusterCount: row["cluster_count"],
+            generatedCount: row["generated_count"],
+            supersededCount: row["superseded_count"],
+            status: status
+        )
+    }
+
+    func encode(to container: inout PersistenceContainer) throws {
+        container["id"] = run.id.uuidString
+        container["started_at"] = run.startedAt.timeIntervalSince1970
+        container["finished_at"] = run.finishedAt?.timeIntervalSince1970
+        container["algorithm_version"] = run.algorithmVersion
+        container["input_memory_count"] = run.inputMemoryCount
+        container["cluster_count"] = run.clusterCount
+        container["generated_count"] = run.generatedCount
+        container["superseded_count"] = run.supersededCount
+        container["status"] = run.status.rawValue
     }
 }
 

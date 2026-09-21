@@ -15,8 +15,21 @@ protocol LearningStore: Sendable {
     func memory(id: UUID) async throws -> WritingMemory?
     func memory(dedupKey: String) async throws -> WritingMemory?
     func memories() async throws -> [WritingMemory]
+    /// Deleting a generalized or core memory is remembered (`isVetoed`), so it is not derived again;
+    /// the memories it was derived from stay, and are no longer pointed at as superseded.
     func deleteMemory(id: UUID) async throws
     func deleteAllMemories() async throws
+
+    /// The specific memories a generalized or core memory was derived from, oldest first.
+    func sources(ofParent parentID: UUID) async throws -> [WritingMemory]
+    /// How many memories each generalized or core memory was derived from.
+    func sourceCounts() async throws -> [UUID: Int]
+    /// Whether the user deleted the memory with this `dedupKey` and it may not be derived again.
+    func isVetoed(dedupKey: String) async throws -> Bool
+    /// Inserts, or updates the run with the same `id`.
+    func recordDreamRun(_ run: DreamRun) async throws
+    /// The most recent run that ran to the end, or nil.
+    func lastCompletedDreamRun() async throws -> DreamRun?
 
     /// With a window, the event is skipped when one with the same source, action and final text was
     /// recorded that long (or less) before it. Returns whether it was inserted.

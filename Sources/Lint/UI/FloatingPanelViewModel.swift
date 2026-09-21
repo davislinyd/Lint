@@ -12,7 +12,17 @@ final class FloatingPanelViewModel {
     var translationText = ""
     var isTranslating = false { didSet { reportInteractiveActivity() } }
     var isStreaming = false { didSet { reportInteractiveActivity() } }
-    var errorMessage: String?
+    var errorMessage: String? {
+        didSet { if errorMessage == nil { setupErrorPending = false } }
+    }
+    /// The last local-server check failed because Local AI is not set up yet (a background warm-up
+    /// can hit this without any message being shown).
+    private var setupErrorPending = false
+    /// The message on screen is "Local AI is not set up yet": the panel offers a Set Up Local AI
+    /// button instead of leaving the user with a bare message.
+    var needsLocalAISetup: Bool { setupErrorPending && errorMessage != nil }
+    var onOpenLocalAISetup: (() -> Void)?
+    var onOpenModelSettings: (() -> Void)?
     var statusNote: String?
     /// Compared against `statusNote` to clear it once the user types; keep one localized copy.
     static let noSelectionNote = String(localized: "沒有選取文字。可直接在左側輸入，再按「產生」。")
@@ -30,6 +40,7 @@ final class FloatingPanelViewModel {
     private let capture: TextCaptureService
     private let llm: LLMService
     private let learning: LearningCoordinator
+    private let localAI: LocalAISetupCoordinator
     private var translationTask: Task<Void, Never>?
     private var streamTask: Task<Void, Never>?
 
@@ -60,11 +71,15 @@ final class FloatingPanelViewModel {
     /// Called when prefetch state flips (chip label can refresh).
     var onPrefetchStateChange: (() -> Void)?
 
-    init(settings: SettingsStore, capture: TextCaptureService, llm: LLMService, learning: LearningCoordinator) {
+    init(
+        settings: SettingsStore, capture: TextCaptureService, llm: LLMService, learning: LearningCoordinator,
+        localAI: LocalAISetupCoordinator
+    ) {
         self.settings = settings
         self.capture = capture
         self.llm = llm
         self.learning = learning
+        self.localAI = localAI
         self.mode = settings.lastMode
     }
 
@@ -332,7 +347,21 @@ final class FloatingPanelViewModel {
 
     private func ensureLocalServerIfNeeded() async throws {
         guard settings.wantsManagedLocalServer else { return }
-        try await LocalLlamaServerManager.shared.ensureRunning(settings: settings)
+        do {
+            try await localAI.ensureServerRunning()
+        } catch let error as LocalAIError where error.needsSetup {
+            // Not set up yet: a friendly message with a way forward, never a connection error.
+            setupErrorPending = true
+            throw error
+        }
+    }
+
+    func openLocalAISetup() {
+        onOpenLocalAISetup?()
+    }
+
+    func openModelSettings() {
+        onOpenModelSettings?()
     }
 
     private func runPrefetch(for result: TextCaptureService.CaptureResult) async {

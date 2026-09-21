@@ -1,45 +1,239 @@
 import AppKit
+import LintCore
 import SwiftUI
 
-/// Sections shown inside the model pane's Form when the local llama.cpp provider is selected.
+/// Sections shown inside the model pane's Form when the local llama.cpp provider is selected:
+/// runtime, model, server, and (collapsed) advanced options. It reports and drives
+/// `LocalAISetupCoordinator`; the logic lives there.
 struct LocalServerSection: View {
     var app: AppModel
-    @State private var serverStatus: LocalLlamaServerManager.Status = .stopped
-    /// Shown instead of `serverStatus` while an action is in flight.
+    /// Shown instead of the server status while an action is in flight.
     @State private var busyLabel: String?
-    @State private var binaryState: LocalLlamaServerManager.BinaryState?
     @State private var serverMessage: String?
     @State private var localServerBusy = false
-    @State private var showBrewInstallConfirm = false
     @State private var showAdvanced = false
+    @State private var showDetails = false
+    @State private var confirmDownload = false
+    @State private var confirmRemove = false
+
+    private var coordinator: LocalAISetupCoordinator { app.localAI }
 
     var body: some View {
         Group {
-            statusSection
-            configSection
+            runtimeSection
+            modelSection
+            serverSection
+            advancedSection
             maintenanceSection
         }
         .task {
-            await refreshLocalServerStatus()
+            await coordinator.refresh()
         }
-        .alert("安裝 llama-server？", isPresented: $showBrewInstallConfirm) {
-            Button("安裝", role: .none) {
-                Task { await installLlamaServerViaBrew() }
-            }
+        .alert("下載模型？", isPresented: $confirmDownload) {
+            Button("下載並安裝") { coordinator.installModel() }
             Button("取消", role: .cancel) {}
         } message: {
-            Text("會執行 brew install llama.cpp（需已安裝 Homebrew，可能需幾分鐘與網路）。完成後 Lint 會自動填入路徑。")
+            Text(downloadConfirmation)
+        }
+        .alert("移除模型？", isPresented: $confirmRemove) {
+            Button("移除", role: .destructive) { Task { await coordinator.removeModel() } }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("會刪除已下載的模型檔案，並停止本機服務。之後可以再下載。")
         }
     }
 
+    // MARK: - Runtime
+
+    @ViewBuilder
+    private var runtimeSection: some View {
+        Section {
+            LabeledContent("執行環境") {
+                if !coordinator.hasChecked {
+                    Text("檢查中…").foregroundStyle(.secondary)
+                } else if let location = coordinator.runtime.location {
+                    VStack(alignment: .trailing, spacing: 2) {
+                        Label("已就緒", systemImage: "checkmark.circle.fill")
+                            .foregroundStyle(.green)
+                        Text(runtimeDetail(location))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                } else {
+                    Label("無法使用", systemImage: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
+                }
+            }
+            if let message = coordinator.runtime.userMessage {
+                Text(message).sectionNote()
+            }
+        } header: {
+            Text("本機 AI")
+        }
+    }
+
+    private func runtimeDetail(_ location: LlamaRuntimeLocation) -> String {
+        switch location.origin {
+        case .bundled:
+            let version = location.info?.displayVersion ?? "llama.cpp"
+            return String(localized: "Lint 內建・\(version)")
+        case .custom:
+            return String(localized: "自訂：\(location.binaryURL.path)")
+        case .externalFallback:
+            return String(localized: "外部安裝的 llama-server：\(location.binaryURL.path)")
+        }
+    }
+
+    // MARK: - Model
+
+    @ViewBuilder
+    private var modelSection: some View {
+        Section {
+            if coordinator.configuration.modelSource == .managed {
+                managedModelRows
+            } else {
+                LabeledContent("模型") {
+                    VStack(alignment: .trailing, spacing: 2) {
+                        Text("自訂（Hugging Face）")
+                        Text(coordinator.configuration.effectiveHuggingFaceSpec)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .textSelection(.enabled)
+                    }
+                }
+            }
+        } header: {
+            Text("模型")
+        }
+    }
+
+    @ViewBuilder
+    private var managedModelRows: some View {
+        let model = coordinator.configuration.managedModel
+        LabeledContent {
+            HStack {
+                modelButtons
+            }
+        } label: {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(model.displayName)
+                HStack(spacing: 6) {
+                    StatusDot(color: modelStatusColor)
+                    Text(modelStatusText)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        if coordinator.state == .modelDownloading {
+            downloadProgress
+        }
+        switch coordinator.downloadState {
+        case .failed(let error):
+            Text(error.localizedDescription)
+                .font(.caption)
+                .foregroundStyle(.red)
+                .textSelection(.enabled)
+        case .cancelled where coordinator.partialBytes > 0:
+            Text("下載已取消。已下載的 \(ModelInstallError.formatBytes(coordinator.partialBytes)) 會保留，繼續下載會從中斷處接續。")
+                .sectionNote()
+        default:
+            EmptyView()
+        }
+    }
+
+    @ViewBuilder
+    private var modelButtons: some View {
+        if coordinator.state == .modelDownloading {
+            Button("取消") { coordinator.cancelInstall() }
+        } else {
+            switch coordinator.model {
+            case .installed:
+                Button("在 Finder 顯示") { openModelFolder() }
+                Button("移除", role: .destructive) { confirmRemove = true }
+            case .notInstalled, .invalid:
+                Button(downloadButtonTitle) { confirmDownload = true }
+            }
+        }
+    }
+
+    private var downloadButtonTitle: LocalizedStringKey {
+        switch coordinator.downloadState {
+        case .failed: return "重試"
+        case .cancelled: return "繼續下載"
+        default:
+            if case .invalid = coordinator.model { return "重新下載" }
+            return "下載"
+        }
+    }
+
+    private var modelStatusText: String {
+        if coordinator.state == .modelDownloading { return String(localized: "下載中…") }
+        switch coordinator.model {
+        case .installed: return String(localized: "已安裝")
+        case .invalid: return String(localized: "不完整或已損毀，需要重新下載")
+        case .notInstalled:
+            if let size = coordinator.configuration.managedModel.totalBytes {
+                return String(localized: "尚未安裝（約 \(ModelInstallError.formatBytes(size))）")
+            }
+            return String(localized: "尚未安裝")
+        }
+    }
+
+    private var modelStatusColor: Color {
+        if coordinator.state == .modelDownloading { return .yellow }
+        switch coordinator.model {
+        case .installed: return .green
+        case .invalid: return .red
+        case .notInstalled: return .secondary
+        }
+    }
+
+    @ViewBuilder
+    private var downloadProgress: some View {
+        switch coordinator.downloadState {
+        case .downloading(let received, let total):
+            if let total, total > 0 {
+                ProgressView(value: Double(min(received, total)), total: Double(total))
+                Text("已下載 \(ModelInstallError.formatBytes(received)) / \(ModelInstallError.formatBytes(total))")
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+            } else {
+                ProgressView()
+                Text("已下載 \(ModelInstallError.formatBytes(received))")
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+            }
+        case .verifying:
+            ProgressView()
+            Text("正在驗證下載的檔案…").font(.caption).foregroundStyle(.secondary)
+        case .installing:
+            ProgressView()
+            Text("正在安裝…").font(.caption).foregroundStyle(.secondary)
+        default:
+            ProgressView()
+        }
+    }
+
+    private var downloadConfirmation: String {
+        let model = coordinator.configuration.managedModel
+        guard let size = model.totalBytes else {
+            return String(localized: "\(model.displayName) 會下載到你的 Mac，之後在本機執行。")
+        }
+        let space = ModelInstallError.formatBytes(Int64((Double(size) * 1.2).rounded(.up)))
+        return String(localized: "\(model.displayName)：下載約 \(ModelInstallError.formatBytes(size))，需要約 \(space) 的可用空間。只有下載時需要網路，模型在你的 Mac 上執行。")
+    }
+
+    // MARK: - Server
+
     private var isRunning: Bool {
-        if case .running = serverStatus { return true }
+        if case .running = coordinator.serverStatus { return true }
         return false
     }
 
-    private var statusColor: Color {
+    private var serverStatusColor: Color {
         if busyLabel != nil { return .yellow }
-        switch serverStatus {
+        switch coordinator.serverStatus {
         case .stopped: return .secondary
         case .starting: return .yellow
         case .running: return .green
@@ -48,7 +242,7 @@ struct LocalServerSection: View {
     }
 
     @ViewBuilder
-    private var statusSection: some View {
+    private var serverSection: some View {
         Section {
             LabeledContent {
                 HStack {
@@ -58,18 +252,19 @@ struct LocalServerSection: View {
                     }
                     if isRunning {
                         Button("重新啟動") {
-                            Task { await restartLocalServerNow() }
+                            Task { await restartServerNow() }
                         }
                         Button("停止", role: .destructive) {
-                            Task { await stopLocalServerNow() }
+                            Task { await stopServerNow() }
                         }
                     } else {
                         Button("啟動") {
-                            Task { await startLocalServerNow() }
+                            Task { await startServerNow() }
                         }
+                        .disabled(!canStart)
                     }
                     Button {
-                        Task { await refreshLocalServerStatus(showFeedback: true) }
+                        Task { await refreshNow() }
                     } label: {
                         Image(systemName: "arrow.clockwise")
                     }
@@ -78,8 +273,8 @@ struct LocalServerSection: View {
                 .disabled(localServerBusy)
             } label: {
                 HStack(spacing: 6) {
-                    StatusDot(color: statusColor)
-                    Text(busyLabel ?? statusLabel(serverStatus))
+                    StatusDot(color: serverStatusColor)
+                    Text(busyLabel ?? statusLabel(coordinator.serverStatus))
                         .lineLimit(2)
                 }
             }
@@ -95,19 +290,44 @@ struct LocalServerSection: View {
                 isOn: Bindable(app.settings).localServerAutoStart
             )
         } header: {
-            Text("llama-server")
+            Text("服務")
         }
     }
 
+    /// Starting needs a working runtime and, for a managed model, the model.
+    private var canStart: Bool {
+        coordinator.runtimeReady && coordinator.modelReady
+    }
+
+    // MARK: - Advanced
+
     @ViewBuilder
-    private var configSection: some View {
+    private var advancedSection: some View {
         Section {
-            TextField("llama-server 路徑", text: Bindable(app.settings).localServerBinaryPath)
             TextField("埠", value: Bindable(app.settings).localServerPort, format: .number.grouping(.never))
-            ExpandableRow(title: "進階：額外參數", isExpanded: $showAdvanced) {
+            ExpandableRow(title: "進階", isExpanded: $showAdvanced) {
+                Picker("模型來源", selection: Bindable(app.settings).localModelSource) {
+                    Text("由 Lint 下載與管理").tag(LocalModelSource.managed)
+                    Text("自訂（Hugging Face -hf）").tag(LocalModelSource.custom)
+                }
+                if app.settings.localModelSource == .custom {
+                    TextField("模型 (HuggingFace -hf)", text: Bindable(app.settings).model)
+                    Text("llama-server 會自己下載這個模型到 Hugging Face 快取（首次啟動較久）。")
+                        .sectionNote()
+                }
+                Picker("執行環境來源", selection: Bindable(app.settings).localRuntimeSource) {
+                    Text("自動（Lint 內建）").tag(LocalRuntimeSource.automatic)
+                    Text("自訂 llama-server").tag(LocalRuntimeSource.custom)
+                }
+                if app.settings.localRuntimeSource == .custom {
+                    TextField("llama-server 路徑", text: Bindable(app.settings).localServerBinaryPath)
+                    Text("例如自行編譯或用 Homebrew 安裝的 llama-server。這是進階相容選項，一般使用不需要。")
+                        .sectionNote()
+                }
+                Text("額外參數")
                 CodeEditor(text: Bindable(app.settings).localServerExtraArgs)
                     .frame(minHeight: 56, maxHeight: 96)
-                Text("建議（Apple Silicon 校對）：--jinja --no-skip-chat-parsing -ngl 99 -fa on -c 4096 -np 1 -t 6。長文可把 -c 改 8192。")
+                Text("建議（Apple Silicon 校對）：--jinja --no-skip-chat-parsing -ngl 99 -fa on -c 4096 -np 1 -t 6。長文可把 -c 改 8192。服務一律只綁定 127.0.0.1，額外參數裡的 --host 會被忽略。")
                     .sectionNote()
             }
         } header: {
@@ -116,76 +336,62 @@ struct LocalServerSection: View {
             Text("改完參數後請按「重新啟動」才會套用。若顯示「外部已啟動」，「啟動」不會重開行程。")
                 .sectionNote()
         }
+        .onChange(of: app.settings.localModelSource) { _, _ in Task { await coordinator.refresh() } }
+        .onChange(of: app.settings.localRuntimeSource) { _, _ in Task { await coordinator.refresh() } }
+        .onChange(of: app.settings.localServerBinaryPath) { _, _ in Task { await coordinator.refresh() } }
     }
 
     @ViewBuilder
     private var maintenanceSection: some View {
         Section("維護") {
-            LabeledContent("安裝狀態") {
-                switch binaryState {
-                case .found:
-                    Label("已安裝", systemImage: "checkmark.circle.fill")
-                        .foregroundStyle(.green)
-                case .missing:
-                    HStack {
-                        Text("未安裝")
-                            .foregroundStyle(.secondary)
-                        Button("安裝 llama-server") {
-                            showBrewInstallConfirm = true
-                        }
-                        .disabled(localServerBusy)
-                    }
-                case .brewUnavailable:
-                    Text("未安裝，且找不到 Homebrew")
-                        .foregroundStyle(.secondary)
-                case nil:
-                    Text("檢查中…")
-                        .foregroundStyle(.secondary)
-                }
-            }
             LabeledContent("模型資料夾") {
                 Button("在 Finder 顯示") {
                     openModelFolder()
                 }
             }
+            if !coordinator.serverLogTail.isEmpty {
+                ExpandableRow(title: "詳細資訊", isExpanded: $showDetails) {
+                    Text(coordinator.serverLogTail)
+                        .font(.caption.monospaced())
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
         }
     }
 
+    // MARK: - Actions
+
     private func openModelFolder() {
-        let hf = app.settings.model.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let folder = LocalLlamaServerManager.modelFolder(
-            hfModel: hf.isEmpty ? SettingsStore.defaultLocalHFModel : hf
-        ) else {
+        let folder: URL?
+        switch app.settings.localModelSource {
+        case .managed:
+            let directory = coordinator.paths.modelsDirectory
+            try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            folder = directory
+        case .custom:
+            folder = HuggingFaceCache.modelFolder(spec: coordinator.configuration.effectiveHuggingFaceSpec)
+        }
+        guard let folder else {
             serverMessage = String(localized: "找不到模型資料夾，模型可能尚未下載")
             return
         }
         NSWorkspace.shared.open(folder)
     }
 
-    private func refreshLocalServerStatus(showFeedback: Bool = false) async {
-        refreshBinaryStatus()
-        let port = app.settings.localServerPort
-        await LocalLlamaServerManager.shared.refreshStatus(port: port)
-        serverStatus = LocalLlamaServerManager.shared.status
-        if showFeedback {
-            serverMessage = String(localized: "已重新檢查：\(statusLabel(serverStatus))")
-        }
+    private func refreshNow() async {
+        await coordinator.refresh()
+        serverMessage = String(localized: "已重新檢查：\(statusLabel(coordinator.serverStatus))")
     }
 
-    private func stopLocalServerNow() async {
+    private func stopServerNow() async {
         localServerBusy = true
         defer { localServerBusy = false }
-        let message = LocalLlamaServerManager.shared.stop(
-            port: app.settings.localServerPort,
-            includingExternal: true
-        )
-        // Give the process a moment to release the port.
-        try? await Task.sleep(for: .milliseconds(400))
-        await refreshLocalServerStatus()
-        serverMessage = message
+        serverMessage = await coordinator.stopServer()
     }
 
-    private func restartLocalServerNow() async {
+    private func restartServerNow() async {
         localServerBusy = true
         defer {
             localServerBusy = false
@@ -194,43 +400,14 @@ struct LocalServerSection: View {
         busyLabel = String(localized: "重新啟動中…")
         serverMessage = String(localized: "正在套用目前參數並重新啟動…")
         do {
-            try await LocalLlamaServerManager.shared.restart(settings: app.settings)
-            serverStatus = LocalLlamaServerManager.shared.status
+            try await coordinator.restartServer()
             serverMessage = String(localized: "已重新啟動，目前參數已生效")
         } catch {
-            serverStatus = .failed(error.localizedDescription)
             serverMessage = error.localizedDescription
         }
     }
 
-    private func refreshBinaryStatus() {
-        let state = LocalLlamaServerManager.detectBinary(preferred: app.settings.localServerBinaryPath)
-        binaryState = state
-        if case .found(let path) = state, app.settings.localServerBinaryPath != path {
-            app.settings.localServerBinaryPath = path
-        }
-    }
-
-    private func installLlamaServerViaBrew() async {
-        localServerBusy = true
-        defer {
-            localServerBusy = false
-            busyLabel = nil
-        }
-        busyLabel = String(localized: "正在 brew install llama.cpp…")
-        do {
-            let path = try await LocalLlamaServerManager.shared.installViaHomebrew()
-            app.settings.localServerBinaryPath = path
-            binaryState = .found(path: path)
-            serverMessage = String(localized: "llama-server 已安裝")
-            await refreshLocalServerStatus()
-        } catch {
-            serverMessage = error.localizedDescription
-            refreshBinaryStatus()
-        }
-    }
-
-    private func startLocalServerNow() async {
+    private func startServerNow() async {
         localServerBusy = true
         defer {
             localServerBusy = false
@@ -238,25 +415,19 @@ struct LocalServerSection: View {
         }
         busyLabel = String(localized: "啟動中…")
         do {
-            let launched = try await LocalLlamaServerManager.shared.start(settings: app.settings)
-            serverStatus = LocalLlamaServerManager.shared.status
-            if launched {
-                serverMessage = String(localized: "已用目前參數啟動本機 llama-server")
-            } else {
-                serverMessage = String(localized: "埠上已有服務在跑，未重新啟動。若剛改參數，請按「重新啟動」。")
-            }
+            try await coordinator.startServer()
+            serverMessage = String(localized: "本機 llama-server 已啟動")
         } catch {
-            serverStatus = .failed(error.localizedDescription)
             serverMessage = error.localizedDescription
         }
     }
 
-    private func statusLabel(_ status: LocalLlamaServerManager.Status) -> String {
+    private func statusLabel(_ status: LocalServerStatus) -> String {
         switch status {
         case .stopped:
             return String(localized: "未運行")
         case .starting:
-            return String(localized: "啟動中（首次下載模型會較久）…")
+            return String(localized: "啟動中（首次載入模型會較久）…")
         case .running(_, let managed):
             return managed ? String(localized: "運行中（由 Lint 管理）") : String(localized: "運行中（外部已啟動）")
         case .failed(let message):

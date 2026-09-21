@@ -13,9 +13,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             check: { [weak self] in self?.model.runCheckHotkey() }
         )
         model.startPolling()
-        if !AccessibilityPermission.isTrusted {
-            model.openSettings()
-        }
+        Task { await model.presentInitialOnboarding() }
     }
 
     @objc func openSettingsFromMenu(_ sender: Any?) {

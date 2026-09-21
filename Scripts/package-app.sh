@@ -78,8 +78,27 @@ for bundle in "$BIN_DIR"/*.bundle; do
 done
 printf 'APPL????' > "$APP/Contents/PkgInfo"
 
+# Bundled llama.cpp runtime (llama-server + its dylibs + licenses), pinned in
+# Resources/LlamaRuntimeManifest.json. It must match the Lint executable's architecture and is
+# copied in before anything is signed, so the app's signature and notarization cover it.
+APP_ARCH=$(lipo -archs "$APP/Contents/MacOS/Lint") || fail "cannot read the architectures of the Lint executable"
+case "$APP_ARCH" in
+  arm64|x86_64) ;;
+  *) fail "the bundled llama.cpp runtime is per-architecture; the Lint executable is '$APP_ARCH', expected exactly arm64 or x86_64" ;;
+esac
+RUNTIME_STAGE=$("$ROOT/Scripts/fetch-llama-runtime.sh" --arch "$APP_ARCH") || fail "could not stage the llama.cpp runtime"
+RUNTIME_DEST="$APP/Contents/Resources/LlamaRuntime/$APP_ARCH"
+mkdir -p "$APP/Contents/Resources/LlamaRuntime"
+ditto --norsrc --noextattr --noqtn "$RUNTIME_STAGE" "$RUNTIME_DEST"
+
 if [ -n "$RELEASE_BUILD" ]; then
   echo "codesign identity: $IDENTITY_NAME (Developer ID, Hardened Runtime, secure timestamp)" >&2
+  # Inside-out: the runtime's dylibs and llama-server first, with the same identity, then the app.
+  if [ -n "${LINT_KEYCHAIN:-}" ]; then
+    "$ROOT/Scripts/sign-llama-runtime.sh" "$RUNTIME_DEST" "$IDENTITY" --release --keychain "$LINT_KEYCHAIN"
+  else
+    "$ROOT/Scripts/sign-llama-runtime.sh" "$RUNTIME_DEST" "$IDENTITY" --release
+  fi
   set -- --force --options runtime --timestamp
   if [ -n "${LINT_KEYCHAIN:-}" ]; then
     set -- "$@" --keychain "$LINT_KEYCHAIN"
@@ -101,10 +120,12 @@ fi
 
 if [ -n "$IDENTITY" ]; then
   echo "codesign identity: $IDENTITY" >&2
+  "$ROOT/Scripts/sign-llama-runtime.sh" "$RUNTIME_DEST" "$IDENTITY"
   codesign --force --sign "$IDENTITY" --entitlements "$ROOT/Resources/Lint.entitlements" "$APP" >&2
 else
   echo "warning: no stable codesign identity; using ad-hoc (-). Accessibility will reset after each rebuild." >&2
   echo "fix: Xcode → Settings → Accounts → Apple ID → Manage Certificates → + Apple Development" >&2
+  "$ROOT/Scripts/sign-llama-runtime.sh" "$RUNTIME_DEST" -
   codesign --force --sign - --entitlements "$ROOT/Resources/Lint.entitlements" "$APP" >&2
 fi
 

@@ -239,6 +239,70 @@ struct SQLiteLearningStore: LearningStore {
         }
     }
 
+    func applyConsolidation(
+        parentDedupKey: String,
+        sourceIDs: [UUID],
+        at now: Date,
+        build: @escaping @Sendable (ConsolidationApplication) -> WritingMemory?
+    ) async throws -> ConsolidationOutcome {
+        try await dbQueue.write { db in
+            let vetoed = try Bool.fetchOne(
+                db,
+                sql: "SELECT EXISTS(SELECT 1 FROM dream_veto WHERE dedup_key = ?)",
+                arguments: [parentDedupKey]
+            ) ?? false
+            if vetoed { return .skipped(.vetoed) }
+
+            let existing = try MemoryRecord.filter(Column("dedup_key") == parentDedupKey).fetchOne(db)?.memory
+            var sources: [WritingMemory] = []
+            for id in sourceIDs {
+                guard let source = try MemoryRecord.fetchOne(db, key: id.uuidString)?.memory,
+                      ConsolidationEligibility.canBeSource(source, at: now)
+                else { return .skipped(.sourceChanged) }
+                // Behind another usable memory already: leave it there.
+                if let other = source.supersededBy, other != existing?.id,
+                   let covering = try MemoryRecord.fetchOne(db, key: other.uuidString)?.memory,
+                   covering.state == .active || covering.state == .pinned {
+                    return .skipped(.sourceChanged)
+                }
+                sources.append(source)
+            }
+
+            var linked = Set<UUID>()
+            if let existing {
+                for raw in try String.fetchAll(
+                    db,
+                    sql: "SELECT child_id FROM memory_relation WHERE parent_id = ?",
+                    arguments: [existing.id.uuidString]
+                ) {
+                    if let id = UUID(uuidString: raw) { linked.insert(id) }
+                }
+            }
+            guard var parent = build(ConsolidationApplication(
+                existingParent: existing, sources: sources, linkedSourceIDs: linked
+            )), parent.level != .specific else { return .skipped(.declined) }
+            parent.dedupKey = parentDedupKey
+            if let existing { parent.id = existing.id }
+            try MemoryRecord(parent).save(db)
+
+            var newlyCovered = 0
+            for var source in sources {
+                if source.supersededBy != parent.id { newlyCovered += 1 }
+                source.supersededBy = parent.id
+                source.lastConsolidatedAt = now
+                try MemoryRecord(source).save(db)
+                try db.execute(
+                    sql: """
+                    INSERT OR IGNORE INTO memory_relation (parent_id, child_id, relation, created_at)
+                    VALUES (?, ?, 'summarizes', ?)
+                    """,
+                    arguments: [parent.id.uuidString, source.id.uuidString, now.timeIntervalSince1970]
+                )
+            }
+            return .applied(parentID: parent.id, created: existing == nil, newlyCovered: newlyCovered)
+        }
+    }
+
     func recordDreamRun(_ run: DreamRun) async throws {
         try await dbQueue.write { db in
             try DreamRunRecord(run).save(db)

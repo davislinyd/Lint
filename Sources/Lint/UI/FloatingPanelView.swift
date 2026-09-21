@@ -43,6 +43,13 @@ struct FloatingPanelView: View {
                     .font(.caption)
                     .foregroundStyle(.red)
                     .textSelection(.enabled)
+                if viewModel.needsLocalAISetup {
+                    HStack(spacing: 12) {
+                        Button("設定本機 AI") { viewModel.openLocalAISetup() }
+                        Button("改用其他模型來源") { viewModel.openModelSettings() }
+                            .buttonStyle(.link)
+                    }
+                }
             }
 
             HStack(alignment: .top, spacing: 12) {

@@ -11,18 +11,28 @@ final class AppModel: NSObject, NSWindowDelegate {
     let capture = TextCaptureService()
     let llm = LLMService()
     let learning = LearningCoordinator()
+    let localAI: LocalAISetupCoordinator
     let panel: FloatingPanelController
     var accessibilityTrusted = AccessibilityPermission.isTrusted
     private var settingsWindow: NSWindow?
+    private var localAISetupWindow: NSWindow?
     private var selectionMonitor: SelectionMonitor?
 
     override init() {
         let keychain = KeychainStore()
         let settings = SettingsStore(keychain: keychain)
         self.settings = settings
-        let viewModel = FloatingPanelViewModel(settings: settings, capture: capture, llm: llm, learning: learning)
+        let localAI = LocalAISetupCoordinator(
+            configuration: { settings.localAIConfiguration },
+            server: LocalLlamaServerManager.shared,
+            accessibilityTrusted: AccessibilityPermission.isTrusted
+        )
+        self.localAI = localAI
+        let viewModel = FloatingPanelViewModel(settings: settings, capture: capture, llm: llm, learning: learning, localAI: localAI)
         self.panel = FloatingPanelController(viewModel: viewModel)
         super.init()
+        viewModel.onOpenLocalAISetup = { [weak self] in self?.presentLocalAISetup() }
+        viewModel.onOpenModelSettings = { [weak self] in self?.openSettings() }
         let monitor = SelectionMonitor(
             settings: settings,
             capture: capture,
@@ -52,80 +62,57 @@ final class AppModel: NSObject, NSWindowDelegate {
         }
         monitor.start()
         Task { await self.learning.prepare(config: self.settings.learningConfig) }
-        Task {
-            await self.promptInstallLlamaIfNeeded()
-            await self.ensureLocalServerIfNeeded()
-        }
+        Task { await self.ensureLocalServerIfNeeded() }
     }
 
-
-    /// First launch / missing binary: offer Homebrew install (never silent).
-    func promptInstallLlamaIfNeeded() async {
-        guard settings.wantsManagedLocalServer else { return }
-        let state = LocalLlamaServerManager.detectBinary(preferred: settings.localServerBinaryPath)
-        switch state {
-        case .found(let path):
-            if settings.localServerBinaryPath != path {
-                settings.localServerBinaryPath = path
-            }
-            return
-        case .missing, .brewUnavailable:
-            break
-        }
-
-        let skipKey = "app.lint.localServer.skipInstallPrompt"
-        if UserDefaults.standard.bool(forKey: skipKey) { return }
-
-        let alert = NSAlert()
-        alert.messageText = String(localized: "尚未偵測到 llama-server")
-        switch state {
-        case .brewUnavailable:
-            alert.informativeText = String(localized: "本機沒有 Homebrew，無法自動安裝。請先到 https://brew.sh 安裝後，再開設定按「安裝 llama-server」。")
-            alert.addButton(withTitle: String(localized: "知道了"))
-            alert.addButton(withTitle: String(localized: "不要再提醒"))
-            let response = alert.runModal()
-            if response == .alertSecondButtonReturn {
-                UserDefaults.standard.set(true, forKey: skipKey)
-            }
-            return
-        default:
-            alert.informativeText = String(localized: "Lint 可用 Homebrew 安裝 llama.cpp（含 llama-server）。需要網路，通常數分鐘。要現在安裝嗎？")
-            alert.addButton(withTitle: String(localized: "安裝"))
-            alert.addButton(withTitle: String(localized: "稍後"))
-            alert.addButton(withTitle: String(localized: "不要再提醒"))
-        }
-        let response = alert.runModal()
-        if response == .alertThirdButtonReturn {
-            UserDefaults.standard.set(true, forKey: skipKey)
-            return
-        }
-        guard response == .alertFirstButtonReturn else { return }
-
-        do {
-            let path = try await LocalLlamaServerManager.shared.installViaHomebrew()
-            settings.localServerBinaryPath = path
-            UserDefaults.standard.set(false, forKey: skipKey)
-            NSLog("Lint: installed llama-server at \(path)")
-        } catch {
-            let err = NSAlert()
-            err.messageText = String(localized: "安裝失敗")
-            err.informativeText = error.localizedDescription
-            err.runModal()
-        }
-    }
-
+    /// At launch: look at what local AI still needs, and start the server if it is ready to start.
     func ensureLocalServerIfNeeded() async {
-        guard settings.wantsManagedLocalServer else { return }
+        await localAI.refresh()
+        guard settings.wantsManagedLocalServer, !localAI.needsSetup else { return }
         do {
-            try await LocalLlamaServerManager.shared.ensureRunning(settings: settings)
+            try await localAI.ensureServerRunning()
         } catch {
-            // Non-fatal at launch — request path will surface the error.
+            // Non-fatal at launch — the request path will surface the error.
             NSLog("Lint local server: \(error.localizedDescription)")
         }
     }
 
     func stopManagedLocalServerIfNeeded() {
-        LocalLlamaServerManager.shared.stopIfStartedByUs()
+        localAI.stopManagedServer()
+    }
+
+    /// First launch: the Local AI setup screen if the local model still has to be installed (unless
+    /// the user said "Later"), otherwise the old behaviour of opening Settings when Accessibility is off.
+    func presentInitialOnboarding() async {
+        await localAI.refresh()
+        if settings.providerKind == .localLlama, localAI.needsSetup, !settings.localAISetupDeferred {
+            presentLocalAISetup()
+        } else if !AccessibilityPermission.isTrusted {
+            openSettings()
+        }
+    }
+
+    func presentLocalAISetup() {
+        if localAISetupWindow == nil {
+            let window = NSWindow(
+                contentRect: NSRect(x: 0, y: 0, width: 520, height: 560),
+                styleMask: [.titled, .closable],
+                backing: .buffered,
+                defer: false
+            )
+            window.title = String(localized: "設定本機 AI")
+            window.isReleasedWhenClosed = false
+            window.contentView = NSHostingView(rootView: LocalAISetupView(app: self, onClose: { [weak self] in
+                self?.localAISetupWindow?.close()
+            }))
+            window.delegate = self
+            window.center()
+            localAISetupWindow = window
+        }
+        panel.dismissBubble()
+        NSApp.setActivationPolicy(.regular)
+        NSApp.activate(ignoringOtherApps: true)
+        localAISetupWindow?.makeKeyAndOrderFront(nil)
     }
 
     func runCapture() {
@@ -163,6 +150,7 @@ final class AppModel: NSObject, NSWindowDelegate {
         Task { [weak self] in
             while let self {
                 self.accessibilityTrusted = AccessibilityPermission.isTrusted
+                self.localAI.setAccessibilityTrusted(self.accessibilityTrusted)
                 try? await Task.sleep(for: .seconds(1))
             }
         }
@@ -192,7 +180,8 @@ final class AppModel: NSObject, NSWindowDelegate {
     func restoreAccessoryIfNeeded() {
         let panelVisible = panel.isVisible
         let settingsVisible = settingsWindow?.isVisible == true
-        if !settingsVisible && !panelVisible {
+        let setupVisible = localAISetupWindow?.isVisible == true
+        if !settingsVisible && !setupVisible && !panelVisible {
             NSApp.setActivationPolicy(.accessory)
         }
     }

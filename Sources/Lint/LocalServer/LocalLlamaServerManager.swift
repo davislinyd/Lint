@@ -1,34 +1,26 @@
 import Foundation
+import LintCore
 
-/// Starts / watches a Homebrew `llama-server` so Lint can use a local GGUF model
-/// without the user keeping a Terminal session open.
+/// Runs the local `llama-server` process: launch, health check, stop, and a short tail of its
+/// output for diagnostics. Which binary and which model to run come in as a `LlamaServerLaunchPlan`
+/// (decided by `LocalAISetupCoordinator`); installing anything is not this class's job.
 @MainActor
-final class LocalLlamaServerManager {
+final class LocalLlamaServerManager: LocalServerControlling {
     static let shared = LocalLlamaServerManager()
 
-    enum Status: Equatable {
-        case stopped
-        case starting
-        case running(pid: Int32?, managedByLint: Bool)
-        case failed(String)
-    }
-
-    enum BinaryState: Equatable {
-        case found(path: String)
-        case missing
-        case brewUnavailable
-    }
-
-    private(set) var status: Status = .stopped
+    private(set) var status: LocalServerStatus = .stopped
+    /// The last lines llama-server printed, kept for diagnostics only (bounded; never the whole log).
+    private(set) var logTail = ""
     private var process: Process?
     private var startedByUs = false
+    private var logBuffer: BoundedLogBuffer?
     private var logPipe: Pipe?
 
     private init() {}
 
     /// True when the OpenAI-compatible `/v1/models` endpoint answers.
     func isHealthy(port: Int) async -> Bool {
-        guard let url = URL(string: "http://127.0.0.1:\(port)/v1/models") else { return false }
+        guard let url = URL(string: "http://\(LlamaServerLaunchPlan.host):\(port)/v1/models") else { return false }
         var request = URLRequest(url: url)
         request.timeoutInterval = 1.5
         do {
@@ -39,91 +31,66 @@ final class LocalLlamaServerManager {
         }
     }
 
-    /// If auto-start is on and nothing is listening, launch `llama-server` with the saved args.
-    func ensureRunning(settings: SettingsStore) async throws {
-        let port = settings.localServerPort
-        if await isHealthy(port: port) {
-            status = .running(pid: process?.processIdentifier, managedByLint: startedByUs)
-            return
-        }
-        guard settings.localServerAutoStart else {
-            throw LocalServerError.notRunning(
-                String(localized: "本機 llama-server 未在埠 \(port) 運行。可在設定開啟「自動啟動」，或先在終端機手動啟動。")
-            )
-        }
-        try await start(settings: settings)
-    }
-
+    /// Launches `plan` and waits until it answers, unless something already does on `port`.
     /// - Returns: `true` if a new process was launched; `false` if something was already healthy on the port.
     @discardableResult
-    func start(settings: SettingsStore) async throws -> Bool {
-        if await isHealthy(port: settings.localServerPort) {
+    func start(plan: LlamaServerLaunchPlan, port: Int) async throws -> Bool {
+        if await isHealthy(port: port) {
             status = .running(pid: nil, managedByLint: false)
             return false
         }
         if let process, process.isRunning {
+            // Still loading from an earlier attempt: wait for that process instead of starting another.
             status = .starting
-            try await waitUntilHealthy(port: settings.localServerPort, timeoutSeconds: 180)
-            status = .running(pid: process.processIdentifier, managedByLint: true)
+            try await awaitHealthy(port: port, process: process)
             return false
         }
 
-        let preferred = settings.localServerBinaryPath.trimmingCharacters(in: .whitespacesAndNewlines)
-        let binary: String
-        switch Self.detectBinary(preferred: preferred) {
-        case .found(let path):
-            binary = path
-            if settings.localServerBinaryPath != path {
-                settings.localServerBinaryPath = path
-            }
-        case .missing:
-            let message = String(localized: "本機尚未安裝 llama-server。請在設定按「安裝 llama-server」，或終端機執行：brew install llama.cpp")
-            status = .failed(message)
-            throw LocalServerError.binaryMissing(message)
-        case .brewUnavailable:
-            let message = String(localized: "找不到 llama-server，且本機沒有 Homebrew。請先安裝 https://brew.sh 後再試。")
-            status = .failed(message)
-            throw LocalServerError.binaryMissing(message)
-        }
-
-        let port = settings.localServerPort
-        let hf = settings.model.trimmingCharacters(in: .whitespacesAndNewlines)
-        var args = [
-            "-hf", hf.isEmpty ? SettingsStore.defaultLocalHFModel : hf,
-            "--host", "127.0.0.1",
-            "--port", "\(port)",
-        ]
-        args.append(contentsOf: Self.splitArgs(settings.localServerExtraArgs))
-
         let proc = Process()
-        proc.executableURL = URL(fileURLWithPath: binary)
-        proc.arguments = args
+        proc.executableURL = plan.executableURL
+        proc.arguments = plan.arguments
         let pipe = Pipe()
         proc.standardOutput = pipe
         proc.standardError = pipe
+        let buffer = BoundedLogBuffer()
+        logBuffer = buffer
+        logTail = ""
         logPipe = pipe
 
         status = .starting
         do {
             try proc.run()
         } catch {
-            let message = String(localized: "無法啟動 llama-server：\(error.localizedDescription)")
-            status = .failed(message)
-            throw LocalServerError.launchFailed(message)
+            let failure = LocalAIError.launchFailed(String(localized: "無法啟動 llama-server：\(error.localizedDescription)"))
+            status = .failed(failure.localizedDescription)
+            throw failure
         }
         process = proc
         startedByUs = true
 
-        // Drain logs so the pipe does not fill up.
+        // Drain the pipe so it never fills up, keeping only the last few KB for diagnostics.
         pipe.fileHandleForReading.readabilityHandler = { handle in
-            _ = handle.availableData
+            buffer.append(handle.availableData)
         }
 
+        try await awaitHealthy(port: port, process: proc)
+        return true
+    }
+
+    /// Waits until the server answers. If it exits, that is a failure and the process is cleaned up. If it is
+    /// merely slow (a 4-5 GB model being paged in on a busy Mac can take minutes), it is left running: the
+    /// error says so, and the next start attaches to the same process instead of loading everything again.
+    private func awaitHealthy(port: Int, process proc: Process) async throws {
         do {
-            try await waitUntilHealthy(port: port, timeoutSeconds: 180)
+            try await waitUntilHealthy(port: port, timeoutSeconds: Self.startupTimeoutSeconds)
             status = .running(pid: proc.processIdentifier, managedByLint: true)
-            return true
+        } catch LocalAIError.startTimeout(let seconds) {
+            logTail = logBuffer?.tail() ?? ""
+            let failure = LocalAIError.startTimeout(seconds: seconds)
+            status = .failed(failure.localizedDescription)
+            throw failure
         } catch {
+            logTail = logBuffer?.tail() ?? ""
             stopIfStartedByUs()
             status = .failed(error.localizedDescription)
             throw error
@@ -142,9 +109,9 @@ final class LocalLlamaServerManager {
         status = .stopped
     }
 
-    /// Stop Lint-managed process, and optionally any listener on `port` (e.g. Terminal).
+    /// Stops Lint's own process and whatever else listens on `port` (e.g. one started in Terminal).
     @discardableResult
-    func stop(port: Int, includingExternal: Bool = true) -> String {
+    func stop(port: Int) -> String {
         var stoppedManaged = false
         if startedByUs, let process {
             process.terminate()
@@ -156,12 +123,10 @@ final class LocalLlamaServerManager {
         }
 
         var killedExternal: [Int32] = []
-        if includingExternal {
-            for pid in Self.listeningPIDs(on: port) {
-                // Skip if we just terminated our own Process (same pid).
-                kill(pid, SIGTERM)
-                killedExternal.append(pid)
-            }
+        for pid in Self.listeningPIDs(on: port) {
+            // Skip if we just terminated our own Process (same pid).
+            kill(pid, SIGTERM)
+            killedExternal.append(pid)
         }
 
         process = nil
@@ -179,18 +144,6 @@ final class LocalLlamaServerManager {
             return String(localized: "已停止服務")
         }
         return String(localized: "埠 \(port) 上沒有偵測到監聽中的服務")
-    }
-
-    /// Stop whatever is on the port, then start with current settings (applies new args).
-    func restart(settings: SettingsStore) async throws {
-        let port = settings.localServerPort
-        _ = stop(port: port, includingExternal: true)
-        // Wait for the port to free / health to drop.
-        for _ in 0..<30 {
-            if !(await isHealthy(port: port)) { break }
-            try? await Task.sleep(for: .milliseconds(200))
-        }
-        try await start(settings: settings)
     }
 
     static func listeningPIDs(on port: Int) -> [Int32] {
@@ -213,152 +166,32 @@ final class LocalLlamaServerManager {
     }
 
     func refreshStatus(port: Int) async {
-        if await isHealthy(port: port) {
-            status = .running(pid: process?.processIdentifier, managedByLint: startedByUs)
-        } else if case .starting = status {
-            // keep
-        } else if process?.isRunning == true {
-            status = .starting
-        } else {
+        let healthy = await isHealthy(port: port)
+        let running = process?.isRunning == true
+        status = status.refreshed(
+            healthy: healthy, managedProcessRunning: running,
+            pid: process?.processIdentifier, managedByLint: startedByUs
+        )
+        if !running, !healthy, case .stopped = status {
             process = nil
             startedByUs = false
-            status = .stopped
         }
     }
 
-    // MARK: - Model files
-
-    /// Where llama-server keeps the `-hf` model: the model's own folder in the
-    /// HuggingFace hub cache once downloaded, otherwise the cache root. Nil if neither exists yet.
-    static func modelFolder(hfModel: String) -> URL? {
-        let env = ProcessInfo.processInfo.environment
-        let hub: URL
-        if let path = env["HF_HUB_CACHE"], !path.isEmpty {
-            hub = URL(fileURLWithPath: path)
-        } else if let home = env["HF_HOME"], !home.isEmpty {
-            hub = URL(fileURLWithPath: home).appendingPathComponent("hub")
-        } else {
-            hub = FileManager.default.homeDirectoryForCurrentUser
-                .appendingPathComponent(".cache/huggingface/hub")
-        }
-
-        let repo = hfModel.split(separator: ":").first.map(String.init) ?? hfModel
-        let model = hub.appendingPathComponent("models--" + repo.replacingOccurrences(of: "/", with: "--"))
-        for url in [model, hub] where FileManager.default.fileExists(atPath: url.path) {
-            return url
-        }
-        return nil
-    }
-
-    // MARK: - Binary detection / Homebrew install
-
-    /// Common install locations + `PATH` lookup.
-    static func detectBinary(preferred: String? = nil) -> BinaryState {
-        var candidates: [String] = []
-        if let preferred, !preferred.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            candidates.append(preferred.trimmingCharacters(in: .whitespacesAndNewlines))
-        }
-        candidates.append(contentsOf: [
-            SettingsStore.defaultLocalServerBinary,
-            "/usr/local/bin/llama-server",
-            "/opt/homebrew/bin/llama-server",
-        ])
-        if let pathEnv = ProcessInfo.processInfo.environment["PATH"] {
-            for dir in pathEnv.split(separator: ":") {
-                candidates.append("\(dir)/llama-server")
-            }
-        }
-        var seen = Set<String>()
-        for path in candidates where seen.insert(path).inserted {
-            if FileManager.default.isExecutableFile(atPath: path) {
-                return .found(path: path)
-            }
-        }
-        return brewExecutable() == nil ? .brewUnavailable : .missing
-    }
-
-    static func brewExecutable() -> String? {
-        for path in ["/opt/homebrew/bin/brew", "/usr/local/bin/brew"] {
-            if FileManager.default.isExecutableFile(atPath: path) { return path }
-        }
-        return nil
-    }
-
-    /// Runs `brew install llama.cpp`. Caller must have confirmed with the user.
-    func installViaHomebrew() async throws -> String {
-        guard let brew = Self.brewExecutable() else {
-            throw LocalServerError.binaryMissing(
-                String(localized: "本機沒有 Homebrew。請先安裝：https://brew.sh  之後再回來按「安裝 llama-server」。")
-            )
-        }
-        status = .starting
-        let proc = Process()
-        proc.executableURL = URL(fileURLWithPath: brew)
-        proc.arguments = ["install", "llama.cpp"]
-        let out = Pipe()
-        let err = Pipe()
-        proc.standardOutput = out
-        proc.standardError = err
-        do {
-            try proc.run()
-        } catch {
-            let message = String(localized: "無法執行 brew：\(error.localizedDescription)")
-            status = .failed(message)
-            throw LocalServerError.launchFailed(message)
-        }
-        await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
-            DispatchQueue.global(qos: .userInitiated).async {
-                proc.waitUntilExit()
-                cont.resume()
-            }
-        }
-        let stderr = String(data: err.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-        let stdout = String(data: out.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-        guard proc.terminationStatus == 0 else {
-            let message = String(localized: "brew install llama.cpp 失敗（code \(proc.terminationStatus)）。\n\(stderr.isEmpty ? stdout : stderr)")
-            status = .failed(message)
-            throw LocalServerError.launchFailed(message)
-        }
-        switch Self.detectBinary() {
-        case .found(let path):
-            status = .stopped
-            return path
-        default:
-            let message = String(localized: "brew 回報成功，但仍找不到 llama-server。請確認 `brew --prefix llama.cpp`。")
-            status = .failed(message)
-            throw LocalServerError.binaryMissing(message)
-        }
-    }
+    /// Loading a 4-5 GB model into memory takes a while, and minutes when the Mac is short of memory; a
+    /// first `-hf` download takes longer still.
+    private static let startupTimeoutSeconds = 600
 
     private func waitUntilHealthy(port: Int, timeoutSeconds: Int) async throws {
         let deadline = ContinuousClock.now + .seconds(timeoutSeconds)
         while ContinuousClock.now < deadline {
             if await isHealthy(port: port) { return }
             if let process, !process.isRunning {
-                throw LocalServerError.launchFailed(String(localized: "llama-server 已結束（可能是參數錯誤或模型下載失敗）。請在終端機手動跑一次查看訊息。"))
+                logTail = logBuffer?.tail() ?? ""
+                throw LocalAIError.launchFailed(String(localized: "llama-server 已結束（可能是參數錯誤或模型下載失敗）。請在設定的「詳細資訊」查看最後的輸出。"))
             }
             try? await Task.sleep(for: .milliseconds(500))
         }
-        throw LocalServerError.timeout(String(localized: "等待 llama-server 就緒逾時（\(timeoutSeconds)s）。首次下載 GGUF 會較久，可先在終端機啟動一次。"))
-    }
-
-    private static func splitArgs(_ line: String) -> [String] {
-        let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return [] }
-        return trimmed.split(whereSeparator: \.isWhitespace).map(String.init)
-    }
-}
-
-enum LocalServerError: LocalizedError {
-    case notRunning(String)
-    case binaryMissing(String)
-    case launchFailed(String)
-    case timeout(String)
-
-    var errorDescription: String? {
-        switch self {
-        case .notRunning(let s), .binaryMissing(let s), .launchFailed(let s), .timeout(let s):
-            return s
-        }
+        throw LocalAIError.startTimeout(seconds: timeoutSeconds)
     }
 }

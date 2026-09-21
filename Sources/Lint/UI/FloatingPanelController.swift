@@ -643,6 +643,7 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
             self?.viewModel.retry()
         }
         chrome.onEdit = { [weak self] in self?.editInFullPanel() }
+        chrome.onSetUpLocalAI = { [weak self] in self?.viewModel.openLocalAISetup() }
         chrome.onDismiss = { [weak self] in self?.dismissBubble() }
         chrome.onDragBegan = { [weak self] in
             self?.bubbleUserDragged = true

@@ -45,6 +45,9 @@ public struct OpenAICompatibleProvider: LLMProvider {
         if let effort = request.reasoningEffort {
             body["reasoning_effort"] = effort.rawValue
         }
+        if let temperature = request.temperature {
+            body["temperature"] = temperature
+        }
         urlRequest.httpBody = try JSONSerialization.data(withJSONObject: body)
         return urlRequest
     }

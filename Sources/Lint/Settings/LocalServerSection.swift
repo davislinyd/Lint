@@ -327,7 +327,7 @@ struct LocalServerSection: View {
                 Text("額外參數")
                 CodeEditor(text: Bindable(app.settings).localServerExtraArgs)
                     .frame(minHeight: 56, maxHeight: 96)
-                Text("建議（Apple Silicon 校對）：--jinja --no-skip-chat-parsing -ngl 99 -fa on -c 4096 -np 1 -t 6。長文可把 -c 改 8192。服務一律只綁定 127.0.0.1，額外參數裡的 --host 會被忽略。")
+                Text("建議（Apple Silicon 校對）：--jinja --no-skip-chat-parsing -ngl 99 -fa on -c 4096 -np 1 -t 6 --reasoning off。長文可把 -c 改 8192。--reasoning off 會關閉 Gemma 4 的思考，否則每段要等數十秒。服務一律只綁定 127.0.0.1，額外參數裡的 --host 會被忽略。")
                     .sectionNote()
             }
         } header: {

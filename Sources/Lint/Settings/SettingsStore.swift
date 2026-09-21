@@ -39,6 +39,7 @@ final class SettingsStore {
         static let localModelSource = "app.lint.localServer.modelSource"
         static let localManagedModelID = "app.lint.localServer.managedModelID"
         static let migratedManagedModel = "app.lint.localServer.migratedManagedModel"
+        static let migratedOffRetiredDefault = "app.lint.localServer.migratedOffRetiredDefault"
         static let localAISetupDeferred = "app.lint.localAI.setupDeferred"
         /// Legacy: the `-hf` spec now lives in `model(.localLlama)`; only read by the migration.
         static let localServerHFModel = "app.lint.localServer.hfModel"
@@ -139,13 +140,17 @@ final class SettingsStore {
         didSet { defaults.set(localServerExtraArgs, forKey: Keys.localServerExtraArgs) }
     }
 
-    static let defaultLocalHFModel = "Qwen/Qwen2.5-7B-Instruct-GGUF:q4_k_m"
+    static let defaultLocalHFModel = ModelCatalog.recommended.huggingFaceSpec
     static let defaultLocalServerExtraArgs =
         // M1/M2 writing assistant: full GPU offload + flash-attn; 4k ctx is enough for
         // proofreading and keeps KV cache lean (use 8192 if you often edit long docs).
-        "--jinja --no-skip-chat-parsing -ngl 99 -fa on -c 4096 -np 1 -t 6"
-    static let legacyDefaultLocalServerExtraArgs =
-        "--jinja --no-skip-chat-parsing -ngl 99 -fa on -c 8192 -np 1 -t 4"
+        // Gemma 4 thinks for tens of seconds before it answers, so thinking is off.
+        "--jinja --no-skip-chat-parsing -ngl 99 -fa on -c 4096 -np 1 -t 6 --reasoning off"
+    /// Earlier defaults. A stored copy of one was never a choice, so it moves to the current default.
+    static let previousDefaultLocalServerExtraArgs = [
+        "--jinja --no-skip-chat-parsing -ngl 99 -fa on -c 8192 -np 1 -t 4",
+        "--jinja --no-skip-chat-parsing -ngl 99 -fa on -c 4096 -np 1 -t 6",
+    ]
     var apiKeyDraft: String = ""
     var hasStoredKey: Bool = false
 
@@ -163,6 +168,10 @@ final class SettingsStore {
         if !defaults.bool(forKey: Keys.migratedManagedModel) {
             Self.migrateToManagedModel(defaults)
             defaults.set(true, forKey: Keys.migratedManagedModel)
+        }
+        if !defaults.bool(forKey: Keys.migratedOffRetiredDefault) {
+            Self.migrateOffRetiredDefault(defaults)
+            defaults.set(true, forKey: Keys.migratedOffRetiredDefault)
         }
         var kind = ProviderKind(rawValue: defaults.string(forKey: Keys.provider) ?? "") ?? .localLlama
         if !kind.isEnabled {
@@ -218,7 +227,7 @@ final class SettingsStore {
         }
         var loadedExtraArgs =
             defaults.string(forKey: Keys.localServerExtraArgs) ?? Self.defaultLocalServerExtraArgs
-        if loadedExtraArgs == Self.legacyDefaultLocalServerExtraArgs {
+        if Self.previousDefaultLocalServerExtraArgs.contains(loadedExtraArgs) {
             loadedExtraArgs = Self.defaultLocalServerExtraArgs
         }
         localServerExtraArgs = loadedExtraArgs
@@ -266,6 +275,14 @@ final class SettingsStore {
         )
         defaults.set(migrated.source.rawValue, forKey: Keys.localModelSource)
         defaults.set(migrated.managedModelID, forKey: Keys.localManagedModelID)
+    }
+
+    /// The Qwen default was replaced by Gemma 4: a setting still pointing at it moves to the managed model.
+    private static func migrateOffRetiredDefault(_ defaults: UserDefaults) {
+        guard LocalModelMigration.isRetiredDefault(defaults.string(forKey: Keys.model(.localLlama))) else { return }
+        defaults.set(LocalModelSource.managed.rawValue, forKey: Keys.localModelSource)
+        defaults.set(ModelCatalog.recommended.id, forKey: Keys.localManagedModelID)
+        defaults.removeObject(forKey: Keys.model(.localLlama))
     }
 
     func selectProvider(_ kind: ProviderKind) {

@@ -386,17 +386,18 @@ final class ModelInstallTests: XCTestCase {
 
     func testTheCatalogEntryIsCompleteAndPinned() throws {
         let model = ModelCatalog.recommended
-        XCTAssertEqual(model.files.count, 2, "Qwen2.5 7B Q4_K_M is a two-shard GGUF")
-        XCTAssertEqual(model.totalBytes, 3_993_201_344 + 689_872_288)
+        XCTAssertEqual(model.files.count, 1, "Gemma 4 12B QAT Q4_0 is a single GGUF")
+        XCTAssertEqual(model.totalBytes, 6_975_879_296)
         for file in model.files {
             XCTAssertTrue(file.hasSafeFileName)
             XCTAssertNotNil(file.sha256?.range(of: "^[0-9a-f]{64}$", options: .regularExpression))
             XCTAssertTrue(file.url.absoluteString.hasPrefix("https://huggingface.co/\(model.repository)/resolve/\(model.revision)/"),
                           "URLs are pinned to the revision the hashes come from")
         }
-        XCTAssertEqual(model.primaryFile.fileName, "qwen2.5-7b-instruct-q4_k_m-00001-of-00002.gguf")
+        XCTAssertEqual(model.primaryFile.fileName, "gemma-4-12b-it-qat-q4_0.gguf")
         XCTAssertEqual(ModelCatalog.descriptor(id: model.id), model)
-        XCTAssertEqual(ModelCatalog.descriptor(matchingHuggingFaceSpec: " Qwen/Qwen2.5-7B-Instruct-GGUF:Q4_K_M\n"), model)
+        XCTAssertEqual(ModelCatalog.descriptor(matchingHuggingFaceSpec: " Google/Gemma-4-12B-IT-QAT-Q4_0-GGUF\n"), model)
+        XCTAssertNil(ModelCatalog.descriptor(id: "qwen2.5-7b-instruct-q4_k_m"), "the Qwen entry is retired")
         XCTAssertNil(ModelCatalog.descriptor(matchingHuggingFaceSpec: "someone/else:q4"))
         XCTAssertEqual(ProviderKind.localLlama.defaultModel, model.huggingFaceSpec, "the old default setting maps onto the catalog entry")
     }

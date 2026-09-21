@@ -69,44 +69,35 @@ public struct ModelDescriptor: Identifiable, Equatable, Sendable {
 }
 
 public enum ModelCatalog {
-    /// Qwen2.5 7B Instruct, Q4_K_M: the model Lint has always defaulted to, now installed by Lint
-    /// instead of by llama-server's `-hf`. Two shards; sizes and hashes from
-    /// https://huggingface.co/api/models/Qwen/Qwen2.5-7B-Instruct-GGUF/tree/main at the pinned
-    /// revision, which also matches the blobs of an existing `-hf` cache.
-    public static let qwen25_7bInstructQ4KM: ModelDescriptor = {
-        let repository = "Qwen/Qwen2.5-7B-Instruct-GGUF"
-        let revision = "bb5d59e06d9551d752d08b292a50eb208b07ab1f"
-        func file(_ name: String, size: Int64, sha256: String) -> ModelFile {
-            ModelFile(
-                fileName: name,
-                url: URL(string: "https://huggingface.co/\(repository)/resolve/\(revision)/\(name)")!,
-                sizeBytes: size,
-                sha256: sha256
-            )
-        }
+    /// Gemma 4 12B, Google's quantization-aware-trained Q4_0: one 7 GB file, small enough for a 16 GB
+    /// Mac. It thinks before answering unless started with `--reasoning off`, which Lint's default
+    /// server arguments do. Size and SHA-256 are from
+    /// https://huggingface.co/api/models/google/gemma-4-12B-it-qat-q4_0-gguf at the pinned revision.
+    public static let gemma4_12bQATQ4_0: ModelDescriptor = {
+        let repository = "google/gemma-4-12B-it-qat-q4_0-gguf"
+        let revision = "29d097773436b69ff9feafd636ab4cf873786537"
+        let fileName = "gemma-4-12b-it-qat-q4_0.gguf"
         return ModelDescriptor(
-            id: "qwen2.5-7b-instruct-q4_k_m",
-            displayName: "Qwen2.5 7B Instruct (Q4_K_M)",
+            id: "gemma-4-12b-it-qat-q4_0",
+            displayName: "Gemma 4 12B (QAT Q4_0)",
             repository: repository,
             revision: revision,
-            quantization: "Q4_K_M",
+            quantization: "Q4_0 (QAT)",
             license: "Apache-2.0",
             files: [
-                file(
-                    "qwen2.5-7b-instruct-q4_k_m-00001-of-00002.gguf", size: 3_993_201_344,
-                    sha256: "dfce12e3862a5283ccfb88221b48480e58745165de856439950d0f22590580db"
-                ),
-                file(
-                    "qwen2.5-7b-instruct-q4_k_m-00002-of-00002.gguf", size: 689_872_288,
-                    sha256: "539cf93f78e887edea1c04e2d7d8cdaca9d01dae9c9025bcb8accbe29df3d72a"
+                ModelFile(
+                    fileName: fileName,
+                    url: URL(string: "https://huggingface.co/\(repository)/resolve/\(revision)/\(fileName)")!,
+                    sizeBytes: 6_975_879_296,
+                    sha256: "93567e57a8fe10b23569b9d9ec38cd005deedf71e29477c421a4b83f418a538b"
                 ),
             ],
             recommended: true,
-            huggingFaceSpec: "Qwen/Qwen2.5-7B-Instruct-GGUF:q4_k_m"
+            huggingFaceSpec: "google/gemma-4-12B-it-qat-q4_0-gguf"
         )
     }()
 
-    public static let all: [ModelDescriptor] = [qwen25_7bInstructQ4KM]
+    public static let all: [ModelDescriptor] = [gemma4_12bQATQ4_0]
 
     public static var recommended: ModelDescriptor {
         all.first(where: \.recommended) ?? all[0]

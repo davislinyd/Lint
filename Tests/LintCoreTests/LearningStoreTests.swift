@@ -288,4 +288,284 @@ final class LearningStoreTests: XCTestCase {
         XCTAssertEqual(try permissions(url), 0o600)
         XCTAssertEqual(try permissions(dir), 0o700)
     }
+
+    // MARK: organizing memories
+
+    private func dreamRun(
+        status: DreamRunStatus = .completed, startedAt: TimeInterval = 1_800_000_000, finished: Bool = true
+    ) -> DreamRun {
+        DreamRun(
+            id: UUID(),
+            startedAt: Date(timeIntervalSince1970: startedAt),
+            finishedAt: finished ? Date(timeIntervalSince1970: startedAt + 5) : nil,
+            algorithmVersion: 1, inputMemoryCount: 40, clusterCount: 3, generatedCount: 1, supersededCount: 4,
+            status: status
+        )
+    }
+
+    /// A generalized parent and `count` specific memories that it stands in for, related in the file.
+    private func makeFamily(
+        in store: SQLiteLearningStore, url: URL, count: Int = 3, parentState: MemoryState = .active
+    ) async throws -> (parent: WritingMemory, children: [WritingMemory]) {
+        var parent = memory(key: "dream:test:parent", state: parentState)
+        parent.level = .generalized
+        try await store.saveMemory(parent)
+        var children: [WritingMemory] = []
+        for index in 0..<count {
+            var child = memory(key: "grammar:en:verb\(index) about", state: .active)
+            child.supersededBy = parent.id
+            child.createdAt = Date(timeIntervalSince1970: 1_700_000_000 + Double(index))
+            try await store.saveMemory(child)
+            children.append(child)
+        }
+        let queue = try DatabaseQueue(path: url.path)
+        let (parentID, childIDs) = (parent.id, children.map(\.id))
+        try await queue.write { db in
+            for childID in childIDs {
+                try db.execute(
+                    sql: """
+                    INSERT INTO memory_relation (parent_id, child_id, relation, created_at)
+                    VALUES (?, ?, 'summarizes', 1700000000)
+                    """,
+                    arguments: [parentID.uuidString, childID.uuidString]
+                )
+            }
+        }
+        return (parent, children)
+    }
+
+    private func count(_ table: String, in url: URL) throws -> Int {
+        let queue = try DatabaseQueue(path: url.path)
+        return try queue.read { db in try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM \(table)") ?? -1 }
+    }
+
+    private func makeFileStore() throws -> (store: SQLiteLearningStore, url: URL) {
+        let url = try makeTempDirectory().appendingPathComponent("LintLearning.sqlite")
+        return (try SQLiteLearningStore(url: url), url)
+    }
+
+    func testTheOrganizingFieldsRoundTrip() async throws {
+        let store = try SQLiteLearningStore(url: nil)
+        var saved = memory()
+        saved.level = .core
+        saved.supersededBy = UUID()
+        saved.retrievalCount = 7
+        saved.successfulUseCount = 4
+        saved.contradictionCount = 2
+        saved.lastUsedAt = Date(timeIntervalSince1970: 1_700_001_000)
+        saved.lastConsolidatedAt = Date(timeIntervalSince1970: 1_700_002_000)
+        try await store.saveMemory(saved)
+        let loaded = try await store.memory(id: saved.id)
+        XCTAssertEqual(loaded, saved)
+    }
+
+    func testAV1DatabaseUpgradesWithEveryMemoryDefaultedToSpecific() async throws {
+        let url = try makeTempDirectory().appendingPathComponent("LintLearning.sqlite")
+        let id = UUID()
+        do {
+            let queue = try DatabaseQueue(path: url.path)
+            try SQLiteLearningStore.migrator.migrate(queue, upTo: "v1_learning")
+            try await queue.write { db in
+                try db.execute(
+                    sql: """
+                    INSERT INTO writing_memory (id, dedup_key, kind, language, mode_scope, triggers, instruction,
+                        negative_example, preferred_example, evidence_score, occurrence_count, state,
+                        user_edited, created_at, last_confirmed_at)
+                    VALUES (?, 'grammar:en:discuss about', 'grammar', 'en', 'toneFormal', '["discuss about"]', 'Old rule.',
+                        'x', 'y', 1.4, 4, 'pinned', 1, 1700000000, 1700000500)
+                    """,
+                    arguments: [id.uuidString]
+                )
+            }
+        }
+
+        let store = try SQLiteLearningStore(url: url)
+
+        let loaded = try await store.memory(id: id)
+        let memory = try XCTUnwrap(loaded)
+        XCTAssertEqual(memory.level, .specific)
+        XCTAssertNil(memory.supersededBy)
+        XCTAssertEqual([memory.retrievalCount, memory.successfulUseCount, memory.contradictionCount], [0, 0, 0])
+        XCTAssertNil(memory.lastUsedAt)
+        XCTAssertNil(memory.lastConsolidatedAt)
+        XCTAssertEqual(memory.evidenceScore, 1.4)
+        XCTAssertEqual(memory.occurrenceCount, 4)
+        XCTAssertEqual(memory.state, .pinned)
+        XCTAssertEqual(memory.modeScope, .toneFormal)
+        XCTAssertTrue(memory.userEdited)
+        XCTAssertEqual(memory.triggers, ["discuss about"])
+    }
+
+    func testAV2DatabaseUpgradesAndTheNewTablesStartEmpty() async throws {
+        let url = try makeTempDirectory().appendingPathComponent("LintLearning.sqlite")
+        do {
+            let queue = try DatabaseQueue(path: url.path)
+            try SQLiteLearningStore.migrator.migrate(queue, upTo: "v2_drop_examples")
+            try await queue.write { db in
+                for index in 0..<3 {
+                    try db.execute(
+                        sql: """
+                        INSERT INTO writing_memory (id, dedup_key, kind, language, triggers, instruction,
+                            evidence_score, occurrence_count, state, user_edited, created_at, last_confirmed_at)
+                        VALUES (?, ?, 'spelling', 'en', '["teh"]', 'Check the word.', 1.2, 3, 'active', 0,
+                            1700000000, 1700000500)
+                        """,
+                        arguments: [UUID().uuidString, "spelling:en:teh\(index)>the"]
+                    )
+                }
+            }
+        }
+
+        let store = try SQLiteLearningStore(url: url)
+
+        let memories = try await store.memories()
+        XCTAssertEqual(memories.count, 3)
+        XCTAssertTrue(memories.allSatisfy { $0.level == .specific && $0.supersededBy == nil })
+        let sourceCounts = try await store.sourceCounts()
+        XCTAssertTrue(sourceCounts.isEmpty)
+        let lastRun = try await store.lastCompletedDreamRun()
+        XCTAssertNil(lastRun)
+        let stats = try await store.stats()
+        XCTAssertEqual(stats.count(.specific), 3)
+        XCTAssertEqual(stats.supersededCount, 0)
+        XCTAssertNil(stats.lastOrganizedAt)
+    }
+
+    func testADatabaseWithANewerMigrationStillOpensForAnOlderMigrator() throws {
+        let (_, url) = try makeFileStore()
+        // What the 0.2.0 build knows about: it must not refuse a file that has gone further.
+        var older = DatabaseMigrator()
+        older.registerMigration("v1_learning") { _ in }
+        older.registerMigration("v2_drop_examples") { _ in }
+        let queue = try DatabaseQueue(path: url.path)
+        XCTAssertNoThrow(try older.migrate(queue))
+    }
+
+    func testDeletingAParentKeepsItsSourcesAndFreesThem() async throws {
+        let (store, url) = try makeFileStore()
+        let family = try await makeFamily(in: store, url: url)
+
+        try await store.deleteMemory(id: family.parent.id)
+
+        let remaining = try await store.memories()
+        XCTAssertEqual(remaining.map(\.id).sorted { $0.uuidString < $1.uuidString },
+                       family.children.map(\.id).sorted { $0.uuidString < $1.uuidString })
+        XCTAssertTrue(remaining.allSatisfy { $0.supersededBy == nil }, "nothing stays hidden behind a deleted parent")
+        XCTAssertEqual(try count("memory_relation", in: url), 0)
+        let vetoed = try await store.isVetoed(dedupKey: family.parent.dedupKey)
+        XCTAssertTrue(vetoed)
+    }
+
+    func testDeletingASourceLeavesTheParentAndTheOtherSources() async throws {
+        let (store, url) = try makeFileStore()
+        let family = try await makeFamily(in: store, url: url)
+
+        try await store.deleteMemory(id: family.children[0].id)
+
+        let sources = try await store.sources(ofParent: family.parent.id)
+        XCTAssertEqual(sources.map(\.id), family.children.dropFirst().map(\.id))
+        let parent = try await store.memory(id: family.parent.id)
+        XCTAssertEqual(parent?.level, .generalized)
+        let vetoed = try await store.isVetoed(dedupKey: family.children[0].dedupKey)
+        XCTAssertFalse(vetoed, "only a derived memory is remembered as deleted")
+    }
+
+    func testDeletingASpecificMemoryLeavesNoVeto() async throws {
+        let store = try SQLiteLearningStore(url: nil)
+        let plain = memory()
+        try await store.saveMemory(plain)
+        try await store.deleteMemory(id: plain.id)
+        let vetoed = try await store.isVetoed(dedupKey: plain.dedupKey)
+        XCTAssertFalse(vetoed)
+    }
+
+    func testDeletingAMemoryThatIsGoneDoesNothing() async throws {
+        let store = try SQLiteLearningStore(url: nil)
+        try await store.deleteMemory(id: UUID())
+        let memories = try await store.memories()
+        XCTAssertTrue(memories.isEmpty)
+    }
+
+    func testClearingAllMemoriesClearsRelationsAndVetoesButKeepsEvents() async throws {
+        let (store, url) = try makeFileStore()
+        let family = try await makeFamily(in: store, url: url)
+        try await store.deleteMemory(id: family.parent.id)
+        try await store.insertEvent(event(at: 1_700_000_000), unlessDuplicateWithin: nil)
+
+        try await store.deleteAllMemories()
+
+        XCTAssertEqual(try count("memory_relation", in: url), 0)
+        XCTAssertEqual(try count("dream_veto", in: url), 0)
+        let events = try await store.eventCount()
+        XCTAssertEqual(events, 1)
+    }
+
+    func testResetAllClearsTheOrganizingRecords() async throws {
+        let (store, url) = try makeFileStore()
+        let family = try await makeFamily(in: store, url: url)
+        try await store.deleteMemory(id: family.parent.id)
+        try await store.recordDreamRun(dreamRun())
+
+        try await store.resetAll()
+
+        XCTAssertEqual(try count("dream_run", in: url), 0)
+        XCTAssertEqual(try count("dream_veto", in: url), 0)
+        XCTAssertEqual(try count("memory_relation", in: url), 0)
+        let lastRun = try await store.lastCompletedDreamRun()
+        XCTAssertNil(lastRun)
+    }
+
+    func testSourcesAreListedOldestFirstAndCountedPerParent() async throws {
+        let (store, url) = try makeFileStore()
+        let family = try await makeFamily(in: store, url: url, count: 4)
+
+        let sources = try await store.sources(ofParent: family.parent.id)
+        XCTAssertEqual(sources.map(\.id), family.children.map(\.id))
+        let counts = try await store.sourceCounts()
+        XCTAssertEqual(counts, [family.parent.id: 4])
+        let none = try await store.sources(ofParent: UUID())
+        XCTAssertTrue(none.isEmpty)
+    }
+
+    func testDreamRunsRoundTripAndOnlyACompletedOneCountsAsTheLast() async throws {
+        let store = try SQLiteLearningStore(url: nil)
+        var running = dreamRun(status: .running, startedAt: 1_800_000_000, finished: false)
+        try await store.recordDreamRun(running)
+        let whileRunning = try await store.lastCompletedDreamRun()
+        XCTAssertNil(whileRunning)
+
+        running.status = .completed
+        running.finishedAt = Date(timeIntervalSince1970: 1_800_000_009)
+        try await store.recordDreamRun(running)
+        let completed = try await store.lastCompletedDreamRun()
+        XCTAssertEqual(completed, running, "the same id is updated, not added")
+
+        try await store.recordDreamRun(dreamRun(status: .failed, startedAt: 1_800_100_000))
+        try await store.recordDreamRun(dreamRun(status: .cancelled, startedAt: 1_800_200_000))
+        let older = dreamRun(status: .completed, startedAt: 1_700_000_000)
+        try await store.recordDreamRun(older)
+        let last = try await store.lastCompletedDreamRun()
+        XCTAssertEqual(last, running, "the newest completed one, whatever else has happened since")
+    }
+
+    func testStatsCountLevelsCoveredMemoriesAndTheLastOrganizingPass() async throws {
+        let (store, url) = try makeFileStore()
+        let family = try await makeFamily(in: store, url: url, count: 3)
+        // One more, covered by a parent that cannot be used.
+        var faded = memory(key: "dream:test:faded", state: .archived)
+        faded.level = .core
+        try await store.saveMemory(faded)
+        var orphan = memory(key: "grammar:en:orphan about")
+        orphan.supersededBy = faded.id
+        try await store.saveMemory(orphan)
+        try await store.recordDreamRun(dreamRun(startedAt: 1_800_000_000))
+
+        let stats = try await store.stats()
+
+        XCTAssertEqual(stats.count(.specific), 4)
+        XCTAssertEqual(stats.count(.generalized), 1)
+        XCTAssertEqual(stats.count(.core), 1)
+        XCTAssertEqual(stats.supersededCount, family.children.count, "a memory behind an unusable parent is not covered")
+        XCTAssertEqual(stats.lastOrganizedAt, Date(timeIntervalSince1970: 1_800_000_005))
+    }
 }

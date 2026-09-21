@@ -10,8 +10,8 @@ final class FloatingPanelViewModel {
     var resultText = ""
     /// Traditional Chinese gloss of `resultText` (bubble helper).
     var translationText = ""
-    var isTranslating = false
-    var isStreaming = false
+    var isTranslating = false { didSet { reportInteractiveActivity() } }
+    var isStreaming = false { didSet { reportInteractiveActivity() } }
     var errorMessage: String?
     var statusNote: String?
     /// Compared against `statusNote` to clear it once the user types; keep one localized copy.
@@ -55,7 +55,7 @@ final class FloatingPanelViewModel {
     /// zh-TW gloss of the finished prefetch, fetched in the background so the bubble opens complete.
     private var prefetchTranslationTask: Task<Void, Never>?
     private var prefetchTranslation: String?
-    private(set) var isPrefetching = false
+    private(set) var isPrefetching = false { didSet { reportInteractiveActivity() } }
     private(set) var isPrefetchReady = false
     /// Called when prefetch state flips (chip label can refresh).
     var onPrefetchStateChange: (() -> Void)?
@@ -284,6 +284,12 @@ final class FloatingPanelViewModel {
         }
         recordFeedback(.replaced)
         return nil
+    }
+
+    /// Says whether the user is waiting on a suggestion, so that the upkeep of the learned memories
+    /// keeps out of the way of it.
+    private func reportInteractiveActivity() {
+        learning.setInteractiveActivity(isStreaming || isPrefetching || isTranslating)
     }
 
     /// The prompt with the user's learned habits added; untouched, and without a moment's delay,

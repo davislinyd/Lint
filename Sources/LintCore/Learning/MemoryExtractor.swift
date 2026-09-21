@@ -15,7 +15,7 @@ struct MemoryCandidate: Equatable, Sendable {
 /// so a memory cannot carry instructions of its own.
 struct MemoryExtractor: Sendable {
     private static let articles: Set<String> = ["a", "an", "the"]
-    private static let prepositions: Set<String> = [
+    static let prepositions: Set<String> = [
         "about", "to", "of", "for", "in", "on", "at", "with", "by", "from", "into", "onto", "over",
     ]
     /// Forms of "be", "have" and "do": changing one is tense or agreement in context, not a habit.

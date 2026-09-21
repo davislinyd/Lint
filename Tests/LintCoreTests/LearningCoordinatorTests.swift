@@ -913,4 +913,294 @@ final class LearningCoordinatorTests: XCTestCase {
         let after = await coordinator.stats()
         XCTAssertEqual(after, .empty)
     }
+
+    // MARK: use of memories, and the ones that were organized
+
+    /// A suggestion that left the text as it was: nothing to learn, but the memories were in the prompt.
+    private func unchanged(
+        _ subject: String = "roadmap", used: [UUID], gesture: UserGesture = .replaced
+    ) -> LearningFeedback {
+        let text = "the \(subject) looks fine to everyone here."
+        return LearningFeedback(
+            gesture: gesture, mode: .proofread, originalText: text, generatedText: text,
+            finalText: text, provider: "localLlama", model: "qwen", usedMemoryIDs: used
+        )
+    }
+
+    private struct Organized {
+        let coordinator: LearningCoordinator
+        let store: SQLiteLearningStore
+        let url: URL
+        let parent: WritingMemory
+        let children: [WritingMemory]
+    }
+
+    /// A store holding a rule and the three memories it stands in for, made by a real organizing pass.
+    private func organized(clock: TestClock = TestClock(), sources: Int = 3) async throws -> Organized {
+        let url = try makeStoreURL()
+        let store = try SQLiteLearningStore(url: url)
+        let children = ["discuss", "mention", "emphasize", "reply", "describe", "explain"]
+            .prefix(sources).map { DreamFixtures.preposition($0) }
+        for child in children { try await store.saveMemory(child) }
+        await MemoryDreamCoordinator(store: store, clock: clock.reader).run()
+        let parent = try unwrapped(await store.memories().first { $0.level != .specific })
+        let coordinator = LearningCoordinator(storeURL: url, hmacKey: testKey(), clock: clock.reader)
+        return Organized(coordinator: coordinator, store: store, url: url, parent: parent, children: children)
+    }
+
+    private func stored(_ id: UUID, in store: SQLiteLearningStore) async throws -> WritingMemory {
+        try unwrapped(await store.memory(id: id))
+    }
+
+    func testTheUseOfAMemoryIsCountedOncePerUsedSuggestion() async throws {
+        let clock = TestClock()
+        let (coordinator, memory) = try await learnedDiscussAbout(clock: clock)
+        XCTAssertEqual([memory.retrievalCount, memory.successfulUseCount, memory.contradictionCount], [0, 0, 0])
+        XCTAssertNil(memory.lastUsedAt)
+
+        clock.advance(days: 1)
+        await coordinator.recordFeedback(unchanged("roadmap", used: [memory.id, memory.id]), config: on)
+        let once = try await onlyMemory(coordinator)
+        XCTAssertEqual(once.retrievalCount, 1, "in the prompt once, however often it is listed")
+        XCTAssertEqual(once.lastUsedAt, clock.now)
+        XCTAssertEqual(once.successfulUseCount, 0, "it was in the prompt, and nothing shows it did anything")
+        XCTAssertEqual(once.lastConfirmedAt, memory.lastConfirmedAt, "using a memory is not confirming it")
+        XCTAssertEqual(once.evidenceScore, memory.evidenceScore)
+
+        clock.advance(days: 1)
+        await coordinator.recordFeedback(unchanged("schedule", used: [memory.id]), config: on)
+        let twice = try await onlyMemory(coordinator)
+        XCTAssertEqual(twice.retrievalCount, 2)
+        XCTAssertEqual(twice.lastUsedAt, clock.now)
+    }
+
+    func testNothingIsCountedForRegeneratingAnUnfinishedSuggestionOrARepeat() async throws {
+        let (coordinator, memory) = try await learnedDiscussAbout()
+
+        await coordinator.recordFeedback(unchanged("roadmap", used: [memory.id], gesture: .regenerated), config: on)
+        var unfinished = unchanged("roadmap", used: [memory.id])
+        unfinished.generatedText = nil
+        await coordinator.recordFeedback(unfinished, config: on)
+        let none = try await onlyMemory(coordinator)
+        XCTAssertEqual([none.retrievalCount, none.successfulUseCount, none.contradictionCount], [0, 0, 0])
+        XCTAssertNil(none.lastUsedAt)
+
+        let feedback = unchanged("budget", used: [memory.id])
+        await coordinator.recordFeedback(feedback, config: on)
+        await coordinator.recordFeedback(feedback, config: on)
+        let once = try await onlyMemory(coordinator)
+        XCTAssertEqual(once.retrievalCount, 1, "the same feedback again is not another use")
+    }
+
+    func testPersonalizingCountsNothingBecauseNothingWasShownYet() async throws {
+        let (coordinator, memory) = try await learnedDiscussAbout()
+        for _ in 0..<3 {
+            let result = await coordinator.personalize(
+                prompt: basePrompt, for: "we should discuss about the roadmap", mode: .proofread, config: on
+            )
+            XCTAssertEqual(result.usedMemoryIDs, [memory.id])
+        }
+        let after = try await onlyMemory(coordinator)
+        XCTAssertEqual([after.retrievalCount, after.successfulUseCount], [0, 0])
+        XCTAssertNil(after.lastUsedAt)
+    }
+
+    func testAReminderThatWorkedIsASuccessfulUseButTheUsersOwnEditIsNot() async throws {
+        let (coordinator, memory) = try await learnedDiscussAbout()
+
+        var reminded = accept("firewall")
+        reminded.usedMemoryIDs = [memory.id]
+        await coordinator.recordFeedback(reminded, config: on)
+        let worked = try await onlyMemory(coordinator)
+        XCTAssertEqual(worked.successfulUseCount, 1)
+        XCTAssertEqual(worked.retrievalCount, 1)
+        XCTAssertEqual(worked.evidenceScore, memory.evidenceScore, accuracy: 1e-9, "and still no new evidence")
+
+        var edited = edit("contract")
+        edited.usedMemoryIDs = [memory.id]
+        await coordinator.recordFeedback(edited, config: on)
+        var plain = accept("report")
+        plain.usedMemoryIDs = []
+        await coordinator.recordFeedback(plain, config: on)
+        let after = try await onlyMemory(coordinator)
+        XCTAssertEqual(after.successfulUseCount, 1, "not for an edit, and not for a fix nobody reminded of")
+        XCTAssertEqual(after.retrievalCount, 2)
+    }
+
+    func testTheRuleThatGaveTheReminderGetsTheCreditForTheMemoryItStandsInFor() async throws {
+        let clock = TestClock()
+        let setup = try await organized(clock: clock)
+        clock.advance(days: 2)
+
+        var reminded = accept("firewall")
+        reminded.usedMemoryIDs = [setup.parent.id]
+        await setup.coordinator.recordFeedback(reminded, config: on)
+
+        let parent = try await stored(setup.parent.id, in: setup.store)
+        XCTAssertEqual(parent.successfulUseCount, 1)
+        XCTAssertEqual(parent.retrievalCount, 1)
+        XCTAssertEqual(parent.lastConfirmedAt, clock.now, "the habit is still there, so the rule is kept alive")
+        XCTAssertEqual(parent.evidenceScore, setup.parent.evidenceScore, accuracy: 1e-9, "the reminder is no new evidence")
+        XCTAssertEqual(parent.occurrenceCount, setup.parent.occurrenceCount)
+
+        let child = try await stored(setup.children[0].id, in: setup.store)
+        XCTAssertEqual([child.successfulUseCount, child.retrievalCount], [0, 0], "it was not in the prompt itself")
+        XCTAssertEqual(child.occurrenceCount, setup.children[0].occurrenceCount, "and it was not counted again")
+        XCTAssertEqual(child.evidenceScore, setup.children[0].evidenceScore, accuracy: 1e-9)
+    }
+
+    func testASourceSeenAgainCountsForItsRule() async throws {
+        let clock = TestClock()
+        let setup = try await organized(clock: clock)
+        clock.advance(days: 2)
+
+        await setup.coordinator.recordFeedback(edit("firewall"), config: on)
+
+        let child = try await stored(setup.children[0].id, in: setup.store)
+        XCTAssertEqual(child.occurrenceCount, setup.children[0].occurrenceCount + 1)
+        let parent = try await stored(setup.parent.id, in: setup.store)
+        XCTAssertEqual(parent.occurrenceCount, setup.parent.occurrenceCount + 1)
+        XCTAssertEqual(parent.evidenceScore, setup.parent.evidenceScore + 0.35, accuracy: 1e-9)
+        XCTAssertEqual(parent.lastConfirmedAt, clock.now)
+        XCTAssertEqual(parent.instruction, setup.parent.instruction)
+    }
+
+    func testARulePutAwayOrSwitchedOffIsNotWokenBySeeingASourceAgain() async throws {
+        for state in [MemoryState.archived, .disabled] {
+            let setup = try await organized()
+            try await setup.store.updateMemory(id: setup.parent.id) { $0.state = state }
+            let before = try await stored(setup.parent.id, in: setup.store)
+
+            await setup.coordinator.recordFeedback(edit("firewall"), config: on)
+
+            let child = try await stored(setup.children[0].id, in: setup.store)
+            XCTAssertEqual(child.occurrenceCount, setup.children[0].occurrenceCount + 1, "\(state)")
+            let after = try await stored(setup.parent.id, in: setup.store)
+            XCTAssertEqual(after, before, "\(state)")
+        }
+    }
+
+    func testUndoingAMemoryCountsAgainstItAndAgainstItsRule() async throws {
+        let setup = try await organized()
+        let putBack = LearningFeedback(
+            gesture: .replaced, mode: .proofread,
+            originalText: "we should discuss about the plan.",
+            generatedText: "we should discuss the plan.",
+            finalText: "we should discuss about the plan.",
+            provider: "localLlama", model: "qwen", usedMemoryIDs: [setup.parent.id]
+        )
+
+        await setup.coordinator.recordFeedback(putBack, config: on)
+
+        let child = try await stored(setup.children[0].id, in: setup.store)
+        XCTAssertEqual(child.contradictionCount, 1)
+        XCTAssertEqual(child.evidenceScore, setup.children[0].evidenceScore - 0.7, accuracy: 1e-9)
+        let parent = try await stored(setup.parent.id, in: setup.store)
+        XCTAssertEqual(parent.contradictionCount, 1)
+        XCTAssertEqual(parent.evidenceScore, setup.parent.evidenceScore - 0.7, accuracy: 1e-9)
+        let other = try await stored(setup.children[1].id, in: setup.store)
+        XCTAssertEqual(other.contradictionCount, 0, "only the pattern that was undone")
+    }
+
+    func testOnlyTheUserUndoingSomethingIsAContradiction() async throws {
+        let (coordinator, memory) = try await learnedDiscussAbout()
+        await coordinator.recordFeedback(unchanged("roadmap", used: [memory.id], gesture: .regenerated), config: on)
+        await coordinator.recordFeedback(unchanged("budget", used: [memory.id]), config: on)
+        let quiet = try await onlyMemory(coordinator)
+        XCTAssertEqual(quiet.contradictionCount, 0, "regenerating, or using a suggestion as it was, says nothing against it")
+
+        await coordinator.recordFeedback(
+            LearningFeedback(
+                gesture: .replaced, mode: .proofread,
+                originalText: "we should discuss about the plan.", generatedText: "we should discuss the plan.",
+                finalText: "we should discuss about the plan.", provider: "localLlama", model: "qwen",
+                usedMemoryIDs: [memory.id]
+            ),
+            config: on
+        )
+        let undone = try await onlyMemory(coordinator)
+        XCTAssertEqual(undone.contradictionCount, 1)
+    }
+
+    func testLearningOffLeavesOrganizedMemoriesAndTheirCountsAlone() async throws {
+        let setup = try await organized()
+        let off = LearningConfig(enabled: false)
+        let before = try await setup.store.memories()
+
+        var feedback = accept("firewall")
+        feedback.usedMemoryIDs = [setup.parent.id]
+        await setup.coordinator.recordFeedback(feedback, config: off)
+        let result = await setup.coordinator.personalize(
+            prompt: basePrompt, for: "we should discuss about the roadmap", mode: .proofread, config: off
+        )
+
+        XCTAssertEqual(Array(result.systemPrompt.utf8), Array(basePrompt.utf8), "byte for byte")
+        XCTAssertTrue(result.usedMemoryIDs.isEmpty)
+        let after = try await setup.store.memories()
+        XCTAssertEqual(after, before)
+    }
+
+    func testAnOrganizedStoreGivesThePreciseMemoryOrTheRuleWithinTheBudget() async throws {
+        let setup = try await organized()
+
+        let general = await setup.coordinator.personalize(
+            prompt: basePrompt, for: "The roadmap for the next quarter looks quite fine to everyone.",
+            mode: .proofread, config: on
+        )
+        XCTAssertEqual(general.usedMemoryIDs, [setup.parent.id], "the rule speaks for the memories behind it")
+        XCTAssertTrue(general.systemPrompt.hasSuffix(setup.parent.instruction))
+
+        let precise = await setup.coordinator.personalize(
+            prompt: basePrompt, for: "we should discuss about the roadmap", mode: .proofread, config: on
+        )
+        XCTAssertEqual(precise.usedMemoryIDs, [setup.children[0].id], "and the precise memory takes its place when it applies")
+        XCTAssertTrue(precise.systemPrompt.hasSuffix(setup.children[0].instruction))
+        XCTAssertFalse(precise.systemPrompt.contains(setup.parent.instruction))
+        let added = precise.systemPrompt.dropFirst(basePrompt.count)
+        XCTAssertLessThanOrEqual(added.count, PromptComposer.header.count + LearningPolicy.maxPersonalizationCharacters + 10)
+    }
+
+    func testARuleThatKeepsWorkingBecomesCoreOnceItIsOldEnough() async throws {
+        let clock = TestClock()
+        let setup = try await organized(clock: clock, sources: 5)
+        let dreamer = MemoryDreamCoordinator(store: setup.store, clock: clock.reader)
+        let counts = try await setup.store.sourceCounts()
+        XCTAssertEqual(counts, [setup.parent.id: 5])
+
+        // The reminder keeps working: the model applies it and the user accepts the result.
+        for topic in ["firewall", "report", "contract"] {
+            clock.advance(days: 1)
+            var reminded = accept(topic)
+            reminded.usedMemoryIDs = [setup.parent.id]
+            await setup.coordinator.recordFeedback(reminded, config: on)
+        }
+        let used = try await stored(setup.parent.id, in: setup.store)
+        XCTAssertEqual(used.successfulUseCount, 3, "without this a rule could never earn its way to core")
+
+        await dreamer.run()
+        let tooYoung = try await stored(setup.parent.id, in: setup.store)
+        XCTAssertEqual(tooYoung.level, .generalized, "three days old")
+
+        clock.advance(days: 11)
+        await dreamer.run()
+        let core = try await stored(setup.parent.id, in: setup.store)
+        XCTAssertEqual(core.level, .core)
+        XCTAssertEqual(core.state, .active)
+        // Both the rule's own counters and its sources are intact.
+        XCTAssertEqual(core.successfulUseCount, 3)
+        let children = try await setup.store.sources(ofParent: core.id)
+        XCTAssertEqual(children.count, 5)
+    }
+
+    func testOrganizingAddsNoTextToTheFile() async throws {
+        let setup = try await organized()
+        var feedback = self.feedback()
+        feedback.usedMemoryIDs = [setup.parent.id]
+        await setup.coordinator.recordFeedback(feedback, config: on)
+
+        let file = try Data(contentsOf: setup.url)
+        for secret in ["zq-source-text", "zq-suggestion-text"] {
+            XCTAssertNil(file.range(of: Data(secret.utf8)), "\(secret) must not be stored")
+        }
+    }
 }

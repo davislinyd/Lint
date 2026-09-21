@@ -34,6 +34,12 @@ final class SettingsStore {
         static let learningEnabled = "app.lint.learning.enabled"
         static let localServerAutoStart = "app.lint.localServer.autoStart"
         static let localServerBinaryPath = "app.lint.localServer.binaryPath"
+        static let localRuntimeSource = "app.lint.localServer.runtimeSource"
+        static let migratedBundledRuntime = "app.lint.localServer.migratedBundledRuntime"
+        static let localModelSource = "app.lint.localServer.modelSource"
+        static let localManagedModelID = "app.lint.localServer.managedModelID"
+        static let migratedManagedModel = "app.lint.localServer.migratedManagedModel"
+        static let localAISetupDeferred = "app.lint.localAI.setupDeferred"
         /// Legacy: the `-hf` spec now lives in `model(.localLlama)`; only read by the migration.
         static let localServerHFModel = "app.lint.localServer.hfModel"
         static let migratedLocalLlama = "app.lint.migratedLocalLlama"
@@ -107,6 +113,22 @@ final class SettingsStore {
     var localServerAutoStart: Bool {
         didSet { defaults.set(localServerAutoStart, forKey: Keys.localServerAutoStart) }
     }
+    /// Automatic (Lint's bundled runtime) or a custom `llama-server` path.
+    var localRuntimeSource: LocalRuntimeSource {
+        didSet { defaults.set(localRuntimeSource.rawValue, forKey: Keys.localRuntimeSource) }
+    }
+    /// A model Lint downloads and verifies itself, or (advanced) a Hugging Face `-hf` spec.
+    var localModelSource: LocalModelSource {
+        didSet { defaults.set(localModelSource.rawValue, forKey: Keys.localModelSource) }
+    }
+    var localManagedModelID: String {
+        didSet { defaults.set(localManagedModelID, forKey: Keys.localManagedModelID) }
+    }
+    /// The user chose "Later" on the first-run setup screen: do not open it by itself again.
+    var localAISetupDeferred: Bool {
+        didSet { defaults.set(localAISetupDeferred, forKey: Keys.localAISetupDeferred) }
+    }
+    /// Only used when `localRuntimeSource` is `.custom`.
     var localServerBinaryPath: String {
         didSet { defaults.set(localServerBinaryPath, forKey: Keys.localServerBinaryPath) }
     }
@@ -124,7 +146,6 @@ final class SettingsStore {
         "--jinja --no-skip-chat-parsing -ngl 99 -fa on -c 4096 -np 1 -t 6"
     static let legacyDefaultLocalServerExtraArgs =
         "--jinja --no-skip-chat-parsing -ngl 99 -fa on -c 8192 -np 1 -t 4"
-    static let defaultLocalServerBinary = "/opt/homebrew/bin/llama-server"
     var apiKeyDraft: String = ""
     var hasStoredKey: Bool = false
 
@@ -134,6 +155,14 @@ final class SettingsStore {
         if !defaults.bool(forKey: Keys.migratedLocalLlama) {
             Self.migrateToLocalLlama(defaults)
             defaults.set(true, forKey: Keys.migratedLocalLlama)
+        }
+        if !defaults.bool(forKey: Keys.migratedBundledRuntime) {
+            Self.migrateToBundledRuntime(defaults)
+            defaults.set(true, forKey: Keys.migratedBundledRuntime)
+        }
+        if !defaults.bool(forKey: Keys.migratedManagedModel) {
+            Self.migrateToManagedModel(defaults)
+            defaults.set(true, forKey: Keys.migratedManagedModel)
         }
         var kind = ProviderKind(rawValue: defaults.string(forKey: Keys.provider) ?? "") ?? .localLlama
         if !kind.isEnabled {
@@ -176,8 +205,12 @@ final class SettingsStore {
         } else {
             localServerAutoStart = defaults.bool(forKey: Keys.localServerAutoStart)
         }
-        localServerBinaryPath =
-            defaults.string(forKey: Keys.localServerBinaryPath) ?? Self.defaultLocalServerBinary
+        localRuntimeSource =
+            LocalRuntimeSource(rawValue: defaults.string(forKey: Keys.localRuntimeSource) ?? "") ?? .automatic
+        localServerBinaryPath = defaults.string(forKey: Keys.localServerBinaryPath) ?? ""
+        localAISetupDeferred = defaults.bool(forKey: Keys.localAISetupDeferred)
+        localModelSource = LocalModelSource(rawValue: defaults.string(forKey: Keys.localModelSource) ?? "") ?? .managed
+        localManagedModelID = defaults.string(forKey: Keys.localManagedModelID) ?? ModelCatalog.recommended.id
         if defaults.object(forKey: Keys.localServerPort) == nil {
             localServerPort = 8000
         } else {
@@ -214,6 +247,25 @@ final class SettingsStore {
             defaults.string(forKey: Keys.localServerHFModel) ?? defaultLocalHFModel,
             forKey: Keys.model(.localLlama)
         )
+    }
+
+    /// Older versions stored the `llama-server` path they found (usually a Homebrew one). The
+    /// known Homebrew defaults now mean "use Lint's own runtime"; any other path was chosen by the
+    /// user and stays as a custom setting.
+    private static func migrateToBundledRuntime(_ defaults: UserDefaults) {
+        let migrated = LocalRuntimeMigration.migrate(storedBinaryPath: defaults.string(forKey: Keys.localServerBinaryPath))
+        defaults.set(migrated.source.rawValue, forKey: Keys.localRuntimeSource)
+        defaults.set(migrated.customPath, forKey: Keys.localServerBinaryPath)
+    }
+
+    /// Older versions had only the `-hf` spec. See `LocalModelMigration` for what happens to it.
+    private static func migrateToManagedModel(_ defaults: UserDefaults) {
+        let migrated = LocalModelMigration.migrate(
+            storedSpec: defaults.string(forKey: Keys.model(.localLlama)),
+            hasCompleteHuggingFaceCopy: { HuggingFaceCache.containsCompleteCopy(of: $0) }
+        )
+        defaults.set(migrated.source.rawValue, forKey: Keys.localModelSource)
+        defaults.set(migrated.managedModelID, forKey: Keys.localManagedModelID)
     }
 
     func selectProvider(_ kind: ProviderKind) {
@@ -290,6 +342,20 @@ final class SettingsStore {
     /// Local llama.cpp provider — Lint launches and talks to its own llama-server.
     var wantsManagedLocalServer: Bool {
         providerKind == .localLlama && localServerAutoStart
+    }
+
+    /// The local server's settings as plain values. The `-hf` spec is the `.localLlama` provider's model field.
+    var localAIConfiguration: LocalAIConfiguration {
+        LocalAIConfiguration(
+            runtimeSource: localRuntimeSource,
+            customBinaryPath: localServerBinaryPath,
+            modelSource: localModelSource,
+            managedModel: ModelCatalog.descriptor(id: localManagedModelID) ?? ModelCatalog.recommended,
+            huggingFaceSpec: defaults.string(forKey: Keys.model(.localLlama)) ?? Self.defaultLocalHFModel,
+            port: localServerPort,
+            extraArguments: localServerExtraArgs,
+            autoStart: localServerAutoStart
+        )
     }
 
     func runtimeConfig() throws -> LLMRuntimeConfig {

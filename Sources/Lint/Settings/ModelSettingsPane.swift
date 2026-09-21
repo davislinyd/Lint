@@ -76,7 +76,6 @@ struct ModelSettingsPane: View {
 
     @ViewBuilder
     private var localRows: some View {
-        TextField("模型 (HuggingFace -hf)", text: Bindable(app.settings).model)
         reasoningPicker
     }
 

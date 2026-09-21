@@ -17,6 +17,10 @@
 #                          Runtime), no Apple services, DMG named "...-preview.dmg". macOS warns on first open
 #                          and the Accessibility permission must be granted again after every update. Not a release.
 #
+# The app bundles the pinned llama.cpp runtime (Resources/LlamaRuntimeManifest.json; fetched and hash-verified by
+# Scripts/fetch-llama-runtime.sh, signed inside-out by Scripts/sign-llama-runtime.sh, both driven by
+# package-app.sh). Its signatures are checked here, in the built app and again in the app inside the DMG.
+#
 # Output: dist/release/ (Lint.app, the DMG, its .sha256 and notarization.json).
 set -euo pipefail
 
@@ -72,7 +76,7 @@ retry() { # retry <attempts> <delay-seconds> <command...>
 require_tools() {
   [ "$(uname -s)" = "Darwin" ] || die "release.sh must run on macOS"
   local tool missing=""
-  for tool in swift security codesign hdiutil ditto shasum lipo plutil spctl xcrun; do
+  for tool in swift security codesign hdiutil ditto shasum lipo plutil spctl xcrun file; do
     command -v "$tool" >/dev/null 2>&1 || missing="$missing $tool"
   done
   [ -x /usr/libexec/PlistBuddy ] || missing="$missing PlistBuddy"
@@ -169,6 +173,69 @@ detect_arch() {
   DMG="$OUT/Lint-$VERSION-macOS-$ARCH$suffix.dmg"
 }
 
+# What package-app.sh must have put in the app besides the executable. A missing SwiftPM resource
+# bundle crashes the Writing tab at runtime (Bundle.module), and nothing else would notice.
+verify_app_resources() {
+  local app="$1" lproj
+  [ -f "$app/Contents/PkgInfo" ] || die "the app has no PkgInfo"
+  [ -f "$app/Contents/Resources/AppIcon.icns" ] || die "the app has no icon"
+  for lproj in "$ROOT"/Resources/*.lproj; do
+    [ -f "$app/Contents/Resources/$(basename "$lproj")/Localizable.strings" ] \
+      || die "the app is missing $(basename "$lproj")/Localizable.strings"
+  done
+  ls -d "$app"/Contents/Resources/*.bundle >/dev/null 2>&1 || die "the app has no SwiftPM resource bundles (KeyboardShortcuts, GRDB)"
+}
+
+# The bundled llama.cpp runtime lives in Contents/Resources, where `codesign --deep` does not look for
+# nested code, yet the notary service rejects an app that ships unsigned or differently signed
+# executables. So every Mach-O in the app other than the main executable is checked on its own: it
+# must be a thin binary of the app's architecture with a valid signature and, for a release, the same
+# Developer ID team, Hardened Runtime and a secure timestamp (an ad-hoc one in a preview). The runtime
+# must also be the pinned upstream build and carry its license notices.
+verify_llama_runtime() {
+  local app="$1" rt manifest="$ROOT/Resources/LlamaRuntimeManifest.json"
+  local main_team file rel info archs count=0 want got first_authority
+  rt="$app/Contents/Resources/LlamaRuntime/$ARCH" # not in the `local` line: bash 3.2 cannot see $app there
+  [ -d "$rt" ] || die "the app has no bundled llama.cpp runtime for $ARCH (Contents/Resources/LlamaRuntime/$ARCH)"
+  [ -x "$rt/llama-server" ] || die "the bundled llama-server is missing or not executable"
+  [ -f "$rt/runtime-info.json" ] || die "the bundled runtime has no runtime-info.json"
+  ls "$rt"/licenses/LICENSE* >/dev/null 2>&1 || die "the bundled runtime has no license notice (Contents/Resources/LlamaRuntime/$ARCH/licenses)"
+  got=$(plutil -extract architecture raw -o - "$rt/runtime-info.json") || die "cannot read runtime-info.json"
+  [ "$got" = "$ARCH" ] || die "runtime-info.json says $got, the app is $ARCH"
+  for want in "tag:upstream.tag" "archiveSHA256:runtimes.$ARCH.sha256"; do
+    got=$(plutil -extract "${want%%:*}" raw -o - "$rt/runtime-info.json") || die "runtime-info.json has no ${want%%:*}"
+    [ "$got" = "$(plutil -extract "${want#*:}" raw -o - "$manifest")" ] \
+      || die "the bundled runtime's ${want%%:*} does not match Resources/LlamaRuntimeManifest.json"
+  done
+
+  main_team=$(codesign -dvv "$app" 2>&1 | sed -n 's/^TeamIdentifier=//p')
+  while IFS= read -r -d '' file; do
+    case "$file" in "$app/Contents/MacOS/"*) continue ;; esac
+    file -b "$file" | grep -q 'Mach-O' || continue
+    rel=${file#"$app/"}
+    count=$((count + 1))
+    archs=$(lipo -archs "$file") || die "cannot read the architectures of $rel"
+    [ "$archs" = "$ARCH" ] || die "$rel is '$archs' but the app is $ARCH; never mix architectures"
+    codesign --verify --strict "$file" || die "nested code has an invalid signature: $rel"
+    info=$(codesign -dvv "$file" 2>&1) || die "cannot read the signature of $rel"
+    if [ -n "$PREVIEW" ]; then
+      has '^Signature=adhoc' "$info" || die "$rel must be ad-hoc signed in a preview build"
+    else
+      first_authority=$(sed -n '/^Authority=/{s/^Authority=//p;q;}' <<<"$info")
+      case "$first_authority" in
+        "$IDENTITY_KIND: "*) ;;
+        *) die "$rel is signed by '$first_authority', expected a '$IDENTITY_KIND' certificate" ;;
+      esac
+      has 'flags=0x[0-9a-f]+\([^)]*runtime[^)]*\)' "$info" || die "$rel does not have Hardened Runtime"
+      has '^Timestamp=' "$info" || die "$rel has no secure timestamp"
+      [ "$(sed -n 's/^TeamIdentifier=//p' <<<"$info")" = "$main_team" ] \
+        || die "$rel is signed by a different team than the app"
+    fi
+  done < <(find "$app/Contents" -type f -print0)
+  [ "$count" -ge 2 ] || die "found only $count nested executables; the llama.cpp runtime looks incomplete"
+  echo "   bundled llama.cpp runtime: $count nested executables verified"
+}
+
 # Hard checks on a signed Lint.app (the build output, and again the copy inside the DMG).
 verify_app_signature() {
   local app="$1" info first_authority team want got plist v b who
@@ -208,6 +275,8 @@ verify_app_signature() {
     b=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$plist")
     [ "$b" = "$LINT_BUILD_NUMBER" ] || die "the app's CFBundleVersion is $b, expected $LINT_BUILD_NUMBER"
   fi
+  verify_app_resources "$app"
+  verify_llama_runtime "$app"
   echo "   $who · Hardened Runtime · version $v"
 }
 

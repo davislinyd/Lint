@@ -439,4 +439,111 @@ final class MemoryLifecycleTests: XCTestCase {
         XCTAssertEqual(core.state, memory.state)
         XCTAssertEqual(core.id, memory.id)
     }
+
+    // MARK: levels fade at their own pace
+
+    private func aged(_ level: MemoryLevel, state: MemoryState = .active, evidence: Double = 1, days: Double) -> WritingMemory {
+        var memory = DreamFixtures.preposition("mention", evidence: evidence, state: state, confirmedDaysAgo: days)
+        memory.level = level
+        return memory
+    }
+
+    func testEveryLevelHoldsOnForThirtyDaysThenHalvesOnceEveryHalfLife() {
+        let now = DreamFixtures.now
+        let halfLives: [(MemoryLevel, Double)] = [(.specific, 90), (.generalized, 180), (.core, 365)]
+        for (level, halfLife) in halfLives {
+            XCTAssertEqual(LearningPolicy.halfLifeDays(for: level), halfLife)
+            XCTAssertEqual(aged(level, days: 0).evidence(at: now), 1, accuracy: 1e-12, "\(level)")
+            XCTAssertEqual(aged(level, days: 30).evidence(at: now), 1, accuracy: 1e-12, "\(level): grace")
+            XCTAssertLessThan(aged(level, days: 31).evidence(at: now), 1, "\(level): it starts to fade after the grace")
+            XCTAssertEqual(aged(level, days: 30 + halfLife).evidence(at: now), 0.5, accuracy: 1e-9, "\(level)")
+            XCTAssertEqual(aged(level, days: 30 + 2 * halfLife).evidence(at: now), 0.25, accuracy: 1e-9, "\(level)")
+        }
+    }
+
+    func testTheSameAgeFadesLessTheMoreGeneralTheMemory() {
+        let now = DreamFixtures.now
+        let specific = aged(.specific, days: 200).evidence(at: now)
+        let generalized = aged(.generalized, days: 200).evidence(at: now)
+        let core = aged(.core, days: 200).evidence(at: now)
+        XCTAssertLessThan(specific, generalized)
+        XCTAssertLessThan(generalized, core)
+    }
+
+    func testPinnedAndDisabledMemoriesOfAnyLevelDoNotFade() {
+        let now = DreamFixtures.now
+        for level in MemoryLevel.allCases {
+            for state in [MemoryState.pinned, .disabled] {
+                XCTAssertEqual(aged(level, state: state, days: 5_000).evidence(at: now), 1, "\(level) \(state)")
+            }
+        }
+    }
+
+    func testALongerHalfLifeKeepsAGeneralizedMemoryInUseWhereASpecificOneFadesToACandidate() {
+        let now = DreamFixtures.now
+        // 200 days: a specific memory is down to a third, a generalized one still above the bar.
+        XCTAssertEqual(MemoryLifecycle.settled(aged(.specific, evidence: 1.2, days: 200), at: now).state, .candidate)
+        XCTAssertEqual(MemoryLifecycle.settled(aged(.generalized, evidence: 1.2, days: 200), at: now).state, .active)
+        XCTAssertEqual(MemoryLifecycle.settled(aged(.core, evidence: 1.2, days: 200), at: now).state, .active)
+        // 300 days: the specific one has faded away altogether, the generalized one has not.
+        XCTAssertEqual(MemoryLifecycle.settled(aged(.specific, evidence: 0.3, days: 300), at: now).state, .archived)
+        XCTAssertEqual(MemoryLifecycle.settled(aged(.generalized, evidence: 0.3, days: 300), at: now).state, .candidate)
+    }
+
+    func testWeakeningKeepsTheAccountOfWhatWasLeftUnderTheLongerHalfLife() {
+        let now = DreamFixtures.now
+        let memory = aged(.generalized, evidence: 3, days: 210)      // one half-life of fading: 1.5 left
+        let weakened = MemoryLifecycle.weakened(memory, by: 0.5, at: now)
+        XCTAssertEqual(weakened.evidence(at: now), 1.0, accuracy: 1e-9)
+        XCTAssertEqual(weakened.lastConfirmedAt, memory.lastConfirmedAt, "no confirmation, so the clock keeps running")
+    }
+
+    // MARK: contradictions and support
+
+    func testEveryWeakeningCountsAsAContradiction() {
+        let now = DreamFixtures.now
+        var memory = DreamFixtures.preposition("mention")
+        XCTAssertEqual(memory.contradictionCount, 0)
+        memory = MemoryLifecycle.weakened(memory, by: 0.1, at: now)
+        memory = MemoryLifecycle.weakened(memory, by: 5, at: now)    // and one that takes everything
+        XCTAssertEqual(memory.contradictionCount, 2)
+        XCTAssertEqual(memory.evidenceScore, 0, accuracy: 1e-12)
+        XCTAssertEqual(memory.state, .candidate)
+
+        var pinned = DreamFixtures.preposition("reply", state: .pinned)
+        pinned = MemoryLifecycle.weakened(pinned, by: 0.1, at: now)
+        XCTAssertEqual(pinned.contradictionCount, 1)
+        XCTAssertEqual(pinned.state, .pinned)
+    }
+
+    func testSupportCountsAsAnotherObservationOfTheRule() {
+        let now = DreamFixtures.now
+        var rule = DreamFixtures.preposition("mention", evidence: 3.6, count: 9, confirmedDaysAgo: 5)
+        rule.level = .generalized
+        let supported = MemoryLifecycle.supported(rule, weight: 0.35, at: now)
+
+        XCTAssertEqual(supported.evidenceScore, 3.95, accuracy: 1e-9)
+        XCTAssertEqual(supported.occurrenceCount, 10)
+        XCTAssertEqual(supported.lastConfirmedAt, now)
+        XCTAssertEqual(supported.instruction, rule.instruction)
+        XCTAssertEqual(supported.contradictionCount, rule.contradictionCount)
+        XCTAssertEqual(supported.level, .generalized)
+        XCTAssertEqual(supported.state, .active)
+    }
+
+    func testSupportWakesAMemoryThatHadFadedAndKeepsWhatTheUserGave() {
+        let now = DreamFixtures.now
+        var archived = DreamFixtures.preposition("mention", evidence: 0.05, state: .archived)
+        archived.level = .generalized
+        XCTAssertEqual(MemoryLifecycle.supported(archived, weight: 0.35, at: now).state, .candidate)
+
+        var pinned = DreamFixtures.preposition("mention", evidence: 0.05, state: .pinned)
+        pinned.level = .generalized
+        pinned.userEdited = true
+        pinned.instruction = "my own wording"
+        let supported = MemoryLifecycle.supported(pinned, weight: 0.35, at: now)
+        XCTAssertEqual(supported.state, .pinned)
+        XCTAssertEqual(supported.instruction, "my own wording")
+        XCTAssertTrue(supported.userEdited)
+    }
 }

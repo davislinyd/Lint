@@ -227,9 +227,10 @@ public actor LearningCoordinator {
     ) async {
         let weight = LearningPolicy.evidenceWeight(for: action)
         guard weight > 0 else { return }
+        await countUse(of: feedback.usedMemoryIDs, at: now, store: store)
         let extractor = MemoryExtractor()
-        let injected = await injectedKeys(feedback.usedMemoryIDs, store: store)
-        let extraction = extractor.extraction(from: feedback, action: action, injected: injected)
+        let injected = await injectedPatterns(feedback.usedMemoryIDs, store: store)
+        let extraction = extractor.extraction(from: feedback, action: action, injected: Set(injected.keys))
         let against = LearningPolicy.contradictionWeight(for: action)
         var changed = false
         for candidate in extraction.candidates {
@@ -238,6 +239,10 @@ public actor LearningCoordinator {
                     MemoryLifecycle.merging(candidate, weight: weight, at: now, into: existing)
                 }
                 changed = true
+                // Seen again, so seen again by the rule that stands in for it too.
+                if await support(parentOf: candidate.dedupKey, weight: weight, at: now, store: store) {
+                    changed = true
+                }
             } catch {
                 NSLog("Lint learning: could not update a memory: \(error.localizedDescription)")
             }
@@ -250,7 +255,8 @@ public actor LearningCoordinator {
         for key in extraction.contradicted where await weaken(key, by: against, at: now, store: store) {
             changed = true
         }
-        // The habit was still there, and the model handled it as reminded: keep the memory alive.
+        // The habit was still there, and the model handled it as reminded: keep the memory alive,
+        // and count the reminder as having worked for whichever memory in the prompt gave it.
         for key in extraction.reminded {
             do {
                 try await store.updateMemory(dedupKey: key) { memory in
@@ -260,15 +266,72 @@ public actor LearningCoordinator {
             } catch {
                 NSLog("Lint learning: could not refresh a memory: \(error.localizedDescription)")
             }
+            for id in injected[key] ?? [] where await creditSuccess(id, at: now, store: store) {
+                changed = true
+            }
         }
         if changed { invalidateMemories() }
     }
 
-    /// Does nothing if there is no such memory. False if it could not be written.
+    /// The suggestion that carried these memories was used, so they were: counted once each. That
+    /// says nothing about the text, and changes nothing about what is retrieved.
+    private func countUse(of ids: [UUID], at now: Date, store: any LearningStore) async {
+        for id in Set(ids) {
+            do {
+                try await store.updateMemory(id: id) { memory in
+                    memory.retrievalCount += 1
+                    memory.lastUsedAt = now
+                }
+            } catch {
+                NSLog("Lint learning: could not count the use of a memory: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    /// The model applied what the memory reminded it of and the user accepted that. A generalized
+    /// or core memory that gave the reminder is kept alive by it, as a specific one is.
+    private func creditSuccess(_ id: UUID, at now: Date, store: any LearningStore) async -> Bool {
+        do {
+            try await store.updateMemory(id: id) { memory in
+                memory.successfulUseCount += 1
+                if memory.level != .specific { memory = MemoryLifecycle.refreshed(memory, at: now) }
+            }
+            return true
+        } catch {
+            NSLog("Lint learning: could not count a successful use: \(error.localizedDescription)")
+            return false
+        }
+    }
+
+    /// A specific memory was seen again: so was the pattern of the generalized or core memory that
+    /// stands in for it, as long as that one is not put away or switched off. False if nothing
+    /// was written.
+    private func support(parentOf dedupKey: String, weight: Double, at now: Date, store: any LearningStore) async -> Bool {
+        guard let parentID = (try? await store.memory(dedupKey: dedupKey))?.supersededBy else { return false }
+        do {
+            try await store.updateMemory(id: parentID) { memory in
+                guard memory.state == .candidate || memory.state == .active || memory.state == .pinned else { return }
+                memory = MemoryLifecycle.supported(memory, weight: weight, at: now)
+            }
+            return true
+        } catch {
+            NSLog("Lint learning: could not update a rule: \(error.localizedDescription)")
+            return false
+        }
+    }
+
+    /// Does nothing if there is no such memory. False if it could not be written. What goes against a
+    /// memory goes against the rule that stands in for it too.
     private func weaken(_ dedupKey: String, by amount: Double, at now: Date, store: any LearningStore) async -> Bool {
         do {
+            let parentID = try await store.memory(dedupKey: dedupKey)?.supersededBy
             try await store.updateMemory(dedupKey: dedupKey) { memory in
                 memory = MemoryLifecycle.weakened(memory, by: amount, at: now)
+            }
+            if let parentID {
+                try await store.updateMemory(id: parentID) { memory in
+                    memory = MemoryLifecycle.weakened(memory, by: amount, at: now)
+                }
             }
             return true
         } catch {
@@ -298,13 +361,20 @@ public actor LearningCoordinator {
         }
     }
 
-    /// The patterns of the memories the prompt carried. A memory deleted since is simply not counted.
-    private func injectedKeys(_ ids: [UUID], store: any LearningStore) async -> Set<String> {
-        var keys = Set<String>()
+    /// The patterns (by `dedupKey`) the prompt reminded the model of, each with the memories that gave
+    /// the reminder: the memory of that pattern itself, and any generalized or core memory that
+    /// stands in for it. A memory deleted since is simply not counted.
+    private func injectedPatterns(_ ids: [UUID], store: any LearningStore) async -> [String: Set<UUID>] {
+        var patterns: [String: Set<UUID>] = [:]
         for id in ids {
-            if let memory = try? await store.memory(id: id) { keys.insert(memory.dedupKey) }
+            guard let memory = try? await store.memory(id: id) else { continue }
+            patterns[memory.dedupKey, default: []].insert(id)
+            guard memory.level != .specific else { continue }
+            for source in (try? await store.sources(ofParent: id)) ?? [] {
+                patterns[source.dedupKey, default: []].insert(id)
+            }
         }
-        return keys
+        return patterns
     }
 
     private func invalidateMemories() {

@@ -153,7 +153,7 @@ extension WritingMemory {
         guard state != .pinned, state != .disabled else { return 1 }
         let days = max(0, date.timeIntervalSince(lastConfirmedAt)) / 86_400
         let fading = max(0, days - LearningPolicy.evidenceGraceDays)
-        return pow(0.5, fading / LearningPolicy.evidenceHalfLifeDays)
+        return pow(0.5, fading / LearningPolicy.halfLifeDays(for: level))
     }
 }
 
@@ -215,6 +215,18 @@ enum LearningPolicy {
     /// again, and then halves every `evidenceHalfLifeDays`. A habit that keeps recurring never fades.
     static let evidenceGraceDays = 30.0
     static let evidenceHalfLifeDays = 90.0
+    /// A rule that sums up several habits, and one that has kept proving itself, fade more slowly
+    /// than a single correction does.
+    static let generalizedEvidenceHalfLifeDays = 180.0
+    static let coreEvidenceHalfLifeDays = 365.0
+
+    static func halfLifeDays(for level: MemoryLevel) -> Double {
+        switch level {
+        case .specific: evidenceHalfLifeDays
+        case .generalized: generalizedEvidenceHalfLifeDays
+        case .core: coreEvidenceHalfLifeDays
+        }
+    }
     /// A candidate or active memory whose evidence has faded below this is archived.
     static let archiveThreshold = 0.1
     /// How often the memories are looked over for ones that have faded.

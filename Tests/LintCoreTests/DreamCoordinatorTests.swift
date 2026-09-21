@@ -661,6 +661,54 @@ final class DreamCoordinatorTests: XCTestCase {
         XCTAssertEqual(calls.count, 0, "interactive work must not wait for a provider that is no longer wanted")
     }
 
+    func testAPassGivesWayToTheUserWaitingOnASuggestion() async throws {
+        let store = try makeStore()
+        try await save(DreamFixtures.prepositions(3), to: store)
+        let before = try await store.memories()
+        let gate = InteractiveGate()
+
+        gate.set(true)
+        let waiting = try unwrapped(await dreamer(store).run(yieldingTo: gate))
+        XCTAssertEqual(waiting.status, .cancelled)
+        let untouched = try await store.memories()
+        XCTAssertEqual(untouched, before)
+
+        gate.set(false)
+        let free = try unwrapped(await dreamer(store).run(yieldingTo: gate))
+        XCTAssertEqual(free.status, .completed)
+        XCTAssertEqual(free.generatedCount, 1)
+
+        // Not asked to give way, as when the user asked for the pass, it runs whatever else is going on.
+        let store2 = try makeStore()
+        try await save(DreamFixtures.prepositions(3), to: store2)
+        gate.set(true)
+        let asked = try unwrapped(await dreamer(store2).run())
+        XCTAssertEqual(asked.status, .completed)
+    }
+
+    func testAPassThatTheUserInterruptsStopsBetweenClustersWithNothingHalfDone() async throws {
+        struct Interrupting: MemorySimilarityService {
+            let gate: InteractiveGate
+            func similarity(_ lhs: WritingMemory, _ rhs: WritingMemory) async -> Double {
+                gate.set(true)
+                return 1
+            }
+        }
+        let store = try makeStore()
+        try await save(DreamFixtures.prepositions(3), to: store)
+        let before = try await store.memories()
+        let gate = InteractiveGate()
+        let interrupted = MemoryDreamCoordinator(
+            store: store, similarity: Interrupting(gate: gate), clock: { DreamFixtures.now }
+        )
+
+        let run = try unwrapped(await interrupted.run(yieldingTo: gate))
+
+        XCTAssertEqual(run.status, .cancelled)
+        let after = try await store.memories()
+        XCTAssertEqual(after, before)
+    }
+
     func testAHandEditedParentIsNotPutAwayWhenItsSourcesGo() async throws {
         let store = try makeStore()
         let sources = DreamFixtures.prepositions(3)

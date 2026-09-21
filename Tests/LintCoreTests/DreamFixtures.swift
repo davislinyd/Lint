@@ -65,3 +65,108 @@ enum DreamFixtures {
         )
     }
 }
+
+/// A clock the test moves by hand.
+final class DreamClock: @unchecked Sendable {
+    private let lock = NSLock()
+    private var current: Date
+
+    init(_ start: Date = DreamFixtures.now) {
+        current = start
+    }
+
+    var now: Date {
+        lock.lock()
+        defer { lock.unlock() }
+        return current
+    }
+
+    func advance(hours: Double) {
+        lock.lock()
+        current = current.addingTimeInterval(hours * 3_600)
+        lock.unlock()
+    }
+
+    var reader: @Sendable () -> Date {
+        { [self] in now }
+    }
+}
+
+/// A sleep that lasts until the test says so, and notes how long each one was asked to be. A sleep
+/// that is cancelled ends at once, as a real one does.
+final class ManualSleeper: @unchecked Sendable {
+    private let lock = NSLock()
+    private var waiters: [Int: CheckedContinuation<Void, any Error>] = [:]
+    private var next = 0
+    private var asked: [Duration] = []
+
+    var waitingCount: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return waiters.count
+    }
+
+    var durations: [Duration] {
+        lock.lock()
+        defer { lock.unlock() }
+        return asked
+    }
+
+    private func register(_ duration: Duration) -> Int {
+        lock.withLock {
+            let id = next
+            next += 1
+            asked.append(duration)
+            return id
+        }
+    }
+
+    func sleep(_ duration: Duration) async throws {
+        let id = register(duration)
+        try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, any Error>) in
+                lock.lock()
+                if Task.isCancelled {
+                    lock.unlock()
+                    continuation.resume(throwing: CancellationError())
+                } else {
+                    waiters[id] = continuation
+                    lock.unlock()
+                }
+            }
+        } onCancel: {
+            lock.lock()
+            let continuation = waiters.removeValue(forKey: id)
+            lock.unlock()
+            continuation?.resume(throwing: CancellationError())
+        }
+    }
+
+    /// Ends every sleep that is going on now.
+    func wake() {
+        lock.lock()
+        let all = waiters
+        waiters = [:]
+        lock.unlock()
+        for continuation in all.values { continuation.resume() }
+    }
+
+    var reader: @Sendable (Duration) async throws -> Void {
+        { [self] in try await sleep($0) }
+    }
+}
+
+/// Polls until `condition` holds, for what happens on other tasks. False if it never did.
+func eventually(timeout: TimeInterval = 3, _ condition: () async -> Bool) async -> Bool {
+    let deadline = Date().addingTimeInterval(timeout)
+    while Date() < deadline {
+        if await condition() { return true }
+        try? await Task.sleep(nanoseconds: 2_000_000)
+    }
+    return await condition()
+}
+
+/// Gives what should not happen a moment to happen anyway.
+func settle() async {
+    try? await Task.sleep(nanoseconds: 60_000_000)
+}

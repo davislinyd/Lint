@@ -1,5 +1,15 @@
 import Foundation
 
+/// How an explicit request to organize memories went (`LearningCoordinator.organizeMemories`).
+public enum MemoryOrganizationOutcome: Sendable, Equatable {
+    /// Learning is off, or there is nothing on disk.
+    case unavailable
+    /// A pass was already running.
+    case alreadyRunning
+    case finished(newRules: Int, coveredMemories: Int)
+    case failed
+}
+
 enum DreamRunStatus: String, Sendable {
     case running
     case completed
@@ -53,6 +63,18 @@ extension LearningPolicy {
     static let dreamSimilarityThreshold = 0.85
     /// What a generalized memory may list as triggers of its own.
     static let dreamMaxTriggers = 12
+
+    /// Organizing waits until nothing has happened for this long, so that a run of feedback ends in
+    /// one pass; after a failure it waits this long before it tries again.
+    static let dreamIdleDelay = Duration.seconds(60)
+    static let dreamRetryDelay = Duration.seconds(3_600)
+    /// A pass at start-up if the last one was longer ago than this.
+    static let dreamStartupInterval: TimeInterval = 24 * 60 * 60
+    /// A pass once this many memories have been learned from or weakened since the last one.
+    static let dreamChangeThreshold = 25
+    /// A pass when this many memories are candidates or in use, though not more often than the cooldown.
+    static let dreamPressureThreshold = 200
+    static let dreamPressureCooldown: TimeInterval = 6 * 60 * 60
 
     /// A generalized memory becomes core only after all of these hold.
     static let coreMinSources = 5

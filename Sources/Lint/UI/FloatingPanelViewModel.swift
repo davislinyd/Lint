@@ -208,9 +208,11 @@ final class FloatingPanelViewModel {
         streamAdoptedCapture(result)
     }
 
-    func captureAndStream() {
+    /// `showPanel` runs once the selection has been read: showing the panel activates Lint, and from then on
+    /// the focused element is Lint's own, not the field the selection is in.
+    func captureAndStream(showPanel: @escaping @MainActor () -> Void) {
         streamTask?.cancel()
-        streamTask = Task { await runCaptureAndStream() }
+        streamTask = Task { await runCaptureAndStream(showPanel: showPanel) }
     }
 
     /// Auto-suggest path: capture already adopted on TextCaptureService.
@@ -465,7 +467,9 @@ final class FloatingPanelViewModel {
         await runStream(forceLowReasoning: true)
     }
 
-    private func runCaptureAndStream() async {
+    private func runCaptureAndStream(showPanel: @MainActor () -> Void) async {
+        let captured = await capture.capture()
+        showPanel()
         do {
             try await ensureLocalServerIfNeeded()
         } catch {
@@ -480,7 +484,7 @@ final class FloatingPanelViewModel {
         isAutoSuggestSession = false
         mode = settings.lastMode
         usedClipboardFallback = false
-        if let captured = await capture.capture() {
+        if let captured {
             originalText = captured.text
             usedClipboardFallback = captured.usedClipboardFallback
             if captured.usedClipboardFallback {

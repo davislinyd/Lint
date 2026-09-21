@@ -24,6 +24,16 @@ public enum MemoryState: String, Codable, CaseIterable, Sendable {
     case archived
 }
 
+/// How far a memory has been generalized.
+public enum MemoryLevel: String, Codable, CaseIterable, Sendable {
+    /// A concrete learned correction or preference.
+    case specific
+    /// A rule summarized from several compatible specific memories.
+    case generalized
+    /// A generalized rule that has kept proving itself over a long time.
+    case core
+}
+
 /// What happened, without the text itself: only keyed hashes, so events can be de-duplicated
 /// without keeping what the user wrote.
 public struct FeedbackEvent: Codable, Sendable, Equatable, Identifiable {
@@ -60,6 +70,19 @@ public struct WritingMemory: Codable, Sendable, Equatable, Identifiable {
     public var userEdited: Bool
     public var createdAt: Date
     public var lastConfirmedAt: Date
+    public var level: MemoryLevel = .specific
+    /// The generalized or core memory that stands in for this one. Only a pointer: this memory is
+    /// left out of a prompt while that one is usable, and comes back on its own when it is not.
+    /// That is different from `archived`, which says the pattern itself has faded.
+    public var supersededBy: UUID?
+    /// Times the memory was in a prompt whose suggestion the user went on to use.
+    public var retrievalCount: Int = 0
+    /// Times the model applied the memory as reminded and the user accepted it.
+    public var successfulUseCount: Int = 0
+    /// Times the user undid what the memory asks for.
+    public var contradictionCount: Int = 0
+    public var lastUsedAt: Date?
+    public var lastConsolidatedAt: Date?
 }
 
 /// What the user did with a finished suggestion.
@@ -130,7 +153,7 @@ extension WritingMemory {
         guard state != .pinned, state != .disabled else { return 1 }
         let days = max(0, date.timeIntervalSince(lastConfirmedAt)) / 86_400
         let fading = max(0, days - LearningPolicy.evidenceGraceDays)
-        return pow(0.5, fading / LearningPolicy.evidenceHalfLifeDays)
+        return pow(0.5, fading / LearningPolicy.halfLifeDays(for: level))
     }
 }
 
@@ -159,11 +182,20 @@ public struct LearningConfig: Sendable, Equatable {
 public struct LearningStats: Sendable, Equatable {
     public var memoriesByState: [MemoryState: Int]
     public var eventCount: Int
+    public var memoriesByLevel: [MemoryLevel: Int] = [:]
+    /// Specific memories that a usable generalized or core memory currently stands in for.
+    public var supersededCount = 0
+    /// When memories were last organized; nil if that never finished.
+    public var lastOrganizedAt: Date?
 
     public static let empty = LearningStats(memoriesByState: [:], eventCount: 0)
 
     public func count(_ state: MemoryState) -> Int {
         memoriesByState[state] ?? 0
+    }
+
+    public func count(_ level: MemoryLevel) -> Int {
+        memoriesByLevel[level] ?? 0
     }
 }
 
@@ -183,6 +215,18 @@ enum LearningPolicy {
     /// again, and then halves every `evidenceHalfLifeDays`. A habit that keeps recurring never fades.
     static let evidenceGraceDays = 30.0
     static let evidenceHalfLifeDays = 90.0
+    /// A rule that sums up several habits, and one that has kept proving itself, fade more slowly
+    /// than a single correction does.
+    static let generalizedEvidenceHalfLifeDays = 180.0
+    static let coreEvidenceHalfLifeDays = 365.0
+
+    static func halfLifeDays(for level: MemoryLevel) -> Double {
+        switch level {
+        case .specific: evidenceHalfLifeDays
+        case .generalized: generalizedEvidenceHalfLifeDays
+        case .core: coreEvidenceHalfLifeDays
+        }
+    }
     /// A candidate or active memory whose evidence has faded below this is archived.
     static let archiveThreshold = 0.1
     /// How often the memories are looked over for ones that have faded.

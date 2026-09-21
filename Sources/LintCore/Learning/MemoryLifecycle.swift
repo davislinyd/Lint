@@ -42,6 +42,20 @@ enum MemoryLifecycle {
         return memory
     }
 
+    /// Another observation of a pattern that a generalized memory stands for: it counts for that
+    /// memory too, as if it had been seen there. The wording, and the state the user gave it, stay.
+    static func supported(_ memory: WritingMemory, weight: Double, at now: Date) -> WritingMemory {
+        var memory = memory
+        memory.evidenceScore = memory.evidence(at: now) + weight
+        memory.occurrenceCount += 1
+        memory.lastConfirmedAt = now
+        if memory.state == .archived { memory.state = .candidate }
+        if memory.state == .candidate {
+            memory.state = restingState(evidenceScore: memory.evidenceScore)
+        }
+        return memory
+    }
+
     /// Takes evidence away, because the user undid what the memory asks for. An active memory that
     /// falls well below the bar is a candidate again; pinned, disabled and archived ones keep their
     /// state. This is no confirmation, so the clock is not restarted: the stored value is set so
@@ -51,6 +65,7 @@ enum MemoryLifecycle {
         let factor = memory.decayFactor(at: now)
         let remaining = max(0, memory.evidence(at: now) - amount)
         memory.evidenceScore = factor > 0 ? remaining / factor : 0
+        memory.contradictionCount += 1
         if memory.state == .active, remaining < LearningPolicy.demoteThreshold {
             memory.state = .candidate
         }
@@ -102,6 +117,65 @@ enum MemoryLifecycle {
         memory.evidenceScore = evidence
         memory.lastConfirmedAt = now
         memory.state = restingState(evidenceScore: evidence)
+        return memory
+    }
+
+    /// The generalized memory that `proposal` describes, with the evidence of the sources it has not
+    /// counted yet added to it. Nil when there is nothing to write: the memory is disabled (it stays
+    /// off), or all of these sources were counted before.
+    ///
+    /// The evidence is summed as it stood when the newest of the sources was last confirmed, which is
+    /// also when the memory counts as confirmed: it is not fresher than the habit it summarizes, and
+    /// it fades from there. An existing memory keeps its wording, whoever wrote it, and its state if
+    /// the user holds it.
+    static func consolidated(
+        _ proposal: ConsolidationProposal,
+        from application: ConsolidationApplication,
+        at now: Date
+    ) -> WritingMemory? {
+        let existing = application.existingParent
+        if existing?.state == .disabled { return nil }
+        let added = application.sources.filter { !application.linkedSourceIDs.contains($0.id) }
+        guard let newest = added.map(\.lastConfirmedAt).max() else { return nil }
+        let confirmed = max(existing?.lastConfirmedAt ?? .distantPast, newest)
+
+        var memory = existing ?? WritingMemory(
+            id: UUID(),
+            dedupKey: proposal.parentDedupKey,
+            kind: proposal.kind,
+            language: proposal.language,
+            modeScope: proposal.modeScope,
+            triggers: proposal.triggers,
+            instruction: proposal.instruction,
+            evidenceScore: 0,
+            occurrenceCount: 0,
+            state: .candidate,
+            userEdited: false,
+            createdAt: now,
+            lastConfirmedAt: confirmed,
+            level: proposal.targetLevel
+        )
+        memory.evidenceScore = memory.evidence(at: confirmed) + added.reduce(0) { $0 + $1.evidence(at: confirmed) }
+        memory.occurrenceCount += added.reduce(0) { $0 + $1.occurrenceCount }
+        memory.contradictionCount += added.reduce(0) { $0 + $1.contradictionCount }
+        memory.lastConfirmedAt = confirmed
+        memory.lastConsolidatedAt = now
+        if memory.state == .archived { memory.state = .candidate }
+        if memory.state == .candidate {
+            memory.state = restingState(evidenceScore: memory.evidenceScore)
+        }
+        return memory
+    }
+
+    /// The memory earns a higher level. What it has faded to so far is settled into the stored value
+    /// and the clock restarts, so that the longer half-life of the new level applies from now on and
+    /// does not change what the memory is worth today.
+    static func promoted(_ memory: WritingMemory, to level: MemoryLevel, at now: Date) -> WritingMemory {
+        var memory = memory
+        memory.evidenceScore = memory.evidence(at: now)
+        memory.lastConfirmedAt = now
+        memory.lastConsolidatedAt = now
+        memory.level = level
         return memory
     }
 

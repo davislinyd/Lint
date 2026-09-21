@@ -82,8 +82,9 @@ With **Settings → Learning** turned on, Lint notices writing habits you keep c
 - Everything stays on your Mac, in `~/Library/Application Support/Lint/LintLearning.sqlite` (readable only by you).
 - Only abstracted rules are kept: a word, a short phrase or a template sentence, never the text around it. Numbers, addresses, paths, acronyms and capitalised names are left out. Lint cannot recognise Chinese names or names typed in lowercase, so a name you corrected can still end up in a memory; you can read and delete every memory under Settings → Learning → Manage Memories.
 - What you did with a suggestion (replace, copy, rewrite) is logged as keyed hashes, not text; the key is in the Keychain.
-- Memories fade when the pattern stops showing up: after a month without it the evidence halves every three months, so a memory first drops out of the prompt and is eventually archived (never deleted). Pinned and disabled memories do not fade, and Enable brings an archived one back.
-- Under Settings → Learning → Manage Memories you can read, reword, pin, disable or delete every memory, clear them all, or reset the whole database.
+- Memories fade when the pattern stops showing up: after a month without it the evidence halves every three months (every six for a general rule, every year for a core one), so a memory first drops out of the prompt and is eventually archived (never deleted). Pinned and disabled memories do not fade, and Enable brings an archived one back.
+- **Memory organization** (Settings → Learning → Memory Organization): when several memories of one kind pile up, Lint can sum them up in one general rule (for now: a preposition you keep deleting after different verbs, such as "discuss about" and "mention about"). The rule is worded from a fixed template, so it never contains a word you wrote. The memories behind it are kept: they are marked as covered and left out of the prompt while the rule is in use, and they come back on their own once the rule fades, is disabled or is deleted; one whose own words are in your text still speaks for itself. Pinned, disabled and hand-edited memories are never combined, a rule you delete is not made again, and a rule that keeps proving itself for weeks becomes a core memory. It runs only on this Mac (no cloud, no model download), waits until you are not waiting on a suggestion, and starts by itself a minute after start-up (once a day), after enough new learning, or when you press Organize Memories Now.
+- Under Settings → Learning → Manage Memories you can read, reword, pin, disable or delete every memory, see whether it is specific, general or core and which memories a rule was derived from, clear them all, or reset the whole database.
 
 ### Test
 
@@ -175,8 +176,9 @@ chmod +x Scripts/*.sh
 - 全部只存在你的 Mac：`~/Library/Application Support/Lint/LintLearning.sqlite`（僅你本人可讀）。
 - 只保存抽象後的規則（一個字、一小段詞組或模板句），不保存周圍的文字。數字、網址、路徑、縮寫與大寫開頭的人名不會被記下。Lint 認不出中文人名或全小寫的英文名，被你修正過的名字仍可能進入記憶；可在「設定 → 學習 → 管理記憶」查看並刪除。
 - 你對建議做了什麼（取代、複製、重寫）只以帶金鑰的雜湊記錄，不含文字；金鑰放在鑰匙圈。
-- 太久沒再出現的記憶會淡出：超過一個月沒出現後，證據每三個月減半，先退出 prompt，最後被封存（不會刪除）。已釘選與已停用的記憶不會淡出，按「啟用」可把封存的記憶還原。
-- 在「設定 → 學習 → 管理記憶」可以查看、改寫、釘選、停用或刪除每一條記憶，也能全部清除或重設整個資料庫。
+- 太久沒再出現的記憶會淡出：超過一個月沒出現後，證據每三個月減半（一般規則每六個月、核心記憶每一年），先退出 prompt，最後被封存（不會刪除）。已釘選與已停用的記憶不會淡出，按「啟用」可把封存的記憶還原。
+- **記憶整理**（「設定 → 學習 → 記憶整理」）：同一類的記憶累積多條時，Lint 可以把它們歸納成一條一般規則（目前只處理：你在不同動詞後反覆刪掉的介系詞，例如「discuss about」與「mention about」）。規則由固定模板寫成，不會含有任何你寫過的字。被歸納的記憶都會保留：規則使用中時它們標示為「已由一般規則涵蓋」並暫時不進 prompt，規則淡出、停用或被刪除後就自動恢復；文字裡出現它自己那個字時，它仍會單獨提醒。已釘選、已停用與你手動改寫過的記憶不會被歸納，你刪掉的規則不會再被重新產生，持續數週都證明有用的規則會升為核心記憶。整理只在這台 Mac 上進行（不連雲端、不下載模型），會等到你不在等建議時才開始，並在啟動後一分鐘（每天一次）、累積足夠新學習後自動進行，也可按「立即整理記憶」。
+- 在「設定 → 學習 → 管理記憶」可以查看、改寫、釘選、停用或刪除每一條記憶，看到它是具體、一般還是核心、規則由哪些記憶歸納而來，也能全部清除或重設整個資料庫。
 
 ### 測試
 

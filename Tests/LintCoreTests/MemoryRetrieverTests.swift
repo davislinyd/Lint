@@ -15,7 +15,9 @@ final class MemoryRetrieverTests: XCTestCase {
         state: MemoryState = .active,
         evidence: Double = 1.2,
         count: Int = 3,
-        instruction: String? = nil
+        instruction: String? = nil,
+        level: MemoryLevel = .specific,
+        supersededBy: UUID? = nil
     ) -> WritingMemory {
         counter += 1
         return WritingMemory(
@@ -23,7 +25,7 @@ final class MemoryRetrieverTests: XCTestCase {
             dedupKey: key, kind: kind, language: language, modeScope: scope, triggers: triggers,
             instruction: instruction ?? "rule for \(key)",
             evidenceScore: evidence, occurrenceCount: count, state: state, userEdited: false,
-            createdAt: now, lastConfirmedAt: now
+            createdAt: now, lastConfirmedAt: now, level: level, supersededBy: supersededBy
         )
     }
 
@@ -318,5 +320,167 @@ final class MemoryRetrieverTests: XCTestCase {
         let elapsed = clock.measure { for _ in 0..<10 { _ = retriever.select(for: query) } }
         let perQuery = elapsed / 10
         XCTAssertLessThan(perQuery, .milliseconds(50), "a query over a 500-word text and 2,000 memories took \(perQuery)")
+    }
+
+    // MARK: organized memories
+
+    private let discussText = "We should discuss about the plan tomorrow."
+
+    /// A generalized memory with no triggers: a rule for English text as a whole.
+    private func rule(
+        _ key: String = "dream:rule", state: MemoryState = .active, level: MemoryLevel = .generalized,
+        triggers: [String] = [], evidence: Double = 3.6, count: Int = 9
+    ) -> WritingMemory {
+        memory(key, triggers: triggers, state: state, evidence: evidence, count: count, level: level)
+    }
+
+    private func covered(
+        _ key: String, by rule: WritingMemory, triggers: [String] = [], evidence: Double = 1.2
+    ) -> WritingMemory {
+        memory(key, triggers: triggers, evidence: evidence, supersededBy: rule.id)
+    }
+
+    func testAMemoryThatARuleStandsInForIsLeftOutOfTheRedundantPrompt() {
+        let rule = rule()
+        let habit = covered("grammar:en:habit", by: rule)
+        let bound = covered("grammar:en:discuss about", by: rule, triggers: ["discuss about"])
+
+        XCTAssertEqual(keys([rule, habit, bound], english), [rule.dedupKey])
+
+        // The same memories with nothing standing in for them: each is as useful as before.
+        let free = [habit, memory("grammar:en:discuss about", triggers: ["discuss about"])]
+        XCTAssertEqual(keys(free, english), ["grammar:en:habit"])
+        XCTAssertEqual(keys(free + [self.rule()], english).count, 2)
+    }
+
+    func testAnExactTriggerBringsTheMemoryBackInPlaceOfItsRule() {
+        let rule = rule()
+        let bound = covered("grammar:en:discuss about", by: rule, triggers: ["discuss about"])
+        let other = covered("grammar:en:mention about", by: rule, triggers: ["mention about"])
+
+        XCTAssertEqual(keys([rule, bound, other], discussText), ["grammar:en:discuss about"],
+                       "the precise memory, not the rule as well")
+        XCTAssertEqual(keys([rule, bound, other], english), [rule.dedupKey], "no trigger, so the rule speaks")
+    }
+
+    func testARuleIsOnlyLeftOutWhenTheMemoryItStandsInForIsReallyPicked() {
+        let ruleA = rule("dream:a")
+        let ruleB = rule("dream:b")
+        let inA = covered("grammar:en:discuss about", by: ruleA, triggers: ["discuss about"])
+        let inB = covered("grammar:en:mention about", by: ruleB, triggers: ["mention about"])
+
+        // Only A's memory is in the text: A gives way to it, and B still speaks (it is a habit, so two fit).
+        XCTAssertEqual(
+            Set(keys([ruleA, ruleB, inA, inB], discussText)), ["grammar:en:discuss about", "dream:b"]
+        )
+    }
+
+    func testAPinnedRuleIsNotDisplaced() {
+        let rule = rule(state: .pinned)
+        let bound = covered("grammar:en:discuss about", by: rule, triggers: ["discuss about"])
+        XCTAssertEqual(keys([bound, rule], discussText), [rule.dedupKey, "grammar:en:discuss about"])
+    }
+
+    func testARuleThatIsNotInUseHidesNothing() {
+        for state in [MemoryState.candidate, .archived, .disabled] {
+            let rule = rule(state: state)
+            let habit = covered("grammar:en:habit", by: rule)
+            let bound = covered("grammar:en:discuss about", by: rule, triggers: ["discuss about"])
+            XCTAssertEqual(
+                Set(keys([rule, habit, bound], discussText)), ["grammar:en:habit", "grammar:en:discuss about"],
+                "\(state)"
+            )
+        }
+    }
+
+    func testAMemoryWhoseRuleIsGoneOrHasFadedIsNotHidden() {
+        let gone = memory("grammar:en:habit", supersededBy: UUID())
+        XCTAssertEqual(keys([gone], english), ["grammar:en:habit"], "the rule was deleted")
+
+        // The rule has not been confirmed for so long that it has faded away by now.
+        var faded = rule()
+        faded.evidenceScore = 0.2
+        faded.lastConfirmedAt = now.addingTimeInterval(-2_000 * 86_400)
+        let habit = covered("grammar:en:habit", by: faded)
+        XCTAssertEqual(keys([faded, habit], english), ["grammar:en:habit"])
+    }
+
+    func testARuleIsNotAnythingElsesPointer() {
+        // A rule that itself names another is still a rule, and is not left out for that.
+        let outer = rule("dream:outer")
+        var inner = rule("dream:inner")
+        inner.supersededBy = outer.id
+        XCTAssertEqual(Set(keys([outer, inner], english)), ["dream:outer", "dream:inner"])
+    }
+
+    func testTheOrderIsExactSpecificThenRuleThenHabit() {
+        let exact = memory("grammar:en:discuss about", triggers: ["discuss about"])
+        let coreLexical = rule("dream:core-lexical", level: .core, triggers: ["discuss about"])
+        let generalizedLexical = rule("dream:gen-lexical", triggers: ["discuss about"])
+        let coreHabit = rule("dream:core-habit", level: .core)
+        let generalizedHabit = rule("dream:gen-habit")
+        let specificHabit = memory("grammar:en:habit")
+
+        let all = [specificHabit, generalizedHabit, coreHabit, generalizedLexical, coreLexical, exact]
+        XCTAssertEqual(
+            keys(all, discussText),
+            [exact.dedupKey, coreLexical.dedupKey, generalizedLexical.dedupKey, coreHabit.dedupKey, generalizedHabit.dedupKey],
+            "two habits fit, and the plain one is not among them"
+        )
+    }
+
+    func testEvidenceCannotLiftARuleOverAnExactMemoryOrAHabitOverARule() {
+        let strongRule = rule("dream:strong", triggers: ["discuss about"], evidence: 500, count: 50)
+        let weakExact = memory("grammar:en:discuss about", triggers: ["discuss about"], evidence: 0.6, count: 1)
+        XCTAssertEqual(keys([strongRule, weakExact], discussText), [weakExact.dedupKey, strongRule.dedupKey])
+
+        let strongHabit = memory("grammar:en:strong-habit", evidence: 500, count: 50)
+        let weakRule = rule("dream:weak", evidence: 0.6, count: 1)
+        XCTAssertEqual(keys([strongHabit, weakRule], english), [weakRule.dedupKey, strongHabit.dedupKey])
+    }
+
+    func testARuleTakesOneOfTheHabitSlots() {
+        let habits = (0..<3).map { memory("grammar:en:habit\($0)") }
+        let picked = keys(habits + [rule()], english)
+        XCTAssertEqual(picked.count, LearningPolicy.maxHabitMemories)
+        XCTAssertEqual(picked.first, "dream:rule")
+    }
+
+    func testThePromptBudgetHoldsWhenRulesAreInvolved() {
+        let rule = rule()
+        let long = String(repeating: "字", count: 150)
+        let bound = (0..<8).map { index in
+            memory(
+                "grammar:en:word\(index) about", triggers: ["word\(index) about"], instruction: long,
+                supersededBy: rule.id
+            )
+        }
+        let text = "Please word0 about word1 about word2 about word3 about word4 about word5 about word6 about word7 about it."
+        let picked = MemoryRetriever(memories: bound + [rule], now: now)
+            .select(for: .init(text: text, mode: .proofread, outputLanguage: nil))
+
+        XCTAssertLessThanOrEqual(picked.count, LearningPolicy.maxPersonalizedMemories)
+        XCTAssertLessThanOrEqual(picked.map(LearningPolicy.promptCost).reduce(0, +), LearningPolicy.maxPersonalizationCharacters)
+        XCTAssertEqual(picked.count, 3, "150 characters and the numbering: three fit in 600")
+        XCTAssertFalse(picked.contains { $0.id == rule.id })
+
+        let composed = PromptComposer.compose(base: "BASE", memories: picked)
+        XCTAssertEqual(composed.usedMemoryIDs, picked.map(\.id))
+    }
+
+    func testAllOfItStaysInTheSameOrderWhateverOrderTheMemoriesComeIn() {
+        let rule = rule()
+        var memories = [
+            rule, covered("grammar:en:discuss about", by: rule, triggers: ["discuss about"]),
+            covered("grammar:en:habit", by: rule), self.rule("dream:other", level: .core),
+            memory("grammar:en:exact", triggers: ["plan"]), memory("grammar:en:h2"),
+        ]
+        let expected = keys(memories, discussText)
+        XCTAssertFalse(expected.isEmpty)
+        for shift in 1..<memories.count {
+            memories.append(memories.removeFirst())
+            XCTAssertEqual(keys(memories, discussText), expected, "rotated by \(shift)")
+        }
+        XCTAssertEqual(keys(memories.reversed(), discussText), expected)
     }
 }

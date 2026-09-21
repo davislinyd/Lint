@@ -25,11 +25,23 @@ private extension MemoryState {
     }
 }
 
+private extension MemoryLevel {
+    var title: LocalizedStringKey {
+        switch self {
+        case .specific: "具體"
+        case .generalized: "一般"
+        case .core: "核心"
+        }
+    }
+}
+
 /// Everything Lint has learned, where each memory can be read, reworded, pinned, disabled or deleted.
 struct MemoryManagementView: View {
     var app: AppModel
     @Environment(\.dismiss) private var dismiss
     @State private var memories: [WritingMemory] = []
+    /// How many memories each generalized or core memory was derived from.
+    @State private var sourceCounts: [UUID: Int] = [:]
     @State private var editing: WritingMemory?
     @State private var confirmClear = false
 
@@ -91,12 +103,17 @@ struct MemoryManagementView: View {
     private func row(_ memory: WritingMemory) -> some View {
         // Disabled by the user, or faded away and archived: not in use, and enabling brings it back.
         let dormant = memory.state == .disabled || memory.state == .archived
+        // A rule says it already, so this one is not told to the model on its own account.
+        let covered = isCovered(memory)
         return HStack(alignment: .top, spacing: 8) {
             VStack(alignment: .leading, spacing: 4) {
                 Text(memory.instruction)
-                    .foregroundStyle(dormant ? .secondary : .primary)
+                    .foregroundStyle(dormant || covered ? .secondary : .primary)
                     .textSelection(.enabled)
-                caption(memory)
+                caption(memory, covered: covered)
+                if memory.level != .specific, let count = sourceCounts[memory.id], count > 0 {
+                    SourceMemories(app: app, parent: memory)
+                }
             }
             Spacer(minLength: 8)
             Menu {
@@ -121,13 +138,29 @@ struct MemoryManagementView: View {
         .padding(.vertical, 2)
     }
 
-    private func caption(_ memory: WritingMemory) -> some View {
+    /// A rule that is in use stands in for this memory.
+    private func isCovered(_ memory: WritingMemory) -> Bool {
+        guard memory.level == .specific, let rule = memory.supersededBy else { return false }
+        return memories.contains { $0.id == rule && ($0.state == .active || $0.state == .pinned) }
+    }
+
+    private func caption(_ memory: WritingMemory, covered: Bool) -> some View {
         let filled = min(5, Int((memory.confidence(at: Date()) * 5).rounded()))
         let stars = String(repeating: "★", count: filled) + String(repeating: "☆", count: 5 - filled)
         let confirmed = memory.lastConfirmedAt.formatted(.relative(presentation: .named))
         return HStack(spacing: 4) {
             Text(memory.state.title)
                 .foregroundStyle(memory.state == .pinned ? Color.accentColor : .secondary)
+            Text(verbatim: "·")
+            Text(memory.level.title)
+            if memory.level != .specific, let count = sourceCounts[memory.id], count > 0 {
+                Text(verbatim: "·")
+                Text("衍生自 \(count) 則記憶")
+            }
+            if covered {
+                Text(verbatim: "·")
+                Text("已由一般規則涵蓋")
+            }
             Text(verbatim: "·")
             Text("信心 \(stars)")
             Text(verbatim: "·")
@@ -148,6 +181,34 @@ struct MemoryManagementView: View {
 
     private func reload() async {
         memories = await app.learning.memories()
+        sourceCounts = await app.learning.sourceCounts()
+    }
+}
+
+/// The memories a generalized or core memory was derived from, read only when they are asked for.
+private struct SourceMemories: View {
+    var app: AppModel
+    var parent: WritingMemory
+    @State private var expanded = false
+    @State private var sources: [WritingMemory] = []
+
+    var body: some View {
+        DisclosureGroup(isExpanded: $expanded) {
+            VStack(alignment: .leading, spacing: 4) {
+                ForEach(sources) { source in
+                    Text(source.instruction)
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                }
+            }
+            .padding(.top, 2)
+        } label: {
+            Text("來源記憶")
+        }
+        .font(.caption)
+        .task(id: expanded) {
+            if expanded { sources = await app.learning.sources(of: parent.id) }
+        }
     }
 }
 

@@ -15,8 +15,34 @@ protocol LearningStore: Sendable {
     func memory(id: UUID) async throws -> WritingMemory?
     func memory(dedupKey: String) async throws -> WritingMemory?
     func memories() async throws -> [WritingMemory]
+    /// Deleting a generalized or core memory is remembered (`isVetoed`), so it is not derived again;
+    /// the memories it was derived from stay, and are no longer pointed at as superseded.
     func deleteMemory(id: UUID) async throws
     func deleteAllMemories() async throws
+
+    /// The specific memories a generalized or core memory was derived from, oldest first.
+    func sources(ofParent parentID: UUID) async throws -> [WritingMemory]
+    /// How many memories each generalized or core memory was derived from.
+    func sourceCounts() async throws -> [UUID: Int]
+    /// Whether the user deleted the memory with this `dedupKey` and it may not be derived again.
+    func isVetoed(dedupKey: String) async throws -> Bool
+    /// Stores a generalized or core memory, relates it to the memories it is derived from and marks
+    /// them as superseded by it, all in one transaction: either all of it happens or none of it.
+    ///
+    /// Inside the transaction the sources are read again and must all still qualify (see
+    /// `ConsolidationEligibility`) and not stand behind another usable memory, and the derived
+    /// memory must not have been deleted by the user; otherwise nothing is written. `build` gets what
+    /// the transaction found and returns the memory to keep, or nil to write nothing.
+    func applyConsolidation(
+        parentDedupKey: String,
+        sourceIDs: [UUID],
+        at now: Date,
+        build: @escaping @Sendable (ConsolidationApplication) -> WritingMemory?
+    ) async throws -> ConsolidationOutcome
+    /// Inserts, or updates the run with the same `id`.
+    func recordDreamRun(_ run: DreamRun) async throws
+    /// The most recent run that ran to the end, or nil.
+    func lastCompletedDreamRun() async throws -> DreamRun?
 
     /// With a window, the event is skipped when one with the same source, action and final text was
     /// recorded that long (or less) before it. Returns whether it was inserted.
@@ -29,4 +55,28 @@ protocol LearningStore: Sendable {
     func stats() async throws -> LearningStats
     /// Removes every memory and event, and scrubs the freed pages from the file.
     func resetAll() async throws
+}
+
+/// What `applyConsolidation` found inside its transaction.
+struct ConsolidationApplication: Sendable {
+    /// The derived memory that already exists under this key, if any.
+    var existingParent: WritingMemory?
+    /// The sources as they are now, in the order asked for.
+    var sources: [WritingMemory]
+    /// Those of the sources that `existingParent` was already derived from.
+    var linkedSourceIDs: Set<UUID>
+}
+
+enum ConsolidationOutcome: Sendable, Equatable {
+    enum Reason: Sendable, Equatable {
+        /// The user deleted this derived memory, so it is not derived again.
+        case vetoed
+        /// A source is gone, changed or is covered by something else since it was chosen.
+        case sourceChanged
+        /// `build` had nothing to write.
+        case declined
+    }
+
+    case applied(parentID: UUID, created: Bool, newlyCovered: Int)
+    case skipped(Reason)
 }

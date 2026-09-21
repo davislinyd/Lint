@@ -113,10 +113,18 @@ public enum LocalModelMigration {
         public var managedModelID: String
     }
 
-    /// - A new user (no stored model): managed, recommended model.
-    /// - The old default spec and the model is not in the Hugging Face cache: managed, so Lint installs it.
-    /// - The old default spec and the model is already in the cache: keep using it as before (custom
-    ///   `-hf`), so an existing setup keeps working without a second 4.7 GB download; switching to
+    /// The default before Gemma 4. It is no longer in the catalog, so a setting that still holds it was
+    /// never a choice: it moves to the recommended model instead of being kept as a custom one.
+    public static let retiredDefaultSpec = "Qwen/Qwen2.5-7B-Instruct-GGUF:q4_k_m"
+
+    public static func isRetiredDefault(_ spec: String?) -> Bool {
+        (spec ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == retiredDefaultSpec.lowercased()
+    }
+
+    /// - A new user (no stored model), or one still on the retired default: managed, recommended model.
+    /// - A catalog spec and the model is not in the Hugging Face cache: managed, so Lint installs it.
+    /// - A catalog spec and the model is already in the cache: keep using it as before (custom
+    ///   `-hf`), so an existing setup keeps working without a second download; switching to
     ///   the managed model stays one click in Settings.
     /// - Any other spec: the user's own choice, kept as custom.
     public static func migrate(
@@ -126,7 +134,7 @@ public enum LocalModelMigration {
     ) -> Result {
         let spec = (storedSpec ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         let recommended = ModelCatalog.recommended
-        if spec.isEmpty { return Result(source: .managed, managedModelID: recommended.id) }
+        if spec.isEmpty || isRetiredDefault(spec) { return Result(source: .managed, managedModelID: recommended.id) }
         guard let match = catalog.first(where: { $0.huggingFaceSpec.lowercased() == spec.lowercased() }) else {
             return Result(source: .custom, managedModelID: recommended.id)
         }

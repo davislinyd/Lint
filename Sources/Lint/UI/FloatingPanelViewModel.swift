@@ -114,6 +114,12 @@ final class FloatingPanelViewModel {
         settings.effectiveSystemPrompt(for: settings.lastMode) + "\n回覆只要修正後的全文，不要解釋。"
     }
 
+    /// Proofreading wants near-deterministic output, but llama-server samples at about 0.8 unless
+    /// told otherwise. Hosted OpenAI models may reject the field, so only local and compatible endpoints get it.
+    private static func rewriteTemperature(for kind: ProviderKind) -> Double? {
+        kind == .localLlama || kind == .openaiCompatible ? 0.3 : nil
+    }
+
     private var lastModelActivity = Date.distantPast
 
     /// The local model can be paged out while idle, making the next request take seconds
@@ -202,9 +208,11 @@ final class FloatingPanelViewModel {
         streamAdoptedCapture(result)
     }
 
-    func captureAndStream() {
+    /// `showPanel` runs once the selection has been read: showing the panel activates Lint, and from then on
+    /// the focused element is Lint's own, not the field the selection is in.
+    func captureAndStream(showPanel: @escaping @MainActor () -> Void) {
         streamTask?.cancel()
-        streamTask = Task { await runCaptureAndStream() }
+        streamTask = Task { await runCaptureAndStream(showPanel: showPanel) }
     }
 
     /// Auto-suggest path: capture already adopted on TextCaptureService.
@@ -392,6 +400,7 @@ final class FloatingPanelViewModel {
                 systemPrompt: personalized.systemPrompt,
                 userText: result.text,
                 reasoningEffort: .low,
+                temperature: Self.rewriteTemperature(for: config.kind),
                 fastMode: settings.fastMode
             )
             let stream = try llm.stream(config: config, request: request)
@@ -458,7 +467,9 @@ final class FloatingPanelViewModel {
         await runStream(forceLowReasoning: true)
     }
 
-    private func runCaptureAndStream() async {
+    private func runCaptureAndStream(showPanel: @MainActor () -> Void) async {
+        let captured = await capture.capture()
+        showPanel()
         do {
             try await ensureLocalServerIfNeeded()
         } catch {
@@ -473,7 +484,7 @@ final class FloatingPanelViewModel {
         isAutoSuggestSession = false
         mode = settings.lastMode
         usedClipboardFallback = false
-        if let captured = await capture.capture() {
+        if let captured {
             originalText = captured.text
             usedClipboardFallback = captured.usedClipboardFallback
             if captured.usedClipboardFallback {
@@ -626,6 +637,7 @@ final class FloatingPanelViewModel {
                 systemPrompt: personalized.systemPrompt,
                 userText: generationSource,
                 reasoningEffort: effort,
+                temperature: Self.rewriteTemperature(for: config.kind),
                 fastMode: settings.fastMode
             )
             let stream = try llm.stream(config: config, request: request)

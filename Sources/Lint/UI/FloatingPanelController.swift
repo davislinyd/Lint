@@ -75,8 +75,9 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
     func run() {
         dismissChip()
         dismissBubble()
-        showFull()
-        viewModel.captureAndStream()
+        // Same as showFull: the selection monitor must not react while the selection is being read.
+        onBubbleVisibilityChange?(true)
+        viewModel.captureAndStream { [weak self] in self?.showFull() }
     }
 
     /// Selection settled — show a tiny chip only (do not call the model yet).

@@ -51,6 +51,10 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         app.openSettings()
     }
 
+    @objc private func openLocalAISetup() {
+        app.presentLocalAISetup()
+    }
+
     @objc private func quit() {
         NSApp.terminate(nil)
     }
@@ -90,6 +94,12 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             let open = NSMenuItem(title: String(localized: "打開系統設定"), action: #selector(openAccessSettings), keyEquivalent: "")
             open.target = self
             menu.addItem(open)
+        }
+
+        if app.settings.providerKind == .localLlama, !app.localAI.isSetupComplete {
+            let setup = NSMenuItem(title: String(localized: "設定本機 AI…"), action: #selector(openLocalAISetup), keyEquivalent: "")
+            setup.target = self
+            menu.addItem(setup)
         }
 
         menu.addItem(.separator())

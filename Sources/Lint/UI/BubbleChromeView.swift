@@ -8,6 +8,7 @@ final class BubbleChromeView: NSView {
     var onReplace: (() -> Void)?
     var onRewrite: (() -> Void)?
     var onEdit: (() -> Void)?
+    var onSetUpLocalAI: (() -> Void)?
     var onDismiss: (() -> Void)?
     /// The controller turns the edit button off when the bubble is shown without activating Lint:
     /// opening the full panel would activate it, and closing the bubble hands the focus back.
@@ -38,6 +39,8 @@ final class BubbleChromeView: NSView {
     private let spinner = NSProgressIndicator()
     private let replaceButton = NSButton(title: String(localized: "取代"), target: nil, action: nil)
     private let rewriteButton = NSButton(title: String(localized: "重寫"), target: nil, action: nil)
+    /// Shown instead of Replace / Rewrite while Local AI is not set up.
+    private let setupButton = NSButton(title: String(localized: "設定本機 AI"), target: nil, action: nil)
     private let closeButton = NSButton(title: String(localized: "關閉"), target: nil, action: nil)
     private let xButton = NSButton(image: NSImage(systemSymbolName: "xmark", accessibilityDescription: String(localized: "關閉")) ?? NSImage(), target: nil, action: nil)
     private let editButton = NSButton(image: NSImage(systemSymbolName: "square.and.pencil", accessibilityDescription: String(localized: "在全面板編輯")) ?? NSImage(), target: nil, action: nil)
@@ -98,6 +101,11 @@ final class BubbleChromeView: NSView {
         rewriteButton.target = self
         rewriteButton.action = #selector(tapRewrite)
 
+        setupButton.bezelStyle = .rounded
+        setupButton.target = self
+        setupButton.action = #selector(tapSetUpLocalAI)
+        setupButton.isHidden = true
+
         closeButton.bezelStyle = .rounded
         // Escape handled by panel key monitor; keep button clickable.
         closeButton.isBordered = false
@@ -115,7 +123,7 @@ final class BubbleChromeView: NSView {
         editButton.target = self
         editButton.action = #selector(tapEdit)
 
-        for v in [titleLabel, statusLabel, bodyLabel, translationLabel, spinner, replaceButton, rewriteButton, closeButton, xButton, editButton] {
+        for v in [titleLabel, statusLabel, bodyLabel, translationLabel, spinner, replaceButton, rewriteButton, setupButton, closeButton, xButton, editButton] {
             v.translatesAutoresizingMaskIntoConstraints = false
             card.addSubview(v)
         }
@@ -164,6 +172,9 @@ final class BubbleChromeView: NSView {
 
             rewriteButton.leadingAnchor.constraint(equalTo: replaceButton.trailingAnchor, constant: 8),
             rewriteButton.centerYAnchor.constraint(equalTo: replaceButton.centerYAnchor),
+
+            setupButton.leadingAnchor.constraint(equalTo: replaceButton.leadingAnchor),
+            setupButton.centerYAnchor.constraint(equalTo: replaceButton.centerYAnchor),
 
             closeButton.leadingAnchor.constraint(equalTo: rewriteButton.trailingAnchor, constant: 8),
             closeButton.centerYAnchor.constraint(equalTo: replaceButton.centerYAnchor),
@@ -224,6 +235,11 @@ final class BubbleChromeView: NSView {
         replaceButton.isEnabled = canReplace
         rewriteButton.isEnabled = !viewModel.originalText.isEmpty && !viewModel.isStreaming
         editButton.isEnabled = viewModel.canEditInFullPanel
+        // Not set up yet: Replace / Rewrite have nothing to act on, so offer the way forward. The hidden
+        // buttons keep their layout slot, and the setup button sits in the same place.
+        setupButton.isHidden = !viewModel.needsLocalAISetup
+        replaceButton.isHidden = viewModel.needsLocalAISetup
+        rewriteButton.isHidden = viewModel.needsLocalAISetup
 
         // Compact width for short text; grow height (not width) as content wraps.
         let targetWidth = Self.idealCardWidth(viewModel: viewModel)
@@ -287,6 +303,10 @@ final class BubbleChromeView: NSView {
 
     @objc private func tapEdit() {
         onEdit?()
+    }
+
+    @objc private func tapSetUpLocalAI() {
+        onSetUpLocalAI?()
     }
 
     @objc private func tapDismiss() {

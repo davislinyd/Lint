@@ -105,6 +105,65 @@ enum MemoryLifecycle {
         return memory
     }
 
+    /// The generalized memory that `proposal` describes, with the evidence of the sources it has not
+    /// counted yet added to it. Nil when there is nothing to write: the memory is disabled (it stays
+    /// off), or all of these sources were counted before.
+    ///
+    /// The evidence is summed as it stood when the newest of the sources was last confirmed, which is
+    /// also when the memory counts as confirmed: it is not fresher than the habit it summarizes, and
+    /// it fades from there. An existing memory keeps its wording, whoever wrote it, and its state if
+    /// the user holds it.
+    static func consolidated(
+        _ proposal: ConsolidationProposal,
+        from application: ConsolidationApplication,
+        at now: Date
+    ) -> WritingMemory? {
+        let existing = application.existingParent
+        if existing?.state == .disabled { return nil }
+        let added = application.sources.filter { !application.linkedSourceIDs.contains($0.id) }
+        guard let newest = added.map(\.lastConfirmedAt).max() else { return nil }
+        let confirmed = max(existing?.lastConfirmedAt ?? .distantPast, newest)
+
+        var memory = existing ?? WritingMemory(
+            id: UUID(),
+            dedupKey: proposal.parentDedupKey,
+            kind: proposal.kind,
+            language: proposal.language,
+            modeScope: proposal.modeScope,
+            triggers: proposal.triggers,
+            instruction: proposal.instruction,
+            evidenceScore: 0,
+            occurrenceCount: 0,
+            state: .candidate,
+            userEdited: false,
+            createdAt: now,
+            lastConfirmedAt: confirmed,
+            level: proposal.targetLevel
+        )
+        memory.evidenceScore = memory.evidence(at: confirmed) + added.reduce(0) { $0 + $1.evidence(at: confirmed) }
+        memory.occurrenceCount += added.reduce(0) { $0 + $1.occurrenceCount }
+        memory.contradictionCount += added.reduce(0) { $0 + $1.contradictionCount }
+        memory.lastConfirmedAt = confirmed
+        memory.lastConsolidatedAt = now
+        if memory.state == .archived { memory.state = .candidate }
+        if memory.state == .candidate {
+            memory.state = restingState(evidenceScore: memory.evidenceScore)
+        }
+        return memory
+    }
+
+    /// The memory earns a higher level. What it has faded to so far is settled into the stored value
+    /// and the clock restarts, so that the longer half-life of the new level applies from now on and
+    /// does not change what the memory is worth today.
+    static func promoted(_ memory: WritingMemory, to level: MemoryLevel, at now: Date) -> WritingMemory {
+        var memory = memory
+        memory.evidenceScore = memory.evidence(at: now)
+        memory.lastConfirmedAt = now
+        memory.lastConsolidatedAt = now
+        memory.level = level
+        return memory
+    }
+
     /// Where a memory settles when the user has neither pinned nor disabled it.
     static func restingState(evidenceScore: Double) -> MemoryState {
         // The tolerance keeps sums like 3 × 0.35 from missing the threshold by rounding.

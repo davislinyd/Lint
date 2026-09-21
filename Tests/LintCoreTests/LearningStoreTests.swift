@@ -568,4 +568,188 @@ final class LearningStoreTests: XCTestCase {
         XCTAssertEqual(stats.supersededCount, family.children.count, "a memory behind an unusable parent is not covered")
         XCTAssertEqual(stats.lastOrganizedAt, Date(timeIntervalSince1970: 1_800_000_005))
     }
+
+    // MARK: applying a consolidation
+
+    private func derivedMemory(_ key: String = "dream:test") -> WritingMemory {
+        var parent = DreamFixtures.plain(key, kind: .grammar)
+        parent.level = .generalized
+        return parent
+    }
+
+    private func relationRows(_ url: URL) throws -> Int {
+        try count("memory_relation", in: url)
+    }
+
+    func testApplyingAConsolidationStoresTheParentRelatesItAndCoversTheSources() async throws {
+        let (store, url) = try makeFileStore()
+        let sources = DreamFixtures.prepositions(3)
+        for source in sources { try await store.saveMemory(source) }
+        let parent = derivedMemory()
+
+        let outcome = try await store.applyConsolidation(
+            parentDedupKey: parent.dedupKey, sourceIDs: sources.map(\.id), at: DreamFixtures.now
+        ) { application in
+            XCTAssertNil(application.existingParent)
+            XCTAssertEqual(application.sources, sources)
+            XCTAssertTrue(application.linkedSourceIDs.isEmpty)
+            return parent
+        }
+
+        XCTAssertEqual(outcome, .applied(parentID: parent.id, created: true, newlyCovered: 3))
+        let stored = try await store.memory(id: parent.id)
+        XCTAssertEqual(stored, parent)
+        let related = try await store.sources(ofParent: parent.id)
+        XCTAssertEqual(Set(related.map(\.id)), Set(sources.map(\.id)))
+        XCTAssertTrue(related.allSatisfy { $0.supersededBy == parent.id && $0.lastConsolidatedAt == DreamFixtures.now })
+        XCTAssertEqual(try relationRows(url), 3)
+    }
+
+    func testTheSourcesAreHandedOverInTheOrderAskedFor() async throws {
+        let store = try SQLiteLearningStore(url: nil)
+        let sources = DreamFixtures.prepositions(3)
+        for source in sources { try await store.saveMemory(source) }
+        let reversed = sources.reversed().map(\.id)
+        let parent = derivedMemory()
+
+        _ = try await store.applyConsolidation(
+            parentDedupKey: parent.dedupKey, sourceIDs: reversed, at: DreamFixtures.now
+        ) { application in
+            XCTAssertEqual(application.sources.map(\.id), reversed)
+            return parent
+        }
+    }
+
+    func testASourceThatChangedSinceItWasChosenStopsTheWholeConsolidation() async throws {
+        let cases: [(String, (inout WritingMemory) -> Void)] = [
+            ("pinned", { $0.state = .pinned }),
+            ("disabled", { $0.state = .disabled }),
+            ("no longer active", { $0.state = .candidate }),
+            ("hand-edited", { $0.userEdited = true }),
+            ("already generalized", { $0.level = .generalized }),
+        ]
+        for (name, change) in cases {
+            let (store, url) = try makeFileStore()
+            var sources = DreamFixtures.prepositions(3)
+            change(&sources[1])
+            for source in sources { try await store.saveMemory(source) }
+            let before = try await store.memories()
+
+            let outcome = try await store.applyConsolidation(
+                parentDedupKey: "dream:test", sourceIDs: sources.map(\.id), at: DreamFixtures.now
+            ) { _ in XCTFail("\(name): nothing should be built"); return nil }
+
+            XCTAssertEqual(outcome, .skipped(.sourceChanged), name)
+            let after = try await store.memories()
+            XCTAssertEqual(after, before, name)
+            XCTAssertEqual(try relationRows(url), 0, name)
+        }
+
+        let store = try SQLiteLearningStore(url: nil)
+        let sources = DreamFixtures.prepositions(3)
+        for source in sources.dropLast() { try await store.saveMemory(source) }
+        let gone = try await store.applyConsolidation(
+            parentDedupKey: "dream:test", sourceIDs: sources.map(\.id), at: DreamFixtures.now
+        ) { _ in nil }
+        XCTAssertEqual(gone, .skipped(.sourceChanged), "a source that has been deleted")
+    }
+
+    func testASourceBehindAnotherUsableMemoryIsLeftThereButNotBehindOneThatIsNot() async throws {
+        for (coverState, expected) in [(MemoryState.active, false), (.pinned, false), (.archived, true), (.disabled, true), (.candidate, true)] {
+            let store = try SQLiteLearningStore(url: nil)
+            let other = { var other = derivedMemory("dream:other"); other.state = coverState; return other }()
+            try await store.saveMemory(other)
+            var sources = DreamFixtures.prepositions(3)
+            sources[0].supersededBy = other.id
+            for source in sources { try await store.saveMemory(source) }
+            let parent = derivedMemory()
+
+            let outcome = try await store.applyConsolidation(
+                parentDedupKey: parent.dedupKey, sourceIDs: sources.map(\.id), at: DreamFixtures.now
+            ) { _ in parent }
+
+            if expected {
+                XCTAssertEqual(outcome, .applied(parentID: parent.id, created: true, newlyCovered: 3), "\(coverState)")
+            } else {
+                XCTAssertEqual(outcome, .skipped(.sourceChanged), "\(coverState)")
+            }
+        }
+    }
+
+    func testAMemoryTheUserDeletedIsNotStoredAgain() async throws {
+        let (store, url) = try makeFileStore()
+        let sources = DreamFixtures.prepositions(3)
+        for source in sources { try await store.saveMemory(source) }
+        let parent = derivedMemory()
+        _ = try await store.applyConsolidation(
+            parentDedupKey: parent.dedupKey, sourceIDs: sources.map(\.id), at: DreamFixtures.now
+        ) { _ in parent }
+        try await store.deleteMemory(id: parent.id)
+        let before = try await store.memories()
+
+        let outcome = try await store.applyConsolidation(
+            parentDedupKey: parent.dedupKey, sourceIDs: sources.map(\.id), at: DreamFixtures.now
+        ) { _ in XCTFail("nothing should be built"); return nil }
+
+        XCTAssertEqual(outcome, .skipped(.vetoed))
+        let after = try await store.memories()
+        XCTAssertEqual(after, before)
+        XCTAssertEqual(try relationRows(url), 0)
+    }
+
+    func testNothingIsWrittenWhenThereIsNothingToBuildOrItCannotBeKept() async throws {
+        let (store, url) = try makeFileStore()
+        let sources = DreamFixtures.prepositions(3)
+        for source in sources { try await store.saveMemory(source) }
+        let before = try await store.memories()
+
+        let declined = try await store.applyConsolidation(
+            parentDedupKey: "dream:test", sourceIDs: sources.map(\.id), at: DreamFixtures.now
+        ) { _ in nil }
+        XCTAssertEqual(declined, .skipped(.declined))
+        // A derived memory is never a specific one.
+        let specific = try await store.applyConsolidation(
+            parentDedupKey: "dream:test", sourceIDs: sources.map(\.id), at: DreamFixtures.now
+        ) { _ in DreamFixtures.plain("dream:test") }
+        XCTAssertEqual(specific, .skipped(.declined))
+
+        let after = try await store.memories()
+        XCTAssertEqual(after, before)
+        XCTAssertEqual(try relationRows(url), 0)
+    }
+
+    func testTheStoredMemoryKeepsItsKeyAndTheIdentityOfTheOneThatExists() async throws {
+        let (store, url) = try makeFileStore()
+        let first = DreamFixtures.prepositions(3)
+        for source in first { try await store.saveMemory(source) }
+        let parent = derivedMemory()
+        _ = try await store.applyConsolidation(
+            parentDedupKey: parent.dedupKey, sourceIDs: first.map(\.id), at: DreamFixtures.now
+        ) { _ in
+            var wrongKey = parent
+            wrongKey.dedupKey = "grammar:en:something else"
+            return wrongKey
+        }
+        let stored = try await store.memory(dedupKey: "dream:test")
+        XCTAssertEqual(stored?.id, parent.id, "stored under the key it was asked for")
+
+        let late = DreamFixtures.preposition("describe")
+        try await store.saveMemory(late)
+        let outcome = try await store.applyConsolidation(
+            parentDedupKey: parent.dedupKey, sourceIDs: (first + [late]).map(\.id), at: DreamFixtures.now
+        ) { application in
+            XCTAssertEqual(application.existingParent?.id, parent.id)
+            XCTAssertEqual(application.linkedSourceIDs, Set(first.map(\.id)))
+            var other = parent
+            other.id = UUID()
+            other.instruction = "joined"
+            return other
+        }
+
+        XCTAssertEqual(outcome, .applied(parentID: parent.id, created: false, newlyCovered: 1))
+        let all = try await store.memories().filter { $0.level != .specific }
+        XCTAssertEqual(all.map(\.id), [parent.id], "no second copy")
+        XCTAssertEqual(all.first?.instruction, "joined")
+        XCTAssertEqual(try relationRows(url), 4)
+    }
 }

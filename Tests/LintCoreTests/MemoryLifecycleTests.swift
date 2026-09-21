@@ -298,4 +298,145 @@ final class MemoryLifecycleTests: XCTestCase {
         )
         XCTAssertEqual(LearningPolicy.evidenceWeight(for: .regenerated), 0)
     }
+
+    // MARK: organizing memories
+
+    private func proposal() -> ConsolidationProposal {
+        ConsolidationProposal(
+            parentDedupKey: "dream:redundant-preposition:grammar:en", sourceIDs: [],
+            kind: .grammar, language: "en", modeScope: nil, targetLevel: .generalized,
+            instruction: MemoryConsolidator.redundantPrepositionInstruction, triggers: [],
+            origin: .rule(.redundantPreposition)
+        )
+    }
+
+    private func application(
+        sources: [WritingMemory], existing: WritingMemory? = nil, linked: [WritingMemory] = []
+    ) -> ConsolidationApplication {
+        ConsolidationApplication(
+            existingParent: existing, sources: sources, linkedSourceIDs: Set(linked.map(\.id))
+        )
+    }
+
+    func testAConsolidatedMemorySumsTheEvidenceAsOfTheNewestSource() throws {
+        let now = DreamFixtures.now
+        // Two weeks apart, and 60 days after the older one the clock has not started to run down yet
+        // (30 days of grace), but at 75 days it has.
+        let newest = DreamFixtures.preposition("mention", evidence: 1.2, count: 3, confirmedDaysAgo: 1)
+        let older = DreamFixtures.preposition("reply", evidence: 1.0, count: 2, confirmedDaysAgo: 90)
+        let expectedOlder = older.evidence(at: newest.lastConfirmedAt)
+        XCTAssertLessThan(expectedOlder, 1.0)
+
+        let parent = try XCTUnwrap(MemoryLifecycle.consolidated(
+            proposal(), from: application(sources: [newest, older]), at: now
+        ))
+
+        XCTAssertEqual(parent.evidenceScore, 1.2 + expectedOlder, accuracy: 1e-9)
+        XCTAssertEqual(parent.lastConfirmedAt, newest.lastConfirmedAt)
+        XCTAssertEqual(parent.occurrenceCount, 5)
+        XCTAssertEqual(parent.createdAt, now)
+        XCTAssertEqual(parent.lastConsolidatedAt, now)
+        XCTAssertEqual(parent.level, .generalized)
+        XCTAssertEqual(parent.dedupKey, "dream:redundant-preposition:grammar:en")
+        XCTAssertEqual(parent.instruction, MemoryConsolidator.redundantPrepositionInstruction)
+        XCTAssertEqual(parent.state, .active)
+        XCTAssertFalse(parent.userEdited)
+        XCTAssertEqual([parent.retrievalCount, parent.successfulUseCount], [0, 0])
+    }
+
+    func testAConsolidatedMemoryStartsAsACandidateIfTheSourcesAreWeakTogether() throws {
+        let weak = (0..<2).map { DreamFixtures.preposition("v\($0)", evidence: 0.3) }
+        let parent = try XCTUnwrap(MemoryLifecycle.consolidated(
+            proposal(), from: application(sources: weak), at: DreamFixtures.now
+        ))
+        XCTAssertEqual(parent.state, .candidate)
+        XCTAssertEqual(parent.evidenceScore, 0.6, accuracy: 1e-9)
+    }
+
+    func testTheContradictionsAgainstTheSourcesCarryOver() throws {
+        var contradicted = DreamFixtures.preposition("reply")
+        contradicted.contradictionCount = 2
+        let parent = try XCTUnwrap(MemoryLifecycle.consolidated(
+            proposal(), from: application(sources: [contradicted, DreamFixtures.preposition("mention")]),
+            at: DreamFixtures.now
+        ))
+        XCTAssertEqual(parent.contradictionCount, 2)
+    }
+
+    func testAnExistingMemoryOnlyCountsTheSourcesItHasNotCounted() throws {
+        let now = DreamFixtures.now
+        let old = DreamFixtures.prepositions(3)
+        let first = try XCTUnwrap(MemoryLifecycle.consolidated(proposal(), from: application(sources: old), at: now))
+
+        let late = DreamFixtures.preposition("describe", evidence: 2, count: 5, confirmedDaysAgo: 0)
+        let joined = try XCTUnwrap(MemoryLifecycle.consolidated(
+            proposal(), from: application(sources: old + [late], existing: first, linked: old), at: now
+        ))
+
+        XCTAssertEqual(joined.id, first.id)
+        XCTAssertEqual(joined.createdAt, first.createdAt)
+        XCTAssertEqual(joined.evidenceScore, first.evidenceScore + 2, accuracy: 1e-9)
+        XCTAssertEqual(joined.occurrenceCount, first.occurrenceCount + 5)
+        XCTAssertEqual(joined.lastConfirmedAt, late.lastConfirmedAt)
+
+        XCTAssertNil(MemoryLifecycle.consolidated(
+            proposal(), from: application(sources: old, existing: first, linked: old), at: now
+        ), "nothing new, nothing to write")
+    }
+
+    func testAnExistingMemoryKeepsItsWordingAndTheStateTheUserGaveIt() throws {
+        let now = DreamFixtures.now
+        let sources = DreamFixtures.prepositions(3)
+        var existing = try XCTUnwrap(MemoryLifecycle.consolidated(proposal(), from: application(sources: sources), at: now))
+        existing.instruction = "my own wording"
+        existing.userEdited = true
+        existing.state = .pinned
+        let late = DreamFixtures.preposition("describe")
+
+        let pinned = try XCTUnwrap(MemoryLifecycle.consolidated(
+            proposal(), from: application(sources: sources + [late], existing: existing, linked: sources), at: now
+        ))
+        XCTAssertEqual(pinned.instruction, "my own wording")
+        XCTAssertTrue(pinned.userEdited)
+        XCTAssertEqual(pinned.state, .pinned)
+
+        existing.state = .disabled
+        XCTAssertNil(MemoryLifecycle.consolidated(
+            proposal(), from: application(sources: sources + [late], existing: existing, linked: sources), at: now
+        ), "a disabled memory stays off")
+    }
+
+    func testAMemoryThatWasPutAwayComesBackWhenItGainsSources() throws {
+        let now = DreamFixtures.now
+        let sources = DreamFixtures.prepositions(3)
+        var existing = try XCTUnwrap(MemoryLifecycle.consolidated(proposal(), from: application(sources: sources), at: now))
+        existing.state = .archived
+        existing.evidenceScore = 0.05
+
+        let woken = try XCTUnwrap(MemoryLifecycle.consolidated(
+            proposal(),
+            from: application(sources: [DreamFixtures.preposition("describe")], existing: existing),
+            at: now
+        ))
+        XCTAssertEqual(woken.state, .active)
+        XCTAssertEqual(woken.evidenceScore, 0.05 + 1.2, accuracy: 1e-9)
+    }
+
+    func testPromotionKeepsTheEvidenceAndRestartsTheClock() {
+        let now = DreamFixtures.now
+        var memory = DreamFixtures.preposition("mention", evidence: 4, confirmedDaysAgo: 120)
+        memory.level = .generalized
+        let worth = memory.evidence(at: now)
+        XCTAssertLessThan(worth, 4, "sanity: it has faded")
+
+        let core = MemoryLifecycle.promoted(memory, to: .core, at: now)
+
+        XCTAssertEqual(core.level, .core)
+        XCTAssertEqual(core.evidenceScore, worth, accuracy: 1e-12)
+        XCTAssertEqual(core.evidence(at: now), worth, accuracy: 1e-12, "worth the same as a moment ago")
+        XCTAssertEqual(core.lastConfirmedAt, now)
+        XCTAssertEqual(core.lastConsolidatedAt, now)
+        XCTAssertEqual(core.state, memory.state)
+        XCTAssertEqual(core.id, memory.id)
+    }
 }

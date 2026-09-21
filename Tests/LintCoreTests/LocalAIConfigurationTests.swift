@@ -64,5 +64,13 @@ final class LocalAIConfigurationTests: XCTestCase {
                        "the old default that is already cached keeps working with no second download")
         XCTAssertEqual(LocalModelMigration.migrate(storedSpec: "unsloth/gemma-3-4b-it-GGUF:Q4_K_M", hasCompleteHuggingFaceCopy: none), .init(source: .custom, managedModelID: recommended.id),
                        "the user's own model is never replaced")
+        for copy in [none, cached] {
+            XCTAssertEqual(LocalModelMigration.migrate(storedSpec: " Qwen/Qwen2.5-7B-Instruct-GGUF:Q4_K_M ", hasCompleteHuggingFaceCopy: copy), .init(source: .managed, managedModelID: recommended.id),
+                           "the retired Qwen default was never a choice: it moves to the recommended model, cached or not")
+        }
+        XCTAssertTrue(LocalModelMigration.isRetiredDefault(LocalModelMigration.retiredDefaultSpec))
+        XCTAssertFalse(LocalModelMigration.isRetiredDefault(nil))
+        XCTAssertFalse(LocalModelMigration.isRetiredDefault(recommended.huggingFaceSpec))
+        XCTAssertFalse(LocalModelMigration.isRetiredDefault("Qwen/Qwen2.5-14B-Instruct-GGUF:q4_k_m"), "only the exact old default")
     }
 }

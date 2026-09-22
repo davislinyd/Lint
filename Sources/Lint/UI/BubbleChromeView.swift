@@ -183,7 +183,7 @@ final class BubbleChromeView: NSView {
     }
 
     func apply(viewModel: FloatingPanelViewModel) {
-        titleLabel.stringValue = viewModel.mode.title
+        titleLabel.stringValue = viewModel.modeTitle
 
         if let err = viewModel.errorMessage, !err.isEmpty {
             statusLabel.isHidden = false
@@ -279,7 +279,7 @@ final class BubbleChromeView: NSView {
             ? 0
             : (translation as NSString).size(withAttributes: [.font: transFont]).width
         // Room beside the title for the spinner and the two icon buttons (edit, close).
-        let titleW = (viewModel.mode.title as NSString)
+        let titleW = (viewModel.modeTitle as NSString)
             .size(withAttributes: [.font: NSFont.systemFont(ofSize: 13, weight: .semibold)]).width + 72
 
         // Buttons + gaps + side padding (~取代 ⏎ / 重寫 R / 關閉 esc).

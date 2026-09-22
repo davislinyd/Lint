@@ -36,6 +36,7 @@ enum DreamFixtures {
         kind: MemoryKind = .style,
         language: String = "en",
         scope: WritingMode? = nil,
+        tone: WritingTone? = nil,
         triggers: [String] = [],
         instruction: String = "使用者偏好簡潔的用詞。",
         evidence: Double = 1.2,
@@ -44,7 +45,8 @@ enum DreamFixtures {
         ageDays: Double = 10
     ) -> WritingMemory {
         WritingMemory(
-            id: UUID(), dedupKey: key, kind: kind, language: language, modeScope: scope,
+            id: UUID(), dedupKey: key, kind: kind, language: language,
+            modeScope: scope, toneScope: tone,
             triggers: triggers, instruction: instruction, evidenceScore: evidence,
             occurrenceCount: count, state: state, userEdited: false,
             createdAt: now.addingTimeInterval(-ageDays * 86_400),
@@ -61,7 +63,7 @@ enum DreamFixtures {
     static func cluster(_ members: [WritingMemory]) -> MemoryCluster {
         MemoryCluster(
             language: members[0].language, kind: members[0].kind, modeScope: members[0].modeScope,
-            members: members
+            toneScope: members[0].toneScope, members: members
         )
     }
 }

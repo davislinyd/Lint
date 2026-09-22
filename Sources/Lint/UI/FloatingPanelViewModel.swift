@@ -27,7 +27,16 @@ final class FloatingPanelViewModel {
     /// Compared against `statusNote` to clear it once the user types; keep one localized copy.
     static let noSelectionNote = String(localized: "沒有選取文字。可直接在左側輸入，再按「產生」。")
     var usedClipboardFallback = false
-    var mode: WritingMode = .proofread
+    /// The task. Choosing another one brings back the tone that task remembers.
+    var mode: WritingMode = .proofread {
+        didSet { if mode != oldValue { tone = settings.tone(for: mode) } }
+    }
+    /// How it should sound; each task remembers its own (see `SettingsStore.tones`).
+    var tone: WritingTone = .preserve {
+        didSet { if tone != oldValue { settings.setTone(tone, for: mode) } }
+    }
+    /// The task, and the tone if one applies and was chosen: what the panel and the bubble call it.
+    var modeTitle: String { mode.displayTitle(tone: tone) }
     var testOutput: String = ""
     var lastUsage: TokenUsage?
     /// Compact bubble session — use lowest latency settings.
@@ -50,6 +59,7 @@ final class FloatingPanelViewModel {
         let source: String
         let text: String
         let mode: WritingMode
+        let tone: WritingTone
         /// Memories that were in the prompt that produced it.
         let usedMemoryIDs: [UUID]
     }
@@ -57,7 +67,9 @@ final class FloatingPanelViewModel {
 
     // Background prefetch while the selection chip is visible.
     private var prefetchTask: Task<Void, Never>?
-    private var prefetchSourceText: String?
+    /// What the prefetch in flight (or finished) was asked for. It is used only for a request with an
+    /// equal key: not one for another text, mode, tone, translation target or custom prompt.
+    private var prefetchKey: WritingRequestKey?
     private var prefetchBuffer = ""
     private var prefetchUsedMemoryIDs: [UUID] = []
     private var prefetchFinished = false
@@ -80,7 +92,13 @@ final class FloatingPanelViewModel {
         self.llm = llm
         self.learning = learning
         self.localAI = localAI
-        self.mode = settings.lastMode
+        loadSelectionFromSettings()
+    }
+
+    /// The task last used, and the tone that task remembers.
+    private func loadSelectionFromSettings() {
+        mode = settings.lastMode
+        tone = settings.tone(for: mode)
     }
 
     func adoptCapture(_ result: TextCaptureService.CaptureResult) {
@@ -91,12 +109,12 @@ final class FloatingPanelViewModel {
 
     /// Start (or keep) a background suggestion for the current selection chip.
     func beginPrefetch(for result: TextCaptureService.CaptureResult) {
-        let text = result.text
-        if prefetchSourceText == text, (isPrefetching || isPrefetchReady || prefetchAttachedToUI) {
+        let key = currentRequestKey(for: result.text)
+        if prefetchKey == key, (isPrefetching || isPrefetchReady || prefetchAttachedToUI) {
             return
         }
         cancelPrefetch()
-        prefetchSourceText = text
+        prefetchKey = key
         prefetchBuffer = ""
         prefetchFinished = false
         prefetchError = nil
@@ -105,13 +123,25 @@ final class FloatingPanelViewModel {
         isPrefetchReady = false
         onPrefetchStateChange?()
         let adopted = result
+        // Built now, not when the request goes out: it has to be the prompt that `key` stands for.
+        let basePrompt = Self.terseSystemPrompt(settings.effectiveSystemPrompt(for: key.mode, tone: key.tone))
         prefetchTask = Task { [weak self] in
-            await self?.runPrefetch(for: adopted)
+            await self?.runPrefetch(for: adopted, key: key, basePrompt: basePrompt)
         }
     }
 
-    private var prefetchSystemPrompt: String {
-        settings.effectiveSystemPrompt(for: settings.lastMode) + "\n回覆只要修正後的全文，不要解釋。"
+    /// The request the settings in force now make for `source`.
+    private func currentRequestKey(for source: String) -> WritingRequestKey {
+        let mode = settings.lastMode
+        return WritingRequestKey(
+            source: source, mode: mode, tone: settings.tone(for: mode),
+            translateTarget: settings.translateTarget, customPrompt: settings.customPrompt
+        )
+    }
+
+    /// Prefetch, the bubble and the warm-up ask for the bare text, so they say so.
+    private static func terseSystemPrompt(_ prompt: String) -> String {
+        prompt + "\n回覆只要修正後的全文，不要解釋。"
     }
 
     /// Proofreading wants near-deterministic output, but llama-server samples at about 0.8 unless
@@ -136,7 +166,9 @@ final class FloatingPanelViewModel {
                 let config = try self.settings.runtimeConfig()
                 let request = ChatRequest(
                     model: config.model,
-                    systemPrompt: self.prefetchSystemPrompt,
+                    systemPrompt: Self.terseSystemPrompt(self.settings.effectiveSystemPrompt(
+                        for: self.settings.lastMode, tone: self.settings.tone(for: self.settings.lastMode)
+                    )),
                     userText: "hi",
                     maxTokens: 1,
                     reasoningEffort: .low,
@@ -155,7 +187,7 @@ final class FloatingPanelViewModel {
         prefetchTranslation = nil
         isPrefetching = false
         isPrefetchReady = false
-        prefetchSourceText = nil
+        prefetchKey = nil
         prefetchBuffer = ""
         prefetchUsedMemoryIDs = []
         prefetchFinished = false
@@ -167,12 +199,14 @@ final class FloatingPanelViewModel {
     /// Chip click: reuse prefetch if it matches, otherwise stream fresh.
     func consumePrefetchOrStream(_ result: TextCaptureService.CaptureResult) {
         let text = result.text
-        if prefetchSourceText == text {
+        // Only a prefetch made for what the settings ask for now; after a change of mode, tone or
+        // translation target (from the status menu, say) it would answer another question.
+        if prefetchKey == currentRequestKey(for: text) {
             errorMessage = nil
             statusNote = nil
             generated = nil
             isAutoSuggestSession = true
-            mode = settings.lastMode
+            loadSelectionFromSettings()
             originalText = text
             usedClipboardFallback = result.usedClipboardFallback
             lastUsage = nil
@@ -185,7 +219,7 @@ final class FloatingPanelViewModel {
                 onPrefetchStateChange?()
                 if prefetchError == nil, !resultText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     generated = GeneratedSuggestion(
-                        source: text, text: resultText, mode: mode, usedMemoryIDs: prefetchUsedMemoryIDs
+                        source: text, text: resultText, mode: mode, tone: tone, usedMemoryIDs: prefetchUsedMemoryIDs
                     )
                     if let gloss = prefetchTranslation {
                         cancelTranslation()
@@ -223,7 +257,7 @@ final class FloatingPanelViewModel {
         clearTranslation()
         statusNote = nil
         isAutoSuggestSession = true
-        mode = settings.lastMode
+        loadSelectionFromSettings()
         originalText = result.text
         usedClipboardFallback = result.usedClipboardFallback
         isStreaming = true
@@ -269,8 +303,8 @@ final class FloatingPanelViewModel {
 
     /// Run the model on whatever is currently in `originalText` (selection or typed).
     func generateFromOriginal() {
-        // Running again on the same text and mode is a rejection; a new text or mode is not.
-        if let generated, generated.source == originalText, generated.mode == mode {
+        // Running again on the same text, mode and tone is a rejection; a new text, mode or tone is not.
+        if let generated, generated.source == originalText, generated.mode == mode, generated.tone == tone {
             recordFeedback(.regenerated)
         }
         streamTask?.cancel()
@@ -318,12 +352,14 @@ final class FloatingPanelViewModel {
     /// The prompt with the user's learned habits added; untouched, and without a moment's delay,
     /// while learning is off. The lookup runs off the main actor and is cut short rather than let
     /// it hold a suggestion back.
-    private func personalize(_ prompt: String, for text: String, mode: WritingMode) async -> PersonalizedPrompt {
+    private func personalize(
+        _ prompt: String, for text: String, mode: WritingMode, tone: WritingTone
+    ) async -> PersonalizedPrompt {
         guard settings.learningEnabled else {
             return PersonalizedPrompt(systemPrompt: prompt, usedMemoryIDs: [])
         }
         return await learning.personalize(
-            prompt: prompt, for: text, mode: mode,
+            prompt: prompt, for: text, mode: mode, tone: tone,
             translateTarget: settings.translateTarget, config: settings.learningConfig
         )
     }
@@ -335,6 +371,7 @@ final class FloatingPanelViewModel {
         let feedback = LearningFeedback(
             gesture: gesture,
             mode: generated?.mode ?? mode,
+            tone: generated?.tone ?? tone,
             originalText: generated?.source ?? originalText,
             generatedText: generated?.text,
             finalText: resultText,
@@ -372,7 +409,9 @@ final class FloatingPanelViewModel {
         onOpenModelSettings?()
     }
 
-    private func runPrefetch(for result: TextCaptureService.CaptureResult) async {
+    private func runPrefetch(
+        for result: TextCaptureService.CaptureResult, key: WritingRequestKey, basePrompt: String
+    ) async {
         do {
             try await ensureLocalServerIfNeeded()
         } catch {
@@ -391,7 +430,7 @@ final class FloatingPanelViewModel {
 
         do {
             let config = try settings.runtimeConfig()
-            let personalized = await personalize(prefetchSystemPrompt, for: result.text, mode: settings.lastMode)
+            let personalized = await personalize(basePrompt, for: result.text, mode: key.mode, tone: key.tone)
             // More typing cancels this prefetch; do not send the model a request for stale text.
             if Task.isCancelled { return }
             prefetchUsedMemoryIDs = personalized.usedMemoryIDs
@@ -429,7 +468,7 @@ final class FloatingPanelViewModel {
                 errorMessage = prefetchBuffer.isEmpty ? (prefetchError ?? String(localized: "沒有收到建議。")) : nil
                 if errorMessage == nil {
                     generated = GeneratedSuggestion(
-                        source: result.text, text: prefetchBuffer, mode: settings.lastMode,
+                        source: result.text, text: prefetchBuffer, mode: key.mode, tone: key.tone,
                         usedMemoryIDs: personalized.usedMemoryIDs
                     )
                     scheduleTranslationOfResult()
@@ -482,7 +521,7 @@ final class FloatingPanelViewModel {
         originalText = ""
         statusNote = nil
         isAutoSuggestSession = false
-        mode = settings.lastMode
+        loadSelectionFromSettings()
         usedClipboardFallback = false
         if let captured {
             originalText = captured.text
@@ -611,6 +650,7 @@ final class FloatingPanelViewModel {
         settings.lastMode = mode
         let generationSource = originalText
         let generationMode = mode
+        let generationTone = tone
         errorMessage = nil
         resultText = ""
         generated = nil
@@ -624,12 +664,13 @@ final class FloatingPanelViewModel {
             let effort: ReasoningEffort = forceLowReasoning ? .low : settings.reasoningEffort
             let systemPrompt: String
             if forceLowReasoning {
-                systemPrompt = settings.effectiveSystemPrompt(for: mode)
-                    + "\n回覆只要修正後的全文，不要解釋。"
+                systemPrompt = Self.terseSystemPrompt(
+                    settings.effectiveSystemPrompt(for: generationMode, tone: generationTone)
+                )
             } else {
-                systemPrompt = settings.effectiveSystemPrompt(for: mode)
+                systemPrompt = settings.effectiveSystemPrompt(for: generationMode, tone: generationTone)
             }
-            let personalized = await personalize(systemPrompt, for: generationSource, mode: generationMode)
+            let personalized = await personalize(systemPrompt, for: generationSource, mode: generationMode, tone: generationTone)
             if Task.isCancelled { return }
             usedMemoryIDs = personalized.usedMemoryIDs
             let request = ChatRequest(
@@ -658,7 +699,8 @@ final class FloatingPanelViewModel {
         }
         if !Task.isCancelled, errorMessage == nil, !resultText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             generated = GeneratedSuggestion(
-                source: generationSource, text: resultText, mode: generationMode, usedMemoryIDs: usedMemoryIDs
+                source: generationSource, text: resultText, mode: generationMode, tone: generationTone,
+                usedMemoryIDs: usedMemoryIDs
             )
             scheduleTranslationOfResult()
         }

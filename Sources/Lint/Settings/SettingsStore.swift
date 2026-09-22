@@ -26,6 +26,8 @@ final class SettingsStore {
         static let customPrompt = "app.lint.customPrompt"
         static let translateTarget = "app.lint.translateTarget"
         static let lastMode = "app.lint.lastMode"
+        static let proofreadTone = "app.lint.lastTone.proofread"
+        static let translateTone = "app.lint.lastTone.translate"
         static let reasoningEffort = "app.lint.reasoningEffort"
         static let autoSuggestOnSelection = "app.lint.autoSuggestOnSelection"
         static let liveWatchWhileTyping = "app.lint.liveWatchWhileTyping"
@@ -40,6 +42,7 @@ final class SettingsStore {
         static let localManagedModelID = "app.lint.localServer.managedModelID"
         static let migratedManagedModel = "app.lint.localServer.migratedManagedModel"
         static let migratedOffRetiredDefault = "app.lint.localServer.migratedOffRetiredDefault"
+        static let migratedWritingTone = "app.lint.migratedWritingTone"
         static let localAISetupDeferred = "app.lint.localAI.setupDeferred"
         /// Legacy: the `-hf` spec now lives in `model(.localLlama)`; only read by the migration.
         static let localServerHFModel = "app.lint.localServer.hfModel"
@@ -80,7 +83,8 @@ final class SettingsStore {
     }
     /// The choice in effect for this run; differs from `appLanguage` once a restart is pending.
     let launchAppLanguage: AppLanguage
-    /// Per-mode full system prompt overrides. Empty / missing → built-in default.
+    /// Full system prompt overrides, one per mode and tone (`WritingPromptComposer.overrideKey`).
+    /// Empty / missing → built-in default.
     var systemPromptOverrides: [String: String] {
         didSet { defaults.set(systemPromptOverrides, forKey: Keys.systemPromptOverrides) }
     }
@@ -89,6 +93,13 @@ final class SettingsStore {
     }
     var lastMode: WritingMode {
         didSet { defaults.set(lastMode.rawValue, forKey: Keys.lastMode) }
+    }
+    /// The tone each task remembers for itself; a custom prompt has none.
+    var tones: WritingToneMemory {
+        didSet {
+            defaults.set(tones.tone(for: .proofread).rawValue, forKey: Keys.proofreadTone)
+            defaults.set(tones.tone(for: .translate).rawValue, forKey: Keys.translateTone)
+        }
     }
     var reasoningEffort: ReasoningEffort {
         didSet { defaults.set(reasoningEffort.rawValue, forKey: Keys.reasoningEffort) }
@@ -173,6 +184,10 @@ final class SettingsStore {
             Self.migrateOffRetiredDefault(defaults)
             defaults.set(true, forKey: Keys.migratedOffRetiredDefault)
         }
+        if !defaults.bool(forKey: Keys.migratedWritingTone) {
+            Self.migrateToWritingTone(defaults)
+            defaults.set(true, forKey: Keys.migratedWritingTone)
+        }
         var kind = ProviderKind(rawValue: defaults.string(forKey: Keys.provider) ?? "") ?? .localLlama
         if !kind.isEnabled {
             kind = .localLlama
@@ -185,7 +200,11 @@ final class SettingsStore {
         systemPromptOverrides =
             defaults.dictionary(forKey: Keys.systemPromptOverrides) as? [String: String] ?? [:]
         translateTarget = defaults.string(forKey: Keys.translateTarget) ?? "繁體中文"
-        lastMode = WritingMode(rawValue: defaults.string(forKey: Keys.lastMode) ?? "") ?? .proofread
+        lastMode = LegacyWritingMode.resolve(defaults.string(forKey: Keys.lastMode) ?? "")?.mode ?? .proofread
+        tones = WritingToneMemory(
+            proofread: WritingTone(rawValue: defaults.string(forKey: Keys.proofreadTone) ?? "") ?? .preserve,
+            translate: WritingTone(rawValue: defaults.string(forKey: Keys.translateTone) ?? "") ?? .preserve
+        )
         reasoningEffort = ReasoningEffort(rawValue: defaults.string(forKey: Keys.reasoningEffort) ?? "") ?? .low
         if defaults.object(forKey: Keys.autoSuggestOnSelection) == nil {
             autoSuggestOnSelection = true
@@ -285,6 +304,22 @@ final class SettingsStore {
         defaults.removeObject(forKey: Keys.model(.localLlama))
     }
 
+    /// Tone used to be three modes of its own. What was stored as one becomes proofreading in that tone,
+    /// and the prompt overrides follow (see `WritingSettingsMigration`). A tone that is already set is
+    /// not overwritten.
+    private static func migrateToWritingTone(_ defaults: UserDefaults) {
+        if let stored = defaults.string(forKey: Keys.lastMode) {
+            let migrated = WritingSettingsMigration.migrateLastMode(stored)
+            defaults.set(migrated.mode.rawValue, forKey: Keys.lastMode)
+            if let tone = migrated.proofreadTone, defaults.string(forKey: Keys.proofreadTone) == nil {
+                defaults.set(tone.rawValue, forKey: Keys.proofreadTone)
+            }
+        }
+        if let overrides = defaults.dictionary(forKey: Keys.systemPromptOverrides) as? [String: String] {
+            defaults.set(WritingSettingsMigration.migrateOverrides(overrides), forKey: Keys.systemPromptOverrides)
+        }
+    }
+
     func selectProvider(_ kind: ProviderKind) {
         guard kind.isEnabled else { return }
         providerKind = kind
@@ -317,38 +352,50 @@ final class SettingsStore {
     }
 
 
-    func defaultSystemPrompt(for mode: WritingMode) -> String {
-        mode.systemPrompt(customPrompt: customPrompt, translateTarget: translateTarget)
+    func tone(for mode: WritingMode) -> WritingTone {
+        tones.tone(for: mode)
     }
 
-    func effectiveSystemPrompt(for mode: WritingMode) -> String {
-        if let override = systemPromptOverrides[mode.rawValue] {
+    func setTone(_ tone: WritingTone, for mode: WritingMode) {
+        tones.set(tone, for: mode)
+    }
+
+    func defaultSystemPrompt(for mode: WritingMode, tone: WritingTone) -> String {
+        WritingPromptComposer.compose(
+            mode: mode, tone: tone, customPrompt: customPrompt, translateTarget: translateTarget
+        )
+    }
+
+    func effectiveSystemPrompt(for mode: WritingMode, tone: WritingTone) -> String {
+        if let override = systemPromptOverrides[WritingPromptComposer.overrideKey(mode: mode, tone: tone)] {
             let trimmed = override.trimmingCharacters(in: .whitespacesAndNewlines)
             if !trimmed.isEmpty { return override }
         }
-        return defaultSystemPrompt(for: mode)
+        return defaultSystemPrompt(for: mode, tone: tone)
     }
 
-    func isSystemPromptOverridden(for mode: WritingMode) -> Bool {
-        guard let override = systemPromptOverrides[mode.rawValue] else { return false }
+    func isSystemPromptOverridden(for mode: WritingMode, tone: WritingTone) -> Bool {
+        guard let override = systemPromptOverrides[WritingPromptComposer.overrideKey(mode: mode, tone: tone)]
+        else { return false }
         return !override.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
-    func setSystemPromptOverride(_ text: String, for mode: WritingMode) {
+    func setSystemPromptOverride(_ text: String, for mode: WritingMode, tone: WritingTone) {
         var copy = systemPromptOverrides
+        let key = WritingPromptComposer.overrideKey(mode: mode, tone: tone)
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        let builtIn = defaultSystemPrompt(for: mode)
+        let builtIn = defaultSystemPrompt(for: mode, tone: tone)
         if trimmed.isEmpty || text == builtIn {
-            copy.removeValue(forKey: mode.rawValue)
+            copy.removeValue(forKey: key)
         } else {
-            copy[mode.rawValue] = text
+            copy[key] = text
         }
         systemPromptOverrides = copy
     }
 
-    func resetSystemPromptOverride(for mode: WritingMode) {
+    func resetSystemPromptOverride(for mode: WritingMode, tone: WritingTone) {
         var copy = systemPromptOverrides
-        copy.removeValue(forKey: mode.rawValue)
+        copy.removeValue(forKey: WritingPromptComposer.overrideKey(mode: mode, tone: tone))
         systemPromptOverrides = copy
     }
 

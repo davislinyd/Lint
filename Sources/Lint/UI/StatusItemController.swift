@@ -18,6 +18,9 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             button.toolTip = "Lint"
         }
         menu.delegate = self
+        // The Tone submenu is switched off while a custom prompt is the mode, and it is the only item
+        // that ever is (the others are enabled, or disabled on purpose).
+        menu.autoenablesItems = false
         statusItem.menu = menu
         rebuild()
     }
@@ -37,6 +40,13 @@ final class StatusItemController: NSObject, NSMenuDelegate {
               let mode = WritingMode(rawValue: raw)
         else { return }
         app.settings.lastMode = mode
+    }
+
+    @objc private func selectTone(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String,
+              let tone = WritingTone(rawValue: raw)
+        else { return }
+        app.settings.setTone(tone, for: app.settings.lastMode)
     }
 
     @objc private func promptAccess() {
@@ -77,6 +87,21 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         let modeRoot = NSMenuItem(title: String(localized: "模式"), action: nil, keyEquivalent: "")
         menu.addItem(modeRoot)
         menu.setSubmenu(modeMenu, for: modeRoot)
+
+        let currentMode = app.settings.lastMode
+        let currentTone = app.settings.tone(for: currentMode)
+        let toneMenu = NSMenu(title: String(localized: "語氣"))
+        for tone in WritingTone.allCases {
+            let item = NSMenuItem(title: tone.title, action: #selector(selectTone(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = tone.rawValue
+            item.state = currentMode.supportsTone && currentTone == tone ? .on : .off
+            toneMenu.addItem(item)
+        }
+        let toneRoot = NSMenuItem(title: String(localized: "語氣"), action: nil, keyEquivalent: "")
+        toneRoot.isEnabled = currentMode.supportsTone
+        menu.addItem(toneRoot)
+        menu.setSubmenu(toneMenu, for: toneRoot)
 
         menu.addItem(.separator())
 

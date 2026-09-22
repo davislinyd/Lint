@@ -4,9 +4,10 @@ import SwiftUI
 struct PromptSettingsPane: View {
     var app: AppModel
     @State private var mode: WritingMode = .proofread
+    @State private var tone: WritingTone = .preserve
 
     private var isOverridden: Bool {
-        app.settings.isSystemPromptOverridden(for: mode)
+        app.settings.isSystemPromptOverridden(for: mode, tone: tone)
     }
 
     var body: some View {
@@ -19,6 +20,15 @@ struct PromptSettingsPane: View {
                 }
                 .pickerStyle(.menu)
                 .fixedSize()
+                if mode.supportsTone {
+                    Picker("語氣", selection: $tone) {
+                        ForEach(WritingTone.allCases) { tone in
+                            Text(tone.title).tag(tone)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .fixedSize()
+                }
                 Spacer()
                 HStack(spacing: 6) {
                     StatusDot(color: isOverridden ? .orange : .green)
@@ -51,12 +61,12 @@ struct PromptSettingsPane: View {
                 CodeEditor(text: systemPromptBinding)
                     .frame(minHeight: 160, maxHeight: .infinity)
                 HStack {
-                    Text("每個模式可分開覆寫，改完即生效。")
+                    Text("每個模式與語氣組合可分開覆寫，改完即生效。")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     Spacer()
                     Button("恢復內建預設") {
-                        app.settings.resetSystemPromptOverride(for: mode)
+                        app.settings.resetSystemPromptOverride(for: mode, tone: tone)
                     }
                     .disabled(!isOverridden)
                 }
@@ -67,8 +77,8 @@ struct PromptSettingsPane: View {
 
     private var systemPromptBinding: Binding<String> {
         Binding(
-            get: { app.settings.effectiveSystemPrompt(for: mode) },
-            set: { app.settings.setSystemPromptOverride($0, for: mode) }
+            get: { app.settings.effectiveSystemPrompt(for: mode, tone: tone) },
+            set: { app.settings.setSystemPromptOverride($0, for: mode, tone: tone) }
         )
     }
 }

@@ -27,7 +27,8 @@ struct MemoryConsolidator: Sendable {
         guard let synthesis else { return nil }
         let sources = cluster.members.map { memory in
             SynthesisSource(
-                id: memory.id, kind: memory.kind, language: memory.language, mode: memory.modeScope,
+                id: memory.id, kind: memory.kind, language: memory.language,
+                mode: memory.modeScope, tone: memory.toneScope,
                 instruction: memory.instruction, triggers: memory.triggers,
                 confidence: memory.confidence(at: now), occurrenceCount: memory.occurrenceCount
             )
@@ -40,7 +41,8 @@ struct MemoryConsolidator: Sendable {
                 return ConsolidationProposal(
                     parentDedupKey: Self.synthesizedKey(cluster: cluster),
                     sourceIDs: cluster.members.map(\.id),
-                    kind: cluster.kind, language: cluster.language, modeScope: cluster.modeScope,
+                    kind: cluster.kind, language: cluster.language,
+                    modeScope: cluster.modeScope, toneScope: cluster.toneScope,
                     targetLevel: .generalized, instruction: instruction, triggers: triggers,
                     origin: .synthesized
                 )
@@ -59,7 +61,8 @@ struct MemoryConsolidator: Sendable {
             return ConsolidationProposal(
                 parentDedupKey: Self.parentKey(family: family, cluster: cluster),
                 sourceIDs: cluster.members.map(\.id),
-                kind: cluster.kind, language: cluster.language, modeScope: cluster.modeScope,
+                kind: cluster.kind, language: cluster.language,
+                modeScope: cluster.modeScope, toneScope: cluster.toneScope,
                 targetLevel: .generalized,
                 instruction: Self.redundantPrepositionInstruction,
                 triggers: [],
@@ -89,7 +92,9 @@ struct MemoryConsolidator: Sendable {
     }
 
     private static func scopedKey(_ prefix: String, cluster: MemoryCluster) -> String {
-        [prefix, cluster.kind.rawValue, cluster.language, cluster.modeScope?.rawValue]
-            .compactMap { $0 }.joined(separator: ":")
+        [
+            prefix, cluster.kind.rawValue, cluster.language,
+            MemoryScope.keySegment(mode: cluster.modeScope, tone: cluster.toneScope),
+        ].compactMap { $0 }.joined(separator: ":")
     }
 }

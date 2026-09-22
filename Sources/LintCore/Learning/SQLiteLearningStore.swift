@@ -124,7 +124,78 @@ struct SQLiteLearningStore: LearningStore {
                 t.column("created_at", .double).notNull()
             }
         }
+        // Tone became a setting of its own: a memory may be scoped to one (`tone_scope`, nil for all)
+        // and an event says which one was asked for. What used to be a tone *mode* is proofreading in
+        // that tone. Every new column has a default, so an existing database loads as it was; nothing
+        // is deleted. The literals are the ones of this version on purpose: a migration must not
+        // change when the app's own names do.
+        migrator.registerMigration("v4_writing_tone") { db in
+            try db.alter(table: "writing_memory") { t in
+                t.add(column: "tone_scope", .text)
+            }
+            try db.alter(table: "feedback_event") { t in
+                t.add(column: "tone", .text).notNull().defaults(to: "preserve")
+            }
+            for (legacy, tone) in Self.legacyTones {
+                try db.execute(
+                    sql: "UPDATE writing_memory SET mode_scope = 'proofread', tone_scope = ? WHERE mode_scope = ?",
+                    arguments: [tone, legacy]
+                )
+                try db.execute(
+                    sql: "UPDATE feedback_event SET mode = 'proofread', tone = ? WHERE mode = ?",
+                    arguments: [tone, legacy]
+                )
+            }
+            try Self.rewriteLegacyKeys(db, table: "writing_memory", keyColumn: "dedup_key")
+            try Self.rewriteLegacyKeys(db, table: "dream_veto", keyColumn: "dedup_key")
+        }
         return migrator
+    }
+
+    /// The old tone modes, and the tone each one is proofreading in.
+    private static let legacyTones = [
+        ("toneFormal", "formal"), ("toneConcise", "concise"), ("toneProfessional", "professional"),
+    ]
+
+    /// A key that names an old tone mode as its scope now names proofreading in that tone, so that a
+    /// pattern learned before matches the same pattern learned after (and a pattern the user vetoed
+    /// stays vetoed). A key whose new form is taken already is left as it is: nothing is merged or
+    /// deleted, and the unique index cannot be broken.
+    private static func rewriteLegacyKeys(_ db: Database, table: String, keyColumn: String) throws {
+        for old in try String.fetchAll(db, sql: "SELECT \(keyColumn) FROM \(table)") {
+            guard let new = rewrittenKey(old) else { continue }
+            let taken = try Bool.fetchOne(
+                db, sql: "SELECT EXISTS(SELECT 1 FROM \(table) WHERE \(keyColumn) = ?)", arguments: [new]
+            ) ?? false
+            if taken {
+                NSLog("Lint learning: kept a memory key of an older version, its new form is in use")
+                continue
+            }
+            try db.execute(sql: "UPDATE \(table) SET \(keyColumn) = ? WHERE \(keyColumn) = ?", arguments: [new, old])
+        }
+    }
+
+    /// `style:en:toneFormal:a>b` → `style:en:proofread|formal:a>b`, and the same for a `dream:` key,
+    /// which names its scope as a part of its own. Nil for a key with nothing to rewrite.
+    static func rewrittenKey(_ key: String) -> String? {
+        var parts = key.split(separator: ":", omittingEmptySubsequences: false).map(String.init)
+        let scoped = ["vocabulary", "style", "terminology"]
+        let candidates: Range<Int>
+        if let kind = parts.first, scoped.contains(kind), parts.count >= 4 {
+            candidates = 2..<3
+        } else if parts.first == "dream", parts.count > 2 {
+            candidates = 2..<parts.count
+        } else {
+            return nil
+        }
+        var changed = false
+        for index in candidates {
+            if let tone = legacyTones.first(where: { $0.0 == parts[index] })?.1 {
+                parts[index] = "proofread|\(tone)"
+                changed = true
+            }
+        }
+        return changed ? parts.joined(separator: ":") : nil
     }
 
     func saveMemory(_ memory: WritingMemory) async throws {
@@ -439,6 +510,7 @@ private struct MemoryRecord: FetchableRecord, PersistableRecord {
         let kind: String = row["kind"]
         let state: String = row["state"]
         let modeScope: String? = row["mode_scope"]
+        let toneScope: String? = row["tone_scope"]
         let triggers: String = row["triggers"]
         let level: String = row["level"]
         let supersededBy: String? = row["superseded_by"]
@@ -459,11 +531,20 @@ private struct MemoryRecord: FetchableRecord, PersistableRecord {
         let lastUsedAt: Double? = row["last_used_at"]
         let lastConsolidatedAt: Double? = row["last_consolidated_at"]
         var scope: WritingMode?
+        var tone: WritingTone?
         if let modeScope {
-            guard let mode = WritingMode(rawValue: modeScope) else {
+            // A build from before tone was a setting can still write an old tone mode here.
+            guard let resolved = LegacyWritingMode.resolve(modeScope) else {
                 throw LearningStoreError.invalidRow("writing_memory.mode_scope \(modeScope)")
             }
-            scope = mode
+            scope = resolved.mode
+            tone = resolved.tone == .preserve ? nil : resolved.tone
+        }
+        if let toneScope {
+            guard let parsed = WritingTone(rawValue: toneScope) else {
+                throw LearningStoreError.invalidRow("writing_memory.tone_scope \(toneScope)")
+            }
+            tone = parsed
         }
         memory = WritingMemory(
             id: uuid,
@@ -471,6 +552,7 @@ private struct MemoryRecord: FetchableRecord, PersistableRecord {
             kind: kind,
             language: row["language"],
             modeScope: scope,
+            toneScope: tone,
             triggers: try JSONDecoder().decode([String].self, from: Data(triggers.utf8)),
             instruction: row["instruction"],
             evidenceScore: row["evidence_score"],
@@ -495,6 +577,7 @@ private struct MemoryRecord: FetchableRecord, PersistableRecord {
         container["kind"] = memory.kind.rawValue
         container["language"] = memory.language
         container["mode_scope"] = memory.modeScope?.rawValue
+        container["tone_scope"] = memory.toneScope?.rawValue
         container["triggers"] = String(decoding: try JSONEncoder().encode(memory.triggers), as: UTF8.self)
         container["instruction"] = memory.instruction
         container["evidence_score"] = memory.evidenceScore
@@ -567,10 +650,12 @@ private struct EventRecord: FetchableRecord, PersistableRecord {
     init(row: Row) throws {
         let id: String = row["id"]
         let mode: String = row["mode"]
+        let tone: String = row["tone"]
         let action: String = row["action"]
         let usedIDs: String = row["used_memory_ids"]
         guard let uuid = UUID(uuidString: id),
-              let mode = WritingMode(rawValue: mode),
+              let resolved = LegacyWritingMode.resolve(mode),
+              let storedTone = WritingTone(rawValue: tone),
               let action = FeedbackAction(rawValue: action)
         else {
             throw LearningStoreError.invalidRow("feedback_event \(id)")
@@ -578,7 +663,9 @@ private struct EventRecord: FetchableRecord, PersistableRecord {
         event = FeedbackEvent(
             id: uuid,
             createdAt: Date(timeIntervalSince1970: row["created_at"]),
-            mode: mode,
+            mode: resolved.mode,
+            // An old tone mode written by a build from before tone was a setting carries its tone.
+            tone: resolved.tone == .preserve ? storedTone : resolved.tone,
             action: action,
             sourceHMAC: row["source_hmac"],
             suggestionHMAC: row["suggestion_hmac"],
@@ -593,6 +680,7 @@ private struct EventRecord: FetchableRecord, PersistableRecord {
         container["id"] = event.id.uuidString
         container["created_at"] = event.createdAt.timeIntervalSince1970
         container["mode"] = event.mode.rawValue
+        container["tone"] = event.tone.rawValue
         container["action"] = event.action.rawValue
         container["source_hmac"] = event.sourceHMAC
         container["suggestion_hmac"] = event.suggestionHMAC

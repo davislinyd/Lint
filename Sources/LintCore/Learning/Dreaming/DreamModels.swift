@@ -93,7 +93,8 @@ enum MemoryFamily: String, Sendable, CaseIterable {
 
     static func of(_ memory: WritingMemory) -> MemoryFamily? {
         guard memory.level == .specific, memory.kind == .grammar, memory.language == "en",
-              memory.modeScope == nil, memory.dedupKey.hasPrefix(redundantPrepositionPrefix)
+              memory.modeScope == nil, memory.toneScope == nil,
+              memory.dedupKey.hasPrefix(redundantPrepositionPrefix)
         else { return nil }
         let words = memory.dedupKey.dropFirst(redundantPrepositionPrefix.count)
             .split(separator: " ", omittingEmptySubsequences: false)
@@ -144,6 +145,7 @@ struct MemoryCluster: Sendable, Equatable {
     var language: String
     var kind: MemoryKind
     var modeScope: WritingMode?
+    var toneScope: WritingTone?
     /// Most important first.
     var members: [WritingMemory]
 }
@@ -163,6 +165,7 @@ struct ConsolidationProposal: Sendable, Equatable {
     var kind: MemoryKind
     var language: String
     var modeScope: WritingMode?
+    var toneScope: WritingTone?
     var targetLevel: MemoryLevel
     var instruction: String
     var triggers: [String]
@@ -178,6 +181,7 @@ struct SynthesisSource: Sendable, Equatable {
     var kind: MemoryKind
     var language: String
     var mode: WritingMode?
+    var tone: WritingTone?
     var instruction: String
     var triggers: [String]
     var confidence: Double

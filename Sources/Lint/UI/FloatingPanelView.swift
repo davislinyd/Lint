@@ -24,6 +24,15 @@ struct FloatingPanelView: View {
                 }
                 .pickerStyle(.menu)
                 .frame(maxWidth: 240)
+                if viewModel.mode.supportsTone {
+                    Picker("語氣", selection: $viewModel.tone) {
+                        ForEach(WritingTone.allCases) { tone in
+                            Text(tone.title).tag(tone)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .frame(maxWidth: 180)
+                }
                 Spacer()
                 if viewModel.isStreaming {
                     ProgressView()

@@ -14,7 +14,8 @@ final class LearningStoreTests: XCTestCase {
     private func memory(
         key: String = "spelling:en:prospective>perspective",
         state: MemoryState = .candidate,
-        modeScope: WritingMode? = nil
+        modeScope: WritingMode? = nil,
+        toneScope: WritingTone? = nil
     ) -> WritingMemory {
         WritingMemory(
             id: UUID(),
@@ -22,6 +23,7 @@ final class LearningStoreTests: XCTestCase {
             kind: .spelling,
             language: "en",
             modeScope: modeScope,
+            toneScope: toneScope,
             triggers: ["prospective"],
             instruction: "Check whether \"perspective\" was meant.",
             evidenceScore: 0.35,
@@ -33,11 +35,15 @@ final class LearningStoreTests: XCTestCase {
         )
     }
 
-    private func event(at seconds: TimeInterval, action: FeedbackAction = .accepted) -> FeedbackEvent {
+    private func event(
+        at seconds: TimeInterval, action: FeedbackAction = .accepted, mode: WritingMode = .proofread,
+        tone: WritingTone = .preserve
+    ) -> FeedbackEvent {
         FeedbackEvent(
             id: UUID(),
             createdAt: Date(timeIntervalSince1970: seconds),
-            mode: .proofread,
+            mode: mode,
+            tone: tone,
             action: action,
             sourceHMAC: "src",
             suggestionHMAC: "sug",
@@ -391,7 +397,8 @@ final class LearningStoreTests: XCTestCase {
         XCTAssertEqual(memory.evidenceScore, 1.4)
         XCTAssertEqual(memory.occurrenceCount, 4)
         XCTAssertEqual(memory.state, .pinned)
-        XCTAssertEqual(memory.modeScope, .toneFormal)
+        XCTAssertEqual(memory.modeScope, .proofread, "an old tone mode is proofreading in that tone")
+        XCTAssertEqual(memory.toneScope, .formal)
         XCTAssertTrue(memory.userEdited)
         XCTAssertEqual(memory.triggers, ["discuss about"])
     }
@@ -439,6 +446,222 @@ final class LearningStoreTests: XCTestCase {
         older.registerMigration("v2_drop_examples") { _ in }
         let queue = try DatabaseQueue(path: url.path)
         XCTAssertNoThrow(try older.migrate(queue))
+    }
+
+    func testADatabaseWithTheToneMigrationStillOpensForABuildThatKnowsOnlyDreaming() throws {
+        let (_, url) = try makeFileStore()
+        var dreaming = DatabaseMigrator()
+        for name in ["v1_learning", "v2_drop_examples", "v3_dreaming"] {
+            dreaming.registerMigration(name) { _ in }
+        }
+        let queue = try DatabaseQueue(path: url.path)
+        XCTAssertNoThrow(try dreaming.migrate(queue), "the installed build shares this file")
+    }
+
+    // MARK: tone
+
+    func testAToneScopeAndAnEventsToneRoundTrip() async throws {
+        let (store, url) = try makeFileStore()
+        let saved = memory(modeScope: .proofread, toneScope: .professional)
+        try await store.saveMemory(saved)
+        let loaded = try await store.memory(id: saved.id)
+        XCTAssertEqual(loaded, saved)
+        XCTAssertEqual(loaded?.toneScope, .professional)
+
+        try await store.insertEvent(event(at: 1, mode: .translate, tone: .formal), unlessDuplicateWithin: nil)
+        let queue = try DatabaseQueue(path: url.path)
+        let stored = try await queue.read { db in
+            try String.fetchOne(db, sql: "SELECT mode || '/' || tone FROM feedback_event")
+        }
+        XCTAssertEqual(stored, "translate/formal")
+    }
+
+    /// A database as version 0.3.0 leaves it: memories and events that name an old tone mode.
+    private func makeDatabaseFromBeforeTone(at url: URL, extra: @escaping @Sendable (Database) throws -> Void = { _ in }) async throws {
+        let queue = try DatabaseQueue(path: url.path)
+        try SQLiteLearningStore.migrator.migrate(queue, upTo: "v3_dreaming")
+        try await queue.write { db in
+            func memory(_ key: String, _ mode: String?, kind: String = "style", level: String = "specific") throws {
+                try db.execute(
+                    sql: """
+                    INSERT INTO writing_memory (id, dedup_key, kind, language, mode_scope, triggers, instruction,
+                        evidence_score, occurrence_count, state, user_edited, created_at, last_confirmed_at, level)
+                    VALUES (?, ?, ?, 'en', ?, '[]', 'Old rule.', 1.4, 4, 'active', 0, 1700000000, 1700000500, ?)
+                    """,
+                    arguments: [UUID().uuidString, key, kind, mode, level]
+                )
+            }
+            try memory("grammar:en:articles", nil, kind: "grammar")
+            try memory("terminology:zh-Hant:translate:軟件>軟體", "translate", kind: "terminology")
+            try memory("style:en:toneFormal:need to>should", "toneFormal")
+            try memory("vocabulary:en:toneConcise:large>huge", "toneConcise", kind: "vocabulary")
+            try memory("vocabulary:en:toneProfessional:big>large", "toneProfessional", kind: "vocabulary")
+            try memory("dream:redundant-preposition:grammar:en", nil, kind: "grammar", level: "generalized")
+            try memory("dream:synthesized:style:en:toneFormal:abc123", "toneFormal", level: "generalized")
+            for (index, mode) in ["proofread", "translate", "toneFormal", "toneConcise", "toneProfessional", "custom"].enumerated() {
+                try db.execute(
+                    sql: """
+                    INSERT INTO feedback_event (id, created_at, mode, action, source_hmac, provider, model, used_memory_ids)
+                    VALUES (?, ?, ?, 'accepted', 'src', 'localLlama', 'qwen', '[]')
+                    """,
+                    arguments: [UUID().uuidString, 1_700_000_000 + index, mode]
+                )
+            }
+            for key in ["dream:redundant-preposition:grammar:en", "dream:synthesized:style:en:toneProfessional:def456"] {
+                try db.execute(sql: "INSERT INTO dream_veto (dedup_key, created_at) VALUES (?, 1700000000)", arguments: [key])
+            }
+            try extra(db)
+        }
+    }
+
+    func testADatabaseFromBeforeToneUpgradesAndKeepsEveryMemory() async throws {
+        let url = try makeTempDirectory().appendingPathComponent("LintLearning.sqlite")
+        try await makeDatabaseFromBeforeTone(at: url)
+
+        let store = try SQLiteLearningStore(url: url)
+        let memories = try await store.memories()
+        XCTAssertEqual(memories.count, 7, "nothing is deleted")
+
+        func scope(_ key: String) -> [AnyHashable?]? {
+            memories.first { $0.dedupKey == key }.map { [$0.modeScope, $0.toneScope] as [AnyHashable?] }
+        }
+        XCTAssertEqual(scope("grammar:en:articles"), [nil, nil])
+        XCTAssertEqual(scope("terminology:zh-Hant:translate:軟件>軟體"), [WritingMode.translate, nil])
+        XCTAssertEqual(scope("style:en:proofread|formal:need to>should"), [WritingMode.proofread, WritingTone.formal])
+        XCTAssertEqual(scope("vocabulary:en:proofread|concise:large>huge"), [WritingMode.proofread, WritingTone.concise])
+        XCTAssertEqual(
+            scope("vocabulary:en:proofread|professional:big>large"), [WritingMode.proofread, WritingTone.professional]
+        )
+        XCTAssertEqual(scope("dream:redundant-preposition:grammar:en"), [nil, nil], "a global derived memory is untouched")
+        XCTAssertEqual(
+            scope("dream:synthesized:style:en:proofread|formal:abc123"), [WritingMode.proofread, WritingTone.formal]
+        )
+        XCTAssertTrue(memories.allSatisfy { $0.state == .active && $0.occurrenceCount == 4 })
+    }
+
+    func testAMemoryOfBeforeToneIsTheSameMemoryAsTheOneLearnedNow() async throws {
+        let url = try makeTempDirectory().appendingPathComponent("LintLearning.sqlite")
+        try await makeDatabaseFromBeforeTone(at: url)
+        let store = try SQLiteLearningStore(url: url)
+
+        // What the extractor makes of a user's edit under proofreading in a professional tone.
+        let feedback = LearningFeedback(
+            gesture: .replaced, mode: .proofread, tone: .professional, originalText: "I need a big house",
+            generatedText: "I need a large house", finalText: "I need a huge house", provider: "p", model: "m"
+        )
+        let candidate = try XCTUnwrap(MemoryExtractor().candidates(from: feedback, action: .editedAndAccepted).first)
+        XCTAssertEqual(candidate.dedupKey, "vocabulary:en:proofread|professional:large>huge")
+        let bigToLarge = "vocabulary:en:proofread|professional:big>large"
+        let existing = try await store.memory(dedupKey: bigToLarge)
+        XCTAssertNotNil(existing, "the key of a memory learned before is the key the extractor writes now")
+
+        let before = try await store.memories().count
+        try await store.mergeMemory(dedupKey: bigToLarge) { existing in
+            var memory = existing ?? WritingMemory(
+                id: UUID(), dedupKey: bigToLarge, kind: .vocabulary, language: "en", modeScope: nil, triggers: [],
+                instruction: "", evidenceScore: 0, occurrenceCount: 0, state: .candidate, userEdited: false,
+                createdAt: Date(), lastConfirmedAt: Date()
+            )
+            memory.occurrenceCount += 1
+            return memory
+        }
+        let after = try await store.memories()
+        XCTAssertEqual(after.count, before, "no duplicate is made for a pattern that was learned before")
+        XCTAssertEqual(after.first { $0.dedupKey == bigToLarge }?.occurrenceCount, 5)
+    }
+
+    func testTheVetoesOfBeforeToneStillVetoTheSameDerivedMemories() async throws {
+        let url = try makeTempDirectory().appendingPathComponent("LintLearning.sqlite")
+        try await makeDatabaseFromBeforeTone(at: url)
+        let store = try SQLiteLearningStore(url: url)
+
+        let family = try await store.isVetoed(dedupKey: "dream:redundant-preposition:grammar:en")
+        XCTAssertTrue(family)
+        let rewritten = try await store.isVetoed(dedupKey: "dream:synthesized:style:en:proofread|professional:def456")
+        XCTAssertTrue(rewritten, "the veto follows the derived memory to its new key")
+        let old = try await store.isVetoed(dedupKey: "dream:synthesized:style:en:toneProfessional:def456")
+        XCTAssertFalse(old)
+        XCTAssertEqual(try count("dream_veto", in: url), 2)
+    }
+
+    func testTheEventsOfBeforeToneSayWhichToneWasAskedFor() async throws {
+        let url = try makeTempDirectory().appendingPathComponent("LintLearning.sqlite")
+        try await makeDatabaseFromBeforeTone(at: url)
+        _ = try SQLiteLearningStore(url: url)
+
+        let queue = try DatabaseQueue(path: url.path)
+        let pairs = try await queue.read { db in
+            try String.fetchAll(db, sql: "SELECT mode || '/' || tone FROM feedback_event ORDER BY created_at")
+        }
+        XCTAssertEqual(pairs, [
+            "proofread/preserve", "translate/preserve", "proofread/formal",
+            "proofread/concise", "proofread/professional", "custom/preserve",
+        ])
+    }
+
+    func testOpeningTheUpgradedDatabaseAgainChangesNothing() async throws {
+        let url = try makeTempDirectory().appendingPathComponent("LintLearning.sqlite")
+        try await makeDatabaseFromBeforeTone(at: url)
+        let first = try await SQLiteLearningStore(url: url).memories()
+        let second = try await SQLiteLearningStore(url: url).memories()
+        XCTAssertEqual(first, second)
+    }
+
+    func testAKeyWhoseNewFormIsTakenIsKeptAsItIsAndNothingIsLost() async throws {
+        let url = try makeTempDirectory().appendingPathComponent("LintLearning.sqlite")
+        try await makeDatabaseFromBeforeTone(at: url) { db in
+            try db.execute(
+                sql: """
+                INSERT INTO writing_memory (id, dedup_key, kind, language, mode_scope, triggers, instruction,
+                    evidence_score, occurrence_count, state, user_edited, created_at, last_confirmed_at)
+                VALUES (?, 'style:en:proofread|formal:need to>should', 'style', 'en', 'proofread', '[]', 'Taken.',
+                    1.4, 4, 'active', 0, 1700000000, 1700000500)
+                """,
+                arguments: [UUID().uuidString]
+            )
+        }
+
+        let store = try SQLiteLearningStore(url: url)
+        let memories = try await store.memories()
+        XCTAssertEqual(memories.count, 8, "no memory is merged away or deleted")
+        XCTAssertEqual(Set(memories.map(\.dedupKey)).count, 8)
+        let legacy = try XCTUnwrap(memories.first { $0.dedupKey == "style:en:toneFormal:need to>should" })
+        XCTAssertEqual(legacy.modeScope, .proofread, "its scope is migrated even when its key could not be")
+        XCTAssertEqual(legacy.toneScope, .formal)
+    }
+
+    func testAnOldToneModeWrittenAfterTheMigrationStillReads() async throws {
+        // The installed build shares this file and writes the old names.
+        let (store, url) = try makeFileStore()
+        let queue = try DatabaseQueue(path: url.path)
+        try await queue.write { db in
+            try db.execute(
+                sql: """
+                INSERT INTO writing_memory (id, dedup_key, kind, language, mode_scope, triggers, instruction,
+                    evidence_score, occurrence_count, state, user_edited, created_at, last_confirmed_at)
+                VALUES (?, 'style:en:toneConcise:a>b', 'style', 'en', 'toneConcise', '[]', 'Old build.',
+                    1.4, 4, 'active', 0, 1700000000, 1700000500)
+                """,
+                arguments: [UUID().uuidString]
+            )
+        }
+        let memories = try await store.memories()
+        XCTAssertEqual(memories.count, 1, "learning does not stop reading over an old name")
+        XCTAssertEqual(memories.first?.modeScope, .proofread)
+        XCTAssertEqual(memories.first?.toneScope, .concise)
+    }
+
+    func testTheKeyRewriteOnlyTouchesAToneModeInTheScopeOfAKey() {
+        let rewrite = SQLiteLearningStore.rewrittenKey
+        XCTAssertEqual(rewrite("style:en:toneFormal:a>b"), "style:en:proofread|formal:a>b")
+        XCTAssertEqual(rewrite("terminology:zh-Hant:toneProfessional:軟件>軟體"), "terminology:zh-Hant:proofread|professional:軟件>軟體")
+        XCTAssertEqual(rewrite("dream:synthesized:style:en:toneConcise:abc"), "dream:synthesized:style:en:proofread|concise:abc")
+        XCTAssertNil(rewrite("style:en:a>b"), "global")
+        XCTAssertNil(rewrite("terminology:zh-Hant:translate:軟件>軟體"), "a translation key was always in its final form")
+        XCTAssertNil(rewrite("spelling:en:toneformal>tonalformal"))
+        XCTAssertNil(rewrite("grammar:en:articles"))
+        XCTAssertNil(rewrite("dream:redundant-preposition:grammar:en"))
+        XCTAssertNil(rewrite("style:en:proofread|formal:a>b"), "already new")
     }
 
     func testDeletingAParentKeepsItsSourcesAndFreesThem() async throws {

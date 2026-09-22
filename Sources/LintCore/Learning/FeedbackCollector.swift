@@ -28,6 +28,7 @@ struct FeedbackCollector {
             id: UUID(),
             createdAt: now,
             mode: feedback.mode,
+            tone: feedback.tone,
             action: action,
             sourceHMAC: hmac(normalized(feedback.originalText)),
             suggestionHMAC: hmac(generatedText),

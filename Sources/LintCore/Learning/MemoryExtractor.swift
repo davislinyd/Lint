@@ -6,6 +6,7 @@ struct MemoryCandidate: Equatable, Sendable {
     var kind: MemoryKind
     var language: String
     var modeScope: WritingMode?
+    var toneScope: WritingTone?
     var triggers: [String]
     var instruction: String
 }
@@ -45,6 +46,7 @@ struct MemoryExtractor: Sendable {
 
     private struct Context {
         let mode: WritingMode
+        let tone: WritingTone
         /// The difference is the user's own choice (an edit of the suggestion), not a change the
         /// model made to the user's text.
         let userChoice: Bool
@@ -95,6 +97,7 @@ struct MemoryExtractor: Sendable {
         let source = trimmed(feedback.originalText)
         let context = Context(
             mode: feedback.mode,
+            tone: feedback.tone,
             userChoice: comparison.userChoice,
             sourceText: source,
             sourceTokens: comparison.userChoice ? DiffAnalyzer.tokens(in: source) : oldTokens,
@@ -167,8 +170,8 @@ struct MemoryExtractor: Sendable {
             result = final == suggestion ? (original, suggestion, false) : (suggestion, final, true)
         }
         // A tone change or a translation rewrites the text by design, so only the user's own
-        // edits say anything about them.
-        if !result.userChoice, feedback.mode != .proofread { return nil }
+        // edits say anything about them. Plain proofreading is the only task that is not one.
+        if !result.userChoice, !(feedback.mode == .proofread && feedback.tone == .preserve) { return nil }
         return result
     }
 
@@ -242,13 +245,13 @@ struct MemoryExtractor: Sendable {
     // MARK: building a candidate
 
     private func candidate(for pattern: Pattern, context: Context) -> MemoryCandidate? {
-        let scope = context.mode == .proofread ? nil : context.mode
+        let scope = MemoryScope.of(mode: context.mode, tone: context.tone)
 
         switch pattern {
         case .articles:
             return MemoryCandidate(
                 dedupKey: "grammar:en:articles",
-                kind: .grammar, language: "en", modeScope: nil, triggers: [],
+                kind: .grammar, language: "en", modeScope: nil, toneScope: nil, triggers: [],
                 instruction: "英文常漏用或誤用冠詞（a／an／the）：請特別檢查單數可數名詞前的冠詞。"
             )
 
@@ -256,7 +259,7 @@ struct MemoryExtractor: Sendable {
             let (wrong, right) = (old.key, new.key)
             return MemoryCandidate(
                 dedupKey: "spelling:en:\(wrong)>\(right)",
-                kind: .spelling, language: "en", modeScope: nil,
+                kind: .spelling, language: "en", modeScope: nil, toneScope: nil,
                 triggers: triggers(for: [old], context: context),
                 instruction: context.userChoice
                     ? "使用者偏好「\(right)」而非「\(wrong)」。"
@@ -267,7 +270,7 @@ struct MemoryExtractor: Sendable {
             let phrase = "\(verb.key) \(preposition.key)"
             return MemoryCandidate(
                 dedupKey: "grammar:en:\(phrase)",
-                kind: .grammar, language: "en", modeScope: nil,
+                kind: .grammar, language: "en", modeScope: nil, toneScope: nil,
                 triggers: triggers(for: [verb, preposition], context: context),
                 instruction: "「\(phrase)」中的「\(preposition.key)」有時是多餘的（使用者曾刪掉）；請確認是否應寫成「\(verb.key)」，僅在語意需要時修正。"
             )
@@ -279,7 +282,7 @@ struct MemoryExtractor: Sendable {
             let kind: MemoryKind = old.count == 1 && new.count == 1 ? .vocabulary : .style
             return MemoryCandidate(
                 dedupKey: Self.key(kind, "en", scope, "\(from)>\(to)"),
-                kind: kind, language: "en", modeScope: scope,
+                kind: kind, language: "en", modeScope: scope.mode, toneScope: scope.tone,
                 triggers: triggers(for: old, context: context),
                 instruction: context.userChoice
                     ? "使用者偏好用「\(to)」取代「\(from)」。"
@@ -293,7 +296,7 @@ struct MemoryExtractor: Sendable {
             let language = TextProfile.chineseVariant(of: context.newText) ?? "zh-Hant"
             return MemoryCandidate(
                 dedupKey: Self.key(.terminology, language, scope, "\(from)>\(to)"),
-                kind: .terminology, language: language, modeScope: scope,
+                kind: .terminology, language: language, modeScope: scope.mode, toneScope: scope.tone,
                 triggers: triggers(for: old, context: context),
                 instruction: "用詞：請用「\(to)」，不要用「\(from)」。"
             )
@@ -324,7 +327,10 @@ struct MemoryExtractor: Sendable {
         tokens.contains(where: \.isCJK) ? tokens.map(\.text).joined() : tokens.map(\.key).joined(separator: " ")
     }
 
-    private static func key(_ kind: MemoryKind, _ language: String, _ scope: WritingMode?, _ pattern: String) -> String {
-        [kind.rawValue, language, scope?.rawValue, pattern].compactMap { $0 }.joined(separator: ":")
+    private static func key(
+        _ kind: MemoryKind, _ language: String, _ scope: MemoryScope.Scope, _ pattern: String
+    ) -> String {
+        [kind.rawValue, language, MemoryScope.keySegment(mode: scope.mode, tone: scope.tone), pattern]
+            .compactMap { $0 }.joined(separator: ":")
     }
 }

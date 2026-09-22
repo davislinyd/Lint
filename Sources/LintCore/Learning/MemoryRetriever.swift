@@ -17,6 +17,7 @@ struct MemoryRetriever: Sendable {
     struct Query: Sendable {
         var text: String
         var mode: WritingMode
+        var tone: WritingTone = .preserve
         /// The language the result is written in when it is not the text's own (translation).
         var outputLanguage: String?
     }
@@ -97,6 +98,7 @@ struct MemoryRetriever: Sendable {
         for entry in entries {
             let memory = entry.memory
             guard memory.modeScope == nil || memory.modeScope == query.mode else { continue }
+            guard memory.toneScope == nil || memory.toneScope == query.tone else { continue }
             if entry.isHabit {
                 // Covered, and with no trigger of its own to bring it back.
                 guard entry.coveredBy == nil else { continue }

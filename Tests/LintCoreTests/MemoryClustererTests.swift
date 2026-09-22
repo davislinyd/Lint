@@ -43,9 +43,9 @@ final class MemoryClustererTests: XCTestCase {
 
     private func memory(
         _ key: String, kind: MemoryKind = .style, language: String = "en", scope: WritingMode? = nil,
-        evidence: Double = 1.2
+        tone: WritingTone? = nil, evidence: Double = 1.2
     ) -> WritingMemory {
-        DreamFixtures.plain(key, kind: kind, language: language, scope: scope, evidence: evidence)
+        DreamFixtures.plain(key, kind: kind, language: language, scope: scope, tone: tone, evidence: evidence)
     }
 
     private func clusterer(
@@ -66,6 +66,7 @@ final class MemoryClustererTests: XCTestCase {
         XCTAssertEqual(cluster.kind, .style)
         XCTAssertEqual(cluster.language, "en")
         XCTAssertNil(cluster.modeScope)
+        XCTAssertNil(cluster.toneScope)
     }
 
     func testMemoriesOfDifferentLanguagesNeverCluster() async {
@@ -87,7 +88,7 @@ final class MemoryClustererTests: XCTestCase {
 
     func testMemoriesOfDifferentModeScopesNeverCluster() async throws {
         // Translation terminology is not general proofreading style, and one tone is not another.
-        let mixed = [memory("a"), memory("b", scope: .translate), memory("c", scope: .toneFormal)]
+        let mixed = [memory("a"), memory("b", scope: .translate), memory("c", scope: .proofread, tone: .formal)]
         let result = await clusterer(TableSimilarity(fallback: 1)).clusters(from: mixed, at: now)
         XCTAssertTrue(result.isEmpty)
 
@@ -96,6 +97,31 @@ final class MemoryClustererTests: XCTestCase {
         XCTAssertEqual(grouped.count, 1)
         XCTAssertEqual(grouped.first?.modeScope, .translate)
         XCTAssertEqual(grouped.first?.members.count, 3)
+    }
+
+    func testMemoriesOfDifferentTonesNeverCluster() async throws {
+        // Professional and concise style memories are both proofreading now; that is no reason to
+        // put them behind one rule.
+        let professional = (0..<3).map { memory("p\($0)", scope: .proofread, tone: .professional) }
+        let concise = (0..<3).map { memory("c\($0)", scope: .proofread, tone: .concise) }
+        let global = (0..<3).map { memory("g\($0)") }
+        let result = await clusterer(TableSimilarity(fallback: 1))
+            .clusters(from: professional + concise + global, at: now)
+
+        XCTAssertEqual(result.count, 3)
+        for cluster in result {
+            XCTAssertEqual(cluster.members.count, 3)
+            XCTAssertEqual(Set(cluster.members.map(\.toneScope)).count, 1, "one tone to a cluster")
+            XCTAssertEqual(Set(cluster.members.map(\.toneScope)), [cluster.toneScope])
+        }
+        XCTAssertEqual(Set(result.map(\.toneScope)), [.professional, .concise, nil])
+
+        let mixed = [
+            memory("a", scope: .proofread, tone: .professional), memory("b", scope: .proofread, tone: .concise),
+            memory("c", scope: .proofread, tone: .formal),
+        ]
+        let none = await clusterer(TableSimilarity(fallback: 1)).clusters(from: mixed, at: now)
+        XCTAssertTrue(none.isEmpty)
     }
 
     func testAClusterBelowTheMinimumSizeIsDropped() async {
@@ -175,9 +201,10 @@ final class MemoryClustererTests: XCTestCase {
         var memories: [WritingMemory] = []
         for language in ["en", "zh-Hant"] {
             for kind in [MemoryKind.grammar, .style] {
-                for scope in [nil, WritingMode.toneFormal] {
+                for (scope, tone) in [(nil, nil), (WritingMode.proofread, WritingTone.formal)] as [(WritingMode?, WritingTone?)] {
                     for index in 0..<8 {
-                        memories.append(memory("\(language)-\(kind)-\(scope?.rawValue ?? "all")-\(index)", kind: kind, language: language, scope: scope))
+                        let name = "\(language)-\(kind)-\(scope?.rawValue ?? "all")-\(index)"
+                        memories.append(memory(name, kind: kind, language: language, scope: scope, tone: tone))
                     }
                 }
             }
@@ -188,6 +215,7 @@ final class MemoryClustererTests: XCTestCase {
         let pairs = comparisons.all
         XCTAssertTrue(pairs.allSatisfy { lhs, rhs in
             lhs.language == rhs.language && lhs.kind == rhs.kind && lhs.modeScope == rhs.modeScope
+                && lhs.toneScope == rhs.toneScope
         })
         // 8 partitions of 8: at most 28 pairs each, against 2,016 for all 64 compared with each other.
         XCTAssertLessThanOrEqual(pairs.count, 8 * 28)

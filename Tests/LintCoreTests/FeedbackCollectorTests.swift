@@ -15,10 +15,11 @@ final class FeedbackCollectorTests: XCTestCase {
         original: String = "I think we need discuss about this issue.",
         generated: String? = "I think we need to discuss this issue.",
         final: String = "I think we need to discuss this issue.",
-        mode: WritingMode = .proofread
+        mode: WritingMode = .proofread,
+        tone: WritingTone = .preserve
     ) -> LearningFeedback {
         LearningFeedback(
-            gesture: gesture, mode: mode, originalText: original, generatedText: generated,
+            gesture: gesture, mode: mode, tone: tone, originalText: original, generatedText: generated,
             finalText: final, provider: "localLlama", model: "qwen"
         )
     }
@@ -65,13 +66,21 @@ final class FeedbackCollectorTests: XCTestCase {
         XCTAssertNil(collector().event(for: feedback(original: " "), now: now))
     }
 
-    func testEventCarriesModeProviderModelAndTime() throws {
-        let event = try XCTUnwrap(collector().event(for: feedback(mode: .toneFormal), now: now))
-        XCTAssertEqual(event.mode, .toneFormal)
+    func testEventCarriesModeToneProviderModelAndTime() throws {
+        let event = try XCTUnwrap(collector().event(for: feedback(mode: .translate, tone: .formal), now: now))
+        XCTAssertEqual(event.mode, .translate)
+        XCTAssertEqual(event.tone, .formal)
         XCTAssertEqual(event.provider, "localLlama")
         XCTAssertEqual(event.model, "qwen")
         XCTAssertEqual(event.createdAt, now)
         XCTAssertTrue(event.usedMemoryIDs.isEmpty)
+    }
+
+    func testTheEventOfAnUntonedModeIsPreserve() throws {
+        let plain = try XCTUnwrap(collector().event(for: feedback(), now: now))
+        XCTAssertEqual(plain.tone, .preserve)
+        let custom = try XCTUnwrap(collector().event(for: feedback(mode: .custom, tone: .formal), now: now))
+        XCTAssertEqual(custom.tone, .preserve, "a custom prompt has no tone")
     }
 
     func testEventRecordsWhichMemoriesWereInThePrompt() throws {

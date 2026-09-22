@@ -304,7 +304,7 @@ final class MemoryLifecycleTests: XCTestCase {
     private func proposal() -> ConsolidationProposal {
         ConsolidationProposal(
             parentDedupKey: "dream:redundant-preposition:grammar:en", sourceIDs: [],
-            kind: .grammar, language: "en", modeScope: nil, targetLevel: .generalized,
+            kind: .grammar, language: "en", modeScope: nil, toneScope: nil, targetLevel: .generalized,
             instruction: MemoryConsolidator.redundantPrepositionInstruction, triggers: [],
             origin: .rule(.redundantPreposition)
         )

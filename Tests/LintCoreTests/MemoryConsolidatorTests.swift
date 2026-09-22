@@ -66,8 +66,11 @@ final class MemoryConsolidatorTests: XCTestCase {
     }
 
     func testOnlyAPlainVerbAndPrepositionMakeAMemberOfTheFamily() {
-        func member(_ key: String, kind: MemoryKind = .grammar, language: String = "en", scope: WritingMode? = nil) -> WritingMemory {
-            DreamFixtures.plain(key, kind: kind, language: language, scope: scope)
+        func member(
+            _ key: String, kind: MemoryKind = .grammar, language: String = "en",
+            scope: WritingMode? = nil, tone: WritingTone? = nil
+        ) -> WritingMemory {
+            DreamFixtures.plain(key, kind: kind, language: language, scope: scope, tone: tone)
         }
         XCTAssertEqual(MemoryFamily.of(member("grammar:en:emphasize on")), .redundantPreposition)
         XCTAssertEqual(MemoryFamily.of(member("grammar:en:can't-stop about")), .redundantPreposition)
@@ -80,6 +83,7 @@ final class MemoryConsolidatorTests: XCTestCase {
             ("another kind", member("grammar:en:discuss about", kind: .style)),
             ("another language", member("grammar:en:discuss about", language: "zh-Hant")),
             ("a mode scope", member("grammar:en:discuss about", scope: .translate)),
+            ("a tone scope", member("grammar:en:discuss about", tone: .formal)),
             ("a spelling pair", member("grammar:en:a>b about")),
         ] {
             XCTAssertNil(MemoryFamily.of(memory), name)
@@ -156,7 +160,8 @@ final class MemoryConsolidatorTests: XCTestCase {
 
         let expected = cluster.members.map { memory in
             SynthesisSource(
-                id: memory.id, kind: memory.kind, language: memory.language, mode: memory.modeScope,
+                id: memory.id, kind: memory.kind, language: memory.language,
+                mode: memory.modeScope, tone: memory.toneScope,
                 instruction: memory.instruction, triggers: memory.triggers,
                 confidence: memory.confidence(at: now), occurrenceCount: memory.occurrenceCount
             )
@@ -191,6 +196,36 @@ final class MemoryConsolidatorTests: XCTestCase {
         let other = DreamFixtures.cluster((5..<8).map { DreamFixtures.plain("style:en:k\($0)") })
         let c = try unwrapped(await consolidator.proposal(for: other, at: now))
         XCTAssertNotEqual(a.parentDedupKey, c.parentDedupKey)
+    }
+
+    func testTheIdentityOfADerivedMemoryNamesItsTone() async throws {
+        let provider = ScriptedSynthesis(result: .success(.rule(instruction: "x", triggers: [])))
+        let consolidator = MemoryConsolidator(synthesis: provider)
+        func cluster(_ scope: WritingMode?, _ tone: WritingTone?) -> MemoryCluster {
+            DreamFixtures.cluster((0..<3).map { DreamFixtures.plain("style:en:k\($0)", scope: scope, tone: tone) })
+        }
+        let professional = try unwrapped(await consolidator.proposal(for: cluster(.proofread, .professional), at: now))
+        let concise = try unwrapped(await consolidator.proposal(for: cluster(.proofread, .concise), at: now))
+        let global = try unwrapped(await consolidator.proposal(for: cluster(nil, nil), at: now))
+
+        XCTAssertEqual([professional.modeScope, concise.modeScope, global.modeScope], [.proofread, .proofread, nil])
+        XCTAssertEqual([professional.toneScope, concise.toneScope, global.toneScope], [.professional, .concise, nil])
+        XCTAssertEqual(
+            Set([professional.parentDedupKey, concise.parentDedupKey, global.parentDedupKey]).count, 3,
+            "two tones never share a derived memory"
+        )
+        XCTAssertTrue(professional.parentDedupKey.hasPrefix("dream:synthesized:style:en:proofread|professional:"))
+        XCTAssertFalse(professional.parentDedupKey.contains(">"))
+        XCTAssertFalse(professional.parentDedupKey.contains(where: \.isWhitespace))
+    }
+
+    func testTheProviderIsToldTheToneOfWhatItCombines() async {
+        let provider = ScriptedSynthesis(result: .success(.noConsolidation))
+        let cluster = DreamFixtures.cluster(
+            (0..<3).map { DreamFixtures.plain("style:en:k\($0)", scope: .proofread, tone: .formal) }
+        )
+        _ = await MemoryConsolidator(synthesis: provider).proposal(for: cluster, at: now)
+        XCTAssertEqual(provider.requests.all.first?.map(\.tone), [.formal, .formal, .formal])
     }
 
     func testNoConsolidationAndAFailingProviderBothMeanNothing() async {

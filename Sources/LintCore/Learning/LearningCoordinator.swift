@@ -107,6 +107,7 @@ public actor LearningCoordinator {
         prompt: String,
         for text: String,
         mode: WritingMode,
+        tone: WritingTone = .preserve,
         translateTarget: String = "",
         config: LearningConfig,
         timeout: Duration = .milliseconds(150)
@@ -117,6 +118,7 @@ public actor LearningCoordinator {
             let memories = await self.relevantMemories(
                 for: text,
                 mode: mode,
+                tone: tone,
                 outputLanguage: mode == .translate ? TextProfile.languageTag(forTarget: translateTarget) : nil,
                 config: config
             )
@@ -130,11 +132,12 @@ public actor LearningCoordinator {
     public func relevantMemories(
         for text: String,
         mode: WritingMode,
+        tone: WritingTone = .preserve,
         outputLanguage: String? = nil,
         config: LearningConfig
     ) async -> [WritingMemory] {
         guard config.enabled, let store = openStore(create: false) else { return [] }
-        let query = MemoryRetriever.Query(text: text, mode: mode, outputLanguage: outputLanguage)
+        let query = MemoryRetriever.Query(text: text, mode: mode, tone: tone, outputLanguage: outputLanguage)
         let now = clock()
         // Evidence keeps fading, so a day-old retriever is rebuilt even if nothing changed.
         if let retriever, now.timeIntervalSince(retrieverBuiltAt) < LearningPolicy.settleInterval {

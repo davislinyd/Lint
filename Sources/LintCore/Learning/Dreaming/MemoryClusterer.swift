@@ -1,7 +1,7 @@
 import Foundation
 
-/// Groups memories that say much the same thing. Only memories of one language, kind and mode scope
-/// are ever compared, which also keeps the comparisons few. Deterministic for the same memories and
+/// Groups memories that say much the same thing. Only memories of one language, kind, mode scope and
+/// tone scope are ever compared, which also keeps the comparisons few. Deterministic for the same memories and
 /// the same similarity.
 ///
 /// A memory joins a cluster only if it is alike enough to *every* member already in it. Chaining
@@ -16,14 +16,20 @@ struct MemoryClusterer: Sendable {
         let language: String
         let kind: MemoryKind
         let modeScope: WritingMode?
+        let toneScope: WritingTone?
 
-        var sortKey: String { "\(language)|\(kind.rawValue)|\(modeScope?.rawValue ?? "")" }
+        var sortKey: String {
+            "\(language)|\(kind.rawValue)|\(modeScope?.rawValue ?? "")|\(toneScope?.rawValue ?? "")"
+        }
     }
 
     func clusters(from memories: [WritingMemory], at now: Date) async -> [MemoryCluster] {
         var partitions: [Partition: [WritingMemory]] = [:]
         for memory in memories {
-            let key = Partition(language: memory.language, kind: memory.kind, modeScope: memory.modeScope)
+            let key = Partition(
+                language: memory.language, kind: memory.kind,
+                modeScope: memory.modeScope, toneScope: memory.toneScope
+            )
             partitions[key, default: []].append(memory)
         }
 
@@ -50,7 +56,7 @@ struct MemoryClusterer: Sendable {
             for group in groups where group.count >= minClusterSize {
                 result.append(MemoryCluster(
                     language: partition.language, kind: partition.kind,
-                    modeScope: partition.modeScope, members: group
+                    modeScope: partition.modeScope, toneScope: partition.toneScope, members: group
                 ))
             }
         }

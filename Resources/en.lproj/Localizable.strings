@@ -166,7 +166,7 @@
 "翻譯目標語言" = "Translation target language";
 "額外指示" = "Extra instructions";
 "若下方 System Prompt 已自訂覆寫，以覆寫內容為準。" = "If the System Prompt below is overridden, the override takes precedence.";
-"每個模式可分開覆寫，改完即生效。" = "Each mode can be overridden separately; changes apply immediately.";
+"每個模式與語氣組合可分開覆寫，改完即生效。" = "Each mode and tone combination can be overridden separately; changes apply immediately.";
 "恢復內建預設" = "Restore Default";
 "一般" = "General";
 "模型" = "Model";
@@ -178,11 +178,13 @@
 "結束 Lint" = "Quit Lint";
 "沒有可覆蓋的選取" = "No selection to overwrite";
 "文法校對與潤飾" = "Proofread & polish";
-"語氣：正式" = "Tone: Formal";
-"語氣：簡潔" = "Tone: Concise";
-"語氣：專業" = "Tone: Professional";
 "翻譯" = "Translate";
 "自訂 Prompt" = "Custom prompt";
+"語氣" = "Tone";
+"保留原語氣" = "Preserve Tone";
+"正式" = "Formal";
+"簡潔" = "Concise";
+"專業" = "Professional";
 "學習" = "Learning";
 "啟用個人化學習" = "Enable Personalized Learning";
 "記住你反覆修正的寫作習慣，之後在相關時提醒模型。資料只存在這台 Mac，只記抽象的規則，不記原文。Lint 認不出中文人名或全小寫的英文名，被你修正過的名字仍可能被記下；可在「管理記憶」查看並刪除。" = "Remembers writing habits you keep correcting and reminds the model when they’re relevant. Data stays on this Mac, and only abstract rules are kept, never your text. Lint can’t recognize Chinese names or names typed in lowercase, so a name you corrected may still be remembered; you can review and delete it under Manage Memories.";

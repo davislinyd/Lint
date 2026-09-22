@@ -56,7 +56,8 @@ struct MemoryConsolidationValidator: Sendable {
             return .protectedSource
         }
         guard sources.allSatisfy({
-            $0.kind == proposal.kind && $0.language == proposal.language && $0.modeScope == proposal.modeScope
+            $0.kind == proposal.kind && $0.language == proposal.language
+                && $0.modeScope == proposal.modeScope && $0.toneScope == proposal.toneScope
         }) else { return .incompatibleSources }
         guard proposal.targetLevel == .generalized else { return .notGeneralized }
         guard isValidParentKey(proposal.parentDedupKey) else { return .invalidParentKey }

@@ -15,7 +15,7 @@ final class MemoryConsolidationValidatorTests: XCTestCase {
         var proposal = ConsolidationProposal(
             parentDedupKey: "dream:redundant-preposition:grammar:en",
             sourceIDs: sources.map(\.id),
-            kind: .grammar, language: "en", modeScope: nil, targetLevel: .generalized,
+            kind: .grammar, language: "en", modeScope: nil, toneScope: nil, targetLevel: .generalized,
             instruction: MemoryConsolidator.redundantPrepositionInstruction, triggers: [],
             origin: .rule(.redundantPreposition), allowedExtraWords: ["discuss", "about"]
         )
@@ -101,7 +101,9 @@ final class MemoryConsolidationValidatorTests: XCTestCase {
     func testTheSourcesMustAgreeWithTheProposalOnWhatItAppliesTo() {
         XCTAssertEqual(check(modify: { $0.language = "zh-Hant" }), .incompatibleSources)
         XCTAssertEqual(check(modify: { $0.kind = .style }), .incompatibleSources)
-        XCTAssertEqual(check(modify: { $0.modeScope = .toneFormal }), .incompatibleSources)
+        XCTAssertEqual(check(modify: { $0.modeScope = .translate }), .incompatibleSources)
+        XCTAssertEqual(check(modify: { $0.toneScope = .formal }), .incompatibleSources)
+        XCTAssertEqual(check(modify: { $0.modeScope = .proofread; $0.toneScope = .professional }), .incompatibleSources)
     }
 
     // MARK: identity and level

@@ -40,6 +40,7 @@ public struct FeedbackEvent: Codable, Sendable, Equatable, Identifiable {
     public var id: UUID
     public var createdAt: Date
     public var mode: WritingMode
+    public var tone: WritingTone = .preserve
     public var action: FeedbackAction
     public var sourceHMAC: String
     public var suggestionHMAC: String?
@@ -60,6 +61,8 @@ public struct WritingMemory: Codable, Sendable, Equatable, Identifiable {
     public var language: String
     /// nil applies to every writing mode.
     public var modeScope: WritingMode?
+    /// nil applies to every tone.
+    public var toneScope: WritingTone? = nil
     /// Words or phrases that make this memory relevant; empty means a general habit.
     public var triggers: [String]
     public var instruction: String
@@ -97,6 +100,8 @@ public enum UserGesture: Sendable {
 public struct LearningFeedback: Sendable {
     public var gesture: UserGesture
     public var mode: WritingMode
+    /// How the suggestion was asked to sound. Always `preserve` for a mode that takes no tone.
+    public var tone: WritingTone
     /// The text the suggestion was generated from.
     public var originalText: String
     /// nil while the suggestion is still streaming or failed; nothing is learned from that.
@@ -111,6 +116,7 @@ public struct LearningFeedback: Sendable {
     public init(
         gesture: UserGesture,
         mode: WritingMode,
+        tone: WritingTone = .preserve,
         originalText: String,
         generatedText: String?,
         finalText: String,
@@ -120,6 +126,7 @@ public struct LearningFeedback: Sendable {
     ) {
         self.gesture = gesture
         self.mode = mode
+        self.tone = mode.supportsTone ? tone : .preserve
         self.originalText = originalText
         self.generatedText = generatedText
         self.finalText = finalText

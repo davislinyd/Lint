@@ -384,6 +384,147 @@ final class LearningCoordinatorTests: XCTestCase {
         XCTAssertTrue(proofreading.isEmpty, "a translation memory stays out of proofreading")
     }
 
+    // MARK: tone
+
+    /// The model added the article, and the user took it as it is.
+    private func acceptedArticle(_ mode: WritingMode, _ tone: WritingTone, _ topic: String) -> LearningFeedback {
+        LearningFeedback(
+            gesture: .replaced, mode: mode, tone: tone,
+            originalText: "I have meeting about the \(topic).", generatedText: "I have a meeting about the \(topic).",
+            finalText: "I have a meeting about the \(topic).", provider: "localLlama", model: "qwen"
+        )
+    }
+
+    func testProofreadingInAToneIsTheModelsRewriteAndNotTheUsersHabit() async throws {
+        for tone in [WritingTone.formal, .concise, .professional] {
+            let coordinator = learner()
+            for topic in topics.prefix(3) {
+                await coordinator.recordFeedback(acceptedArticle(.proofread, tone, topic), config: on)
+            }
+            let memories = await coordinator.memories()
+            XCTAssertTrue(memories.isEmpty, "\(tone): nothing is learned from what the model wrote")
+            let stats = await coordinator.stats()
+            XCTAssertEqual(stats.eventCount, 3, "\(tone): what happened is still recorded, without the text")
+        }
+        let control = learner()
+        for topic in topics.prefix(3) {
+            await control.recordFeedback(acceptedArticle(.proofread, .preserve, topic), config: on)
+        }
+        let learned = await control.memories()
+        XCTAssertEqual(learned.map(\.dedupKey), ["grammar:en:articles"], "plain proofreading still learns")
+    }
+
+    func testTranslatingInAnyToneLearnsNothingFromTheModelsRewrite() async throws {
+        for tone in WritingTone.allCases {
+            let coordinator = learner()
+            for topic in topics.prefix(3) {
+                await coordinator.recordFeedback(acceptedArticle(.translate, tone, topic), config: on)
+            }
+            let memories = await coordinator.memories()
+            XCTAssertTrue(memories.isEmpty, "\(tone)")
+        }
+    }
+
+    func testTheUsersEditUnderAToneIsLearnedForThatToneOnly() async throws {
+        let coordinator = learner()
+        for noun in ["house", "office", "car"] {
+            await coordinator.recordFeedback(
+                LearningFeedback(
+                    gesture: .replaced, mode: .proofread, tone: .professional,
+                    originalText: "I need a big \(noun)", generatedText: "I need a large \(noun)",
+                    finalText: "I need a huge \(noun)", provider: "localLlama", model: "qwen"
+                ),
+                config: on
+            )
+        }
+        let memory = try await onlyMemory(coordinator)
+        XCTAssertEqual(memory.dedupKey, "vocabulary:en:proofread|professional:large>huge")
+        XCTAssertEqual(memory.modeScope, .proofread)
+        XCTAssertEqual(memory.toneScope, .professional)
+        XCTAssertEqual(memory.state, .active)
+
+        func ids(_ mode: WritingMode, _ tone: WritingTone) async -> [UUID] {
+            await coordinator.relevantMemories(
+                for: "We need something large today please", mode: mode, tone: tone, config: on
+            ).map(\.id)
+        }
+        let professional = await ids(.proofread, .professional)
+        XCTAssertEqual(professional, [memory.id])
+        for tone in [WritingTone.preserve, .formal, .concise] {
+            let other = await ids(.proofread, tone)
+            XCTAssertTrue(other.isEmpty, "\(tone)")
+        }
+        let translating = await ids(.translate, .professional)
+        XCTAssertTrue(translating.isEmpty, "it was learned while proofreading")
+
+        // The prompt is personalized with the tone that was asked for.
+        func used(_ tone: WritingTone) async -> [UUID] {
+            await coordinator.personalize(
+                prompt: basePrompt, for: "We need something large today please", mode: .proofread, tone: tone,
+                config: on
+            ).usedMemoryIDs
+        }
+        let usedProfessional = await used(.professional)
+        XCTAssertEqual(usedProfessional, [memory.id])
+        let usedPreserve = await used(.preserve)
+        XCTAssertTrue(usedPreserve.isEmpty)
+    }
+
+    func testAHabitLearnedUnderAToneStaysAvailableInEveryTone() async throws {
+        let coordinator = learner()
+        for topic in topics.prefix(3) {
+            // The user put the article in themselves: a habit of theirs, whatever the tone.
+            await coordinator.recordFeedback(
+                LearningFeedback(
+                    gesture: .replaced, mode: .proofread, tone: .concise,
+                    originalText: "I have meeting about the \(topic).",
+                    generatedText: "I have meeting about the \(topic).",
+                    finalText: "I have a meeting about the \(topic).", provider: "localLlama", model: "qwen"
+                ),
+                config: on
+            )
+        }
+        let memory = try await onlyMemory(coordinator)
+        XCTAssertEqual(memory.dedupKey, "grammar:en:articles")
+        XCTAssertNil(memory.modeScope)
+        XCTAssertNil(memory.toneScope)
+        for tone in WritingTone.allCases {
+            let found = await coordinator.relevantMemories(
+                for: "we should discuss about the roadmap", mode: .proofread, tone: tone, config: on
+            )
+            XCTAssertEqual(found.map(\.id), [memory.id], "\(tone)")
+        }
+    }
+
+    func testAnEditWhileTranslatingInAToneIsScopedToThatTaskAndTone() async throws {
+        let coordinator = learner()
+        for noun in ["house", "office", "car"] {
+            await coordinator.recordFeedback(
+                LearningFeedback(
+                    gesture: .replaced, mode: .translate, tone: .formal,
+                    originalText: "This \(noun) is very big and old", generatedText: "這個\(noun)非常大而且很舊",
+                    finalText: "這個\(noun)極為龐大而且老舊", provider: "localLlama", model: "qwen"
+                ),
+                config: on
+            )
+        }
+        let memories = await coordinator.memories()
+        XCTAssertFalse(memories.isEmpty)
+        XCTAssertTrue(memories.allSatisfy { $0.modeScope == .translate && $0.toneScope == .formal })
+    }
+
+    func testAToneChangesNothingWhileLearningIsOff() async throws {
+        let url = try makeStoreURL()
+        let coordinator = LearningCoordinator(storeURL: url, hmacKey: testKey())
+        await coordinator.recordFeedback(acceptedArticle(.proofread, .professional, "plan"), config: LearningConfig(enabled: false))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: url.path))
+        let off = await coordinator.personalize(
+            prompt: basePrompt, for: "we should discuss about the roadmap", mode: .proofread, tone: .professional,
+            config: LearningConfig(enabled: false)
+        )
+        XCTAssertEqual(Array(off.systemPrompt.utf8), Array(basePrompt.utf8), "byte for byte")
+    }
+
     // MARK: not learning from its own reminders
 
     func testAMemoryIsNotCountedAgainWhenTheModelJustObeyedIt() async throws {

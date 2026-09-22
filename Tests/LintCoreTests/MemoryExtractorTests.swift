@@ -4,12 +4,13 @@ import XCTest
 final class MemoryExtractorTests: XCTestCase {
     private func feedback(
         _ mode: WritingMode = .proofread,
+        tone: WritingTone = .preserve,
         original: String,
         generated: String?,
         final: String? = nil
     ) -> LearningFeedback {
         LearningFeedback(
-            gesture: .replaced, mode: mode, originalText: original, generatedText: generated,
+            gesture: .replaced, mode: mode, tone: tone, originalText: original, generatedText: generated,
             finalText: final ?? generated ?? "", provider: "localLlama", model: "qwen"
         )
     }
@@ -145,8 +146,8 @@ final class MemoryExtractorTests: XCTestCase {
             "spelling:en:perspective>prospective"
         )
         XCTAssertEqual(
-            MemoryExtractor.reversedKey(of: "style:en:toneFormal:need to>should"),
-            "style:en:toneFormal:should>need to"
+            MemoryExtractor.reversedKey(of: "style:en:proofread|formal:need to>should"),
+            "style:en:proofread|formal:should>need to"
         )
         XCTAssertEqual(
             MemoryExtractor.reversedKey(of: "terminology:zh-Hant:translate:軟件>軟體"),
@@ -262,25 +263,104 @@ final class MemoryExtractorTests: XCTestCase {
         XCTAssertTrue(memory.triggers.isEmpty, "the model's word is not in the English source, so it is a general habit")
     }
 
-    func testToneModesLearnOnlyFromTheUsersEdits() throws {
+    func testAToneLearnsOnlyFromTheUsersEdits() throws {
         let sample = feedback(
-            .toneFormal, original: "I need a big house",
+            .proofread, tone: .formal, original: "I need a big house",
             generated: "I need a large house", final: "I need a huge house"
         )
         XCTAssertTrue(extract(.accepted, sample).isEmpty)
         let found = extract(.editedAndAccepted, sample)
-        XCTAssertEqual(keys(found), ["vocabulary:en:toneFormal:large>huge"])
-        XCTAssertEqual(try XCTUnwrap(found.first).modeScope, .toneFormal)
+        XCTAssertEqual(keys(found), ["vocabulary:en:proofread|formal:large>huge"])
+        let memory = try XCTUnwrap(found.first)
+        XCTAssertEqual(memory.modeScope, .proofread)
+        XCTAssertEqual(memory.toneScope, .formal)
+    }
+
+    func testTheUsersEditUnderProfessionalIsScopedToProfessionalProofreading() throws {
+        let sample = feedback(
+            .proofread, tone: .professional, original: "I need a big house",
+            generated: "I need a large house", final: "I need a huge house"
+        )
+        let memory = try XCTUnwrap(extract(.editedAndAccepted, sample).first)
+        XCTAssertEqual(memory.dedupKey, "vocabulary:en:proofread|professional:large>huge")
+        XCTAssertEqual([memory.modeScope, memory.toneScope] as [AnyHashable?], [WritingMode.proofread, WritingTone.professional])
+    }
+
+    func testEditsInDifferentTonesAreDifferentMemories() {
+        var seen = Set<String>()
+        for tone in WritingTone.allCases {
+            let sample = feedback(
+                .proofread, tone: tone, original: "I need a big house",
+                generated: "I need a large house", final: "I need a huge house"
+            )
+            seen.formUnion(keys(extract(.editedAndAccepted, sample)))
+        }
+        XCTAssertEqual(seen.count, 4, "plain proofreading and each tone keep their own")
+        XCTAssertTrue(seen.contains("vocabulary:en:large>huge"), "plain proofreading stays global")
+    }
+
+    func testTranslationStaysScopedToTranslationAndAToneOnlyWhenOneWasAsked() throws {
+        func learned(_ tone: WritingTone) throws -> MemoryCandidate {
+            try XCTUnwrap(extract(.editedAndAccepted, feedback(
+                .translate, tone: tone, original: "This software needs an update.",
+                generated: "這個軟件需要更新", final: "這個軟體需要更新"
+            )).first)
+        }
+        let preserved = try learned(.preserve)
+        XCTAssertEqual(preserved.dedupKey, "terminology:zh-Hant:translate:軟件>軟體", "as it always was")
+        XCTAssertEqual(preserved.modeScope, .translate)
+        XCTAssertNil(preserved.toneScope)
+
+        let formal = try learned(.formal)
+        XCTAssertEqual(formal.dedupKey, "terminology:zh-Hant:translate|formal:軟件>軟體")
+        XCTAssertEqual(formal.toneScope, .formal)
+    }
+
+    func testProofreadingInAToneIsNotProofreadingTheModelsRewriteIsNotAHabit() {
+        // The same correction that plain proofreading learns from is the tone's own rewrite here.
+        for tone in [WritingTone.formal, .concise, .professional] {
+            let sample = feedback(
+                .proofread, tone: tone,
+                original: "I have meeting tomorrow.", generated: "I have a meeting tomorrow."
+            )
+            for action in [FeedbackAction.accepted, .copied] {
+                XCTAssertTrue(extract(action, sample).isEmpty, "\(tone) \(action)")
+            }
+        }
+        let plain = feedback(original: "I have meeting tomorrow.", generated: "I have a meeting tomorrow.")
+        XCTAssertEqual(keys(extract(.accepted, plain)), ["grammar:en:articles"])
+    }
+
+    func testTranslatingInAnyToneLearnsNothingFromTheModelsRewrite() {
+        for tone in WritingTone.allCases {
+            let sample = feedback(
+                .translate, tone: tone,
+                original: "This software needs an update.", generated: "這個軟件需要更新"
+            )
+            XCTAssertTrue(extract(.accepted, sample).isEmpty, "\(tone)")
+        }
+    }
+
+    func testAToneOnACustomPromptIsNoTone() {
+        let sample = feedback(
+            .custom, tone: .formal, original: "I have meeting tomorrow.", generated: "I have a meeting tomorrow."
+        )
+        XCTAssertEqual(sample.tone, .preserve)
+        XCTAssertTrue(extract(.accepted, sample).isEmpty, "a custom rewrite is not proofreading")
     }
 
     func testSpellingAndGrammarStayGlobalInEveryMode() throws {
-        let sample = feedback(
-            .toneConcise, original: "From my perspective we wait",
-            generated: "From my perspective we wait", final: "From my prospective we wait"
-        )
-        let found = extract(.editedAndAccepted, sample)
-        XCTAssertEqual(keys(found), ["spelling:en:perspective>prospective"])
-        XCTAssertNil(try XCTUnwrap(found.first).modeScope)
+        for (mode, tone) in [(WritingMode.proofread, WritingTone.concise), (.translate, .formal), (.custom, .preserve)] {
+            let sample = feedback(
+                mode, tone: tone, original: "From my perspective we wait",
+                generated: "From my perspective we wait", final: "From my prospective we wait"
+            )
+            let found = extract(.editedAndAccepted, sample)
+            XCTAssertEqual(keys(found), ["spelling:en:perspective>prospective"], "\(mode) \(tone)")
+            let memory = try XCTUnwrap(found.first)
+            XCTAssertNil(memory.modeScope)
+            XCTAssertNil(memory.toneScope)
+        }
     }
 
     func testCopyingLearnsFromTheDifferenceItActuallyShows() {

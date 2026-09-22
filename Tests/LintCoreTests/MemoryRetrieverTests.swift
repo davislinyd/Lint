@@ -11,6 +11,7 @@ final class MemoryRetrieverTests: XCTestCase {
         kind: MemoryKind = .grammar,
         language: String = "en",
         scope: WritingMode? = nil,
+        tone: WritingTone? = nil,
         triggers: [String] = [],
         state: MemoryState = .active,
         evidence: Double = 1.2,
@@ -22,7 +23,8 @@ final class MemoryRetrieverTests: XCTestCase {
         counter += 1
         return WritingMemory(
             id: UUID(uuidString: String(format: "00000000-0000-0000-0000-%012d", counter))!,
-            dedupKey: key, kind: kind, language: language, modeScope: scope, triggers: triggers,
+            dedupKey: key, kind: kind, language: language,
+            modeScope: scope, toneScope: tone, triggers: triggers,
             instruction: instruction ?? "rule for \(key)",
             evidenceScore: evidence, occurrenceCount: count, state: state, userEdited: false,
             createdAt: now, lastConfirmedAt: now, level: level, supersededBy: supersededBy
@@ -33,10 +35,11 @@ final class MemoryRetrieverTests: XCTestCase {
         _ memories: [WritingMemory],
         _ text: String,
         mode: WritingMode = .proofread,
+        tone: WritingTone = .preserve,
         outputLanguage: String? = nil
     ) -> [String] {
         MemoryRetriever(memories: memories, now: now)
-            .select(for: .init(text: text, mode: mode, outputLanguage: outputLanguage))
+            .select(for: .init(text: text, mode: mode, tone: tone, outputLanguage: outputLanguage))
             .map(\.dedupKey)
     }
 
@@ -135,12 +138,56 @@ final class MemoryRetrieverTests: XCTestCase {
     func testModeScopeKeepsMemoriesToTheirMode() {
         let memories = [
             memory("global", triggers: ["prospective"]),
-            memory("formal", scope: .toneFormal, triggers: ["prospective"]),
+            memory("formal", scope: .proofread, tone: .formal, triggers: ["prospective"]),
             memory("translate", scope: .translate, triggers: ["prospective"]),
         ]
         XCTAssertEqual(Set(keys(memories, english, mode: .proofread)), ["global"])
-        XCTAssertEqual(Set(keys(memories, english, mode: .toneFormal)), ["global", "formal"])
+        XCTAssertEqual(Set(keys(memories, english, mode: .proofread, tone: .formal)), ["global", "formal"])
         XCTAssertEqual(Set(keys(memories, english, mode: .translate)), ["global", "translate"])
+        XCTAssertEqual(Set(keys(memories, english, mode: .translate, tone: .formal)), ["global", "translate"])
+    }
+
+    func testToneScopeKeepsMemoriesToTheirTone() {
+        let memories = [
+            memory("global", triggers: ["prospective"]),
+            memory("professional", scope: .proofread, tone: .professional, triggers: ["prospective"]),
+            memory("concise", scope: .proofread, tone: .concise, triggers: ["prospective"]),
+            memory("translate-formal", scope: .translate, tone: .formal, triggers: ["prospective"]),
+            memory("translate-any", scope: .translate, triggers: ["prospective"]),
+        ]
+        func found(_ mode: WritingMode, _ tone: WritingTone) -> Set<String> {
+            Set(keys(memories, english, mode: mode, tone: tone))
+        }
+        XCTAssertEqual(found(.proofread, .preserve), ["global"])
+        XCTAssertEqual(found(.proofread, .professional), ["global", "professional"])
+        XCTAssertEqual(found(.proofread, .concise), ["global", "concise"])
+        XCTAssertEqual(found(.proofread, .formal), ["global"])
+        XCTAssertEqual(found(.translate, .formal), ["global", "translate-formal", "translate-any"])
+        XCTAssertEqual(found(.translate, .professional), ["global", "translate-any"])
+        XCTAssertEqual(found(.custom, .preserve), ["global"])
+    }
+
+    func testAMemoryScopedToATaskAloneAppliesInEveryToneOfIt() {
+        let memories = [memory("proofreading", scope: .proofread, triggers: ["prospective"])]
+        for tone in WritingTone.allCases {
+            XCTAssertEqual(keys(memories, english, mode: .proofread, tone: tone), ["proofreading"], "\(tone)")
+        }
+        XCTAssertEqual(keys(memories, english, mode: .translate), [])
+    }
+
+    func testATranslationMemoryOfATonePairsTheToneWithTheOutputLanguage() {
+        let text = "This software needs an update."
+        let term = memory("軟件>軟體", kind: .terminology, language: "zh-Hant", scope: .translate, tone: .professional)
+        XCTAssertEqual(
+            keys([term], text, mode: .translate, tone: .professional, outputLanguage: "zh-Hant"), ["軟件>軟體"]
+        )
+        XCTAssertEqual(keys([term], text, mode: .translate, tone: .professional, outputLanguage: "en"), [])
+        XCTAssertEqual(keys([term], text, mode: .translate, tone: .preserve, outputLanguage: "zh-Hant"), [])
+        let global = memory("軟件>軟體", kind: .terminology, language: "zh-Hant", scope: .translate)
+        XCTAssertEqual(
+            keys([global], text, mode: .translate, tone: .professional, outputLanguage: "zh-Hant"), ["軟件>軟體"],
+            "a translation memory with no tone applies to every tone"
+        )
     }
 
     func testTranslationMemoriesFollowTheOutputLanguage() {
@@ -293,7 +340,7 @@ final class MemoryRetrieverTests: XCTestCase {
         var memories: [WritingMemory] = []
         for i in 0..<700 { memories.append(memory("spell\(i)", kind: .spelling, triggers: [word(i)])) }
         for i in 0..<500 {
-            memories.append(memory("tone\(i)", kind: .style, scope: .toneFormal, triggers: [word(10_000 + i)]))
+            memories.append(memory("tone\(i)", kind: .style, scope: .proofread, tone: .formal, triggers: [word(10_000 + i)]))
         }
         for i in 0..<500 {
             memories.append(memory("term\(i)", kind: .terminology, language: "zh-Hant", scope: .translate, triggers: [word(20_000 + i)]))
@@ -313,7 +360,7 @@ final class MemoryRetrieverTests: XCTestCase {
         let result = retriever.select(for: query)
         XCTAssertEqual(result.first?.dedupKey, "prospective>perspective")
         XCTAssertLessThanOrEqual(result.count, LearningPolicy.maxPersonalizedMemories)
-        XCTAssertTrue(result.allSatisfy { $0.modeScope == nil }, "no tone or translation memory leaks in")
+        XCTAssertTrue(result.allSatisfy { $0.modeScope == nil && $0.toneScope == nil }, "no tone or translation memory leaks in")
         XCTAssertTrue(result.allSatisfy { $0.state == .active })
 
         let clock = ContinuousClock()

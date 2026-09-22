@@ -12,7 +12,7 @@ struct CompactSuggestionView: View {
             HStack(spacing: 8) {
                 Image(systemName: "pencil.and.outline")
                     .foregroundStyle(.blue)
-                Text(viewModel.mode.title)
+                Text(viewModel.modeTitle)
                     .font(.subheadline.weight(.semibold))
                 Spacer(minLength: 0)
                 if viewModel.isStreaming {

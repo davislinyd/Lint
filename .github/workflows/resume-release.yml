@@ -1,0 +1,177 @@
+name: Resume Release
+
+# Finishes a release whose notarization was still "In Progress" when the Release workflow stopped
+# waiting. It takes the EXACT DMG and release-state.json that the Release run kept as the artifact
+# "pending-release-<tag>", checks them against the SHA-256 recorded at submission, asks Apple about
+# the recorded submission ID and, once it is Accepted, staples, verifies and drafts the release.
+# It never builds, signs or submits a DMG, so it needs no Developer ID certificate.
+# Maintainer procedure: docs/RELEASING.md
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag, e.g. v0.3.1"
+        required: true
+        type: string
+      run_id:
+        description: "ID of the Release workflow run that reported NOTARIZATION PENDING"
+        required: true
+        type: string
+      dmg_sha256:
+        description: "Submitted SHA-256 shown in that run's summary"
+        required: true
+        type: string
+
+permissions:
+  contents: write # the draft release
+  actions: read # the pending artifact of another run
+
+# Same group as release.yml: one publishing flow per tag.
+concurrency:
+  group: release-${{ inputs.tag }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  resume:
+    name: Check notarization, staple, verify, draft release
+    runs-on: macos-26
+    environment: release
+    timeout-minutes: 30
+    env:
+      TAG: ${{ inputs.tag }}
+      RUN_ID: ${{ inputs.run_id }}
+      EXPECTED_SHA256: ${{ inputs.dmg_sha256 }}
+    steps:
+      - name: Validate the inputs and the source run
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::'$TAG' is not a release tag"; exit 1; }
+          [[ "$RUN_ID" =~ ^[0-9]+$ ]] || { echo "::error::run_id must be a number"; exit 1; }
+          [[ "$EXPECTED_SHA256" =~ ^[0-9a-f]{64}$ ]] || { echo "::error::dmg_sha256 must be 64 lowercase hex digits"; exit 1; }
+          release_workflow=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/release.yml" --jq .id)
+          run_workflow=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID" --jq .workflow_id)
+          if [ "$run_workflow" != "$release_workflow" ]; then
+            echo "::error::run $RUN_ID is not a run of the Release workflow"
+            exit 1
+          fi
+          echo "PENDING=$RUNNER_TEMP/pending-release" >>"$GITHUB_ENV"
+
+      - name: Check out the tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: refs/tags/${{ inputs.tag }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      # digest-mismatch defaults to error: the download fails if the archive differs from what was uploaded.
+      - name: Download the exact submitted DMG and its state
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: pending-release-${{ inputs.tag }}
+          run-id: ${{ inputs.run_id }}
+          github-token: ${{ github.token }}
+          path: ${{ env.PENDING }}
+
+      # The DMG's own bytes are checked against the state by Scripts/resume-release.sh before anything
+      # else; here the state itself is tied to the tag, its commit and the hash the maintainer passed in.
+      - name: Tie the state to the tag, its commit and the given SHA-256
+        run: |
+          state="$PENDING/release-state.json"
+          [ -f "$state" ] || { echo "::error::the artifact has no release-state.json"; exit 1; }
+          field() { plutil -extract "$1" raw -o - "$state"; }
+          commit=$(git rev-parse --verify "refs/tags/$TAG^{commit}")
+          [ "$(field tag)" = "$TAG" ] || { echo "::error::the state is for tag '$(field tag)', not $TAG"; exit 1; }
+          [ "$(field commit)" = "$commit" ] || { echo "::error::the state's commit $(field commit) is not $TAG ($commit)"; exit 1; }
+          [ "$(git rev-parse HEAD)" = "$commit" ] || { echo "::error::the checkout is not $TAG"; exit 1; }
+          [ "$(field dmgSHA256)" = "$EXPECTED_SHA256" ] || {
+            echo "::error::the state records SHA-256 $(field dmgSHA256), not the dmg_sha256 input $EXPECTED_SHA256"
+            exit 1
+          }
+          name=$(field dmgFileName)
+          echo "DMG $name: $(shasum -a 256 "$PENDING/$name" | awk '{print $1}') (submitted $EXPECTED_SHA256)"
+          echo "submission $(field submissionID), last known status $(field notarizationStatus), release status $(field releaseStatus)"
+
+      - name: Check that the notarization secrets exist
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
+          APPLE_API_KEY_P8_BASE64: ${{ secrets.APPLE_API_KEY_P8_BASE64 }}
+        run: |
+          missing=0
+          for name in APPLE_TEAM_ID APPLE_API_KEY_ID APPLE_API_ISSUER_ID APPLE_API_KEY_P8_BASE64; do
+            if [ -z "${!name:-}" ]; then
+              echo "::error::secret $name is missing or empty in the 'release' environment"
+              missing=1
+            fi
+          done
+          [ "$missing" = 0 ]
+
+      - name: Write the App Store Connect API key
+        env:
+          P8_BASE64: ${{ secrets.APPLE_API_KEY_P8_BASE64 }}
+        run: |
+          umask 077
+          printf '%s' "$P8_BASE64" | base64 --decode -o "$RUNNER_TEMP/AuthKey.p8"
+
+      # Exit codes: 0 finalized, 75 still In Progress, 65 Invalid, 69 status unavailable, 1 error
+      # (including a missing or changed DMG, which stops before Apple is asked).
+      - name: Resume the submitted release
+        id: resume
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
+          APPLE_API_KEY_PATH: ${{ runner.temp }}/AuthKey.p8
+        run: |
+          rc=0
+          ./Scripts/resume-release.sh "$PENDING/release-state.json" || rc=$?
+          echo "exit_code=$rc" >>"$GITHUB_OUTPUT"
+          case "$rc" in
+            0) echo "Finalized." ;;
+            75)
+              echo "::warning::NOTARIZATION PENDING for $TAG: Apple is still processing. Nothing changed; the artifact in run $RUN_ID is untouched. Run this workflow again later with the same inputs."
+              echo "## NOTARIZATION PENDING: $TAG (still In Progress at Apple; run again later with the same inputs)" >>"$GITHUB_STEP_SUMMARY"
+              ;;
+            65) echo "::error::Apple rejected the submission (Invalid); see the log above. Nothing is stapled or published." ; exit 1 ;;
+            69) echo "::error::the notarization status could not be read (API key or network); nothing changed." ; exit 1 ;;
+            *) echo "::error::resume stopped (exit code $rc); see the log above." ; exit 1 ;;
+          esac
+
+      - name: Keep the rejection diagnostics
+        if: always() && steps.resume.outputs.exit_code == '65'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: rejected-release-${{ inputs.tag }}-${{ github.run_id }}
+          path: |
+            ${{ env.PENDING }}/release-state.json
+            ${{ env.PENDING }}/notarization-*.json
+          if-no-files-found: warn
+          retention-days: 30
+
+      # A draft: download and test the DMG on another Mac, then publish it from the GitHub UI.
+      - name: Create the draft GitHub Release
+        if: steps.resume.outputs.exit_code == '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          state="$PENDING/release-state.json"
+          [ "$(plutil -extract releaseStatus raw -o - "$state")" = finalized ] || { echo "::error::the state is not finalized"; exit 1; }
+          dmg="$PENDING/$(plutil -extract dmgFileName raw -o - "$state")"
+          gh release create "$TAG" "$dmg" "$dmg.sha256" \
+            --repo "$GITHUB_REPOSITORY" \
+            --verify-tag \
+            --draft \
+            --generate-notes \
+            --title "Lint $TAG"
+          echo "Draft release: $(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json url --jq .url)"
+
+      - name: Remove the API key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/AuthKey.p8"

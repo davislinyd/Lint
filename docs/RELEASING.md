@@ -1,8 +1,13 @@
 # 發版流程（維護者）
 
-推送 `vX.Y.Z` tag 後，GitHub Actions（[`.github/workflows/release.yml`](../.github/workflows/release.yml)）會自動：驗證 tag → 跑測試 → 建置 → Developer ID 簽章（Hardened Runtime + 安全時間戳）→ 簽 DMG → Apple 公證 → staple → 驗證 → SHA-256 → 建立 **Draft** GitHub Release。使用者只需要從 Releases 下載 DMG。
+推送 `vX.Y.Z` tag 後，GitHub Actions（[`.github/workflows/release.yml`](../.github/workflows/release.yml)）會自動：驗證 tag → 跑測試 → 建置 → Developer ID 簽章（Hardened Runtime + 安全時間戳）→ 簽 DMG → 送 Apple 公證 → staple → 驗證 → SHA-256 → 建立 **Draft** GitHub Release。使用者只需要從 Releases 下載 DMG。Apple 若在等待時間內沒處理完，這次 run 會以 **NOTARIZATION PENDING** 結束並保留原封不動的 DMG，之後用 [`resume-release.yml`](../.github/workflows/resume-release.yml) 完成（見下方「公證還在處理中（PENDING）」）。
 
-[`Scripts/release.sh`](../Scripts/release.sh) 是同一條流程的腳本，也能在本機 Mac 上跑（它不會建立 GitHub Release）。
+[`Scripts/release.sh`](../Scripts/release.sh) 是同一條流程的腳本，也能在本機 Mac 上跑（它不會建立 GitHub Release）；本機正式發版用 [`Scripts/formal-release.sh`](../Scripts/formal-release.sh)。
+
+## 兩件互不影響的事：日常開發與正式發版
+
+- **日常開發**：照常在主要的 checkout 工作、切分支、改檔案、`swift build`、`swift test`、`./Scripts/package-app.sh`、`LINT_PREVIEW_BUILD=1 ./Scripts/release.sh`、`LINT_SKIP_NOTARIZE=1 ./Scripts/release.sh`。這些照舊使用 `dist/`、`dist/release/`，每次建置都會清掉 `dist/release/`，所以那裡**永遠不會**放送審過的 DMG（要公證的建置不准輸出到 `dist/release/`）。
+- **正式發版**：從不可變的 tag（或本機測試時明確指定的 commit）建置，在**獨立的 git worktree**（detached，固定在那個 commit）裡跑，產物放在**持久的發版目錄**。發版開始後就記下確切的 commit SHA，之後的 resume 與驗證都以它為準，不看主要 checkout 的內容；公證等幾個小時或幾天都不影響你繼續開發下一版（例如 v0.3.1 在等 Apple 時照常開發 v0.3.2）。
 
 ## 前置條件
 
@@ -117,9 +122,11 @@ gh secret set APPLE_API_ISSUER_ID --env release --repo davislinyd/Lint
 | `APPLE_API_ISSUER_ID` | Issuer ID（UUID） |
 | `APPLE_API_KEY_P8_BASE64` | `AuthKey_XXXXXXXXXX.p8` 的 Base64 |
 
+Resume Release（`resume-release.yml`）也在 `release` 環境執行（從 `main` 手動觸發），只用得到 `APPLE_TEAM_ID`、`APPLE_API_KEY_ID`、`APPLE_API_ISSUER_ID`、`APPLE_API_KEY_P8_BASE64`，不碰 Developer ID 憑證。
+
 設好後把本機的 `.p12` / `.p8` 收進密碼管理器或刪除。它們不能進 repo、issue 或聊天。
 
-## 發版
+## 發版（GitHub Actions）
 
 1. `Resources/Info.plist` 的 `CFBundleShortVersionString` 是唯一的版本來源；確認它就是要發的版本，並已合併進 `main`。
 2. 在 `main` 上打 tag 並推送：
@@ -131,11 +138,116 @@ git push origin v0.2.0
 ```
 
    tag 必須是 `vMAJOR.MINOR.PATCH`、與 Info.plist 版本相同、指向 `main` 上的 commit，否則 workflow 會在載入任何金鑰之前就失敗。沒有 `v` 前綴的 tag（例如早期本機的 `0.2.0`）不會觸發 workflow。
-3. Actions → **Release** 跑完後，Releases 頁會出現 **Draft**，內含 `Lint-<版本>-macOS-arm64.dmg` 與 `.sha256`。`CFBundleVersion` 會是這次 run 的編號。
+3. Actions → **Release** 跑完後（Apple 沒在時間內處理完則是 PENDING，見下節），Releases 頁會出現 **Draft**，內含 `Lint-<版本>-macOS-arm64.dmg` 與 `.sha256`。`CFBundleVersion` 會是這次 run 的編號。
 4. 在**另一台 Mac** 下載並測試：開啟 DMG、拖進 Applications、啟動、輔助功能授權、LLM、Learning 資料庫。
 5. 沒問題就在 GitHub 上按 **Publish release**。等流程穩定幾次之後，才考慮把 workflow 的 `--draft` 拿掉。
 
-重跑：Actions → Release → *Run workflow* → 輸入既有的 tag。同一個 tag 若已有 Draft，先刪掉它（`gh release create` 不會覆蓋）。
+重跑：Actions → Release → *Run workflow* → 輸入既有的 tag。同一個 tag 若已有 Draft，先刪掉它（`gh release create` 不會覆蓋）。**公證 PENDING 時不要重跑 Release**：workflow 會先檢查這個 tag 有沒有未過期的 `pending-release-<tag>` artifact，有就拒絕建置，請改用 Resume Release。
+
+同一個 tag 同一時間只會有一條發版流程（Release 與 Resume Release 共用 `release-<tag>` concurrency group）；其他 tag、`ci.yml`、推到 `main` 的 commit 都不會被卡住。
+
+### 公證還在處理中（PENDING）
+
+`release.sh` 先上傳 DMG（不等待），拿到 submission ID 後**立刻**把 ID、DMG 的 SHA-256、commit 等寫進 `release-state.json`，然後才用 `notarytool wait --timeout 45m` 等。
+
+- **notarytool 等到逾時（exit code 124）不等於公證被拒。** 逾時只代表這台電腦不等了；Apple 那邊還在處理。腳本會再用 `notarytool info` 問一次狀態，仍是 `In Progress` 就以 **PENDING**（exit code 75）結束：不刪 DMG、不重建 DMG，狀態檔保留。
+- 只有 Apple 回 `Invalid`（或 `Rejected`）才是被拒（exit code 65）：印出並保存 `notarytool log`（`notarization-log.json`），狀態記為 `invalid`，這個 DMG 永遠不會被 staple 或發佈。
+- 上傳失敗、沒拿到 submission ID（exit code 1，狀態 `submission-failed`）：Apple 那邊沒有任何待處理的東西，檢查 API key 與網路後重新開始一次發版。
+- 已有 submission ID 但查不到狀態（網路、401/403，exit code 69）：送審紀錄與 DMG 都保留，修好之後 resume。
+
+在 GitHub Actions 上，PENDING 時 Release run 會：
+
+1. 把**送審的那個 DMG**、`release-state.json`、`notarization-submit.json` 上傳成 artifact `pending-release-<tag>`（不壓縮，保留 30 天）；
+2. 立刻把 artifact 下載回來，用 `cmp` 逐位元組比對原檔，並確認 SHA-256 等於送審時記錄的值（GitHub artifact 是 zip 封裝，內容不變；download-artifact 另外會驗 artifact 的 digest）；
+3. 在 run 的 Summary 顯示 **NOTARIZATION PENDING**、submission ID、送審的 SHA-256，以及 resume 指令。Job 本身是成功的（這不是失敗）。
+
+之後（Apple 處理完再跑，太早跑只會再回 PENDING、不改任何東西）：
+
+```sh
+gh workflow run resume-release.yml --repo davislinyd/Lint -f tag=v0.3.1 -f run_id=<Release run 的 ID> -f dmg_sha256=<Summary 上的 SHA-256>
+```
+
+Resume Release 只做這些：確認 `run_id` 是 Release workflow 的 run → checkout 該 tag → 從那個 run 下載 `pending-release-<tag>` → 確認狀態檔的 tag、commit 與 tag 相同、`dmgSHA256` 等於你給的 `dmg_sha256` → `resume-release.sh` 重算 DMG 的 SHA-256 並要求**完全相等** → `notarytool info` →
+
+- `Accepted`：staple **那個** DMG → `stapler validate` → `hdiutil verify` → 掛載檢查 `Lint.app` 簽章、內建 llama.cpp、Gatekeeper → 重新產生最終 `.sha256` → 建立 Draft Release；
+- `In Progress`：什麼都不動，run 顯示 PENDING，之後用同樣的參數再跑；
+- `Invalid`：印出 log、上傳診斷資料、失敗，不發佈。
+
+它不建置、不簽章、不重新送審，也不需要 Developer ID 憑證（只用 API key）。
+
+**永遠不要為了 resume 重建 DMG。** 重建出來的 DMG 是不同的檔案（SHA-256 不同），舊的 submission ID 的票證不屬於它；`resume-release.sh` 看到 SHA-256 不符會直接停止、不 staple。原始 DMG 若遺失，就只能重新發一次版（新的建置、新的送審）。
+
+## 本機正式發版（隔離的 worktree 與持久目錄）
+
+[`Scripts/formal-release.sh`](../Scripts/formal-release.sh) 在本機做同一件事，而且不依賴你的工作目錄：
+
+```sh
+Scripts/formal-release.sh start v0.3.1
+```
+
+它會確認 tag 是 `vMAJOR.MINOR.PATCH`、存在、在 `origin/main` 上（先 `git fetch origin --tags`）、該 commit 的 `Info.plist` 版本相同；然後在 `~/Library/Application Support/LintRelease/`（可用 `LINT_RELEASE_ROOT` 改）建立：
+
+```text
+~/Library/Application Support/LintRelease/
+  v0.3.1/
+    <commit-sha>/
+      worktree/                          detached checkout，固定在該 commit；建置在這裡跑
+      artifacts/
+        Lint-0.3.1-macOS-arm64.dmg       送審的那個 DMG（finalize 後是 staple 過的版本）
+        Lint-0.3.1-macOS-arm64.dmg.sha256  finalize 後才產生
+        release-state.json
+        notarization-submit.json         notarytool 上傳的回覆
+        notarization-log.json            只有 Invalid 時
+      logs/
+        start-<時間>.log、resume-<時間>.log
+```
+
+環境變數與 `release.sh` 相同：`CODESIGN_IDENTITY`、`APPLE_API_KEY_PATH`、`APPLE_API_KEY_ID`、`APPLE_API_ISSUER_ID`、`APPLE_TEAM_ID`、`LINT_BUILD_NUMBER`、`LINT_NOTARY_TIMEOUT`（預設 `45m`）。`.p8`／`.p12` 不會被複製進發版目錄，狀態檔也不含任何金鑰或密碼。本機測試未打 tag 的 commit：`Scripts/formal-release.sh start --commit <rev>`（狀態檔的 `tag` 是空字串）。
+
+同一個版本已有未完成（`built`／`pending`／`finalizing`）的發版時，`start` 會拒絕；同一個 commit 的 `artifacts/` 已有東西也會拒絕，永遠不覆蓋。
+
+查狀態（只讀本機檔案，不連 Apple）：
+
+```sh
+Scripts/formal-release.sh status
+```
+
+Resume（用發版 worktree 裡、也就是 tag 那個 commit 的腳本執行；worktree 不在了會從 git 重建）：
+
+```sh
+Scripts/formal-release.sh resume v0.3.1
+```
+
+也可以直接跑 `Scripts/resume-release.sh <release-state.json>`（需要能找到該 commit 的 git repo）。驗證所用的 entitlements、runtime manifest、語系清單都用 `git archive` 從**送審的 commit** 取出，所以主要 checkout 之後的修改不會影響 resume。
+
+結束代碼：`0` 完成、`75` PENDING、`65` Invalid、`69` 查不到狀態、`1` 其他錯誤（包括 DMG 遺失或 SHA-256 不符，這兩種在連 Apple 之前就停止）。
+
+Finalize 的細節：先把送審的 DMG 複製到 `artifacts/.finalize/` 並驗證雜湊，在副本上 staple 與做完所有檢查，才用同一目錄內的 rename 換掉原檔；中途失敗時原檔仍是送審時的位元組。狀態檔先記下 `finalizing` 與最終 SHA-256 再 rename，所以就算在那一瞬間中斷，下次 resume 也認得出來。
+
+清理（明確執行才會刪）：
+
+```sh
+Scripts/formal-release.sh cleanup v0.3.1 --worktree-only
+```
+
+```sh
+Scripts/formal-release.sh cleanup v0.3.1
+```
+
+`--worktree-only` 只移除 worktree（finalize 之後就可以刪，會同時 `git worktree prune`），DMG、狀態與 log 保留到你自己清。不加參數會刪除 `v0.3.1/` 底下的整個發版目錄；只要還有 `built`／`pending`／`finalizing` 的發版就拒絕，除非加上 `--discard-pending`（放棄那次送審）。`--commit <sha>` 只處理其中一個 commit。它只會動 `LINT_RELEASE_ROOT/<版本>/` 底下，不會碰其他版本。
+
+### release-state.json
+
+所有值都是字串（未知時為空字串），另有整數 `schemaVersion`。以原子方式寫入（同目錄暫存檔 + rename）。
+
+| 欄位 | 內容 |
+|------|------|
+| `schemaVersion` | `1` |
+| `version`、`tag`、`commit`、`architecture`、`buildNumber` | 發版身分；`commit` 是完整 SHA |
+| `dmgFileName`、`dmgPath`、`dmgSHA256`、`dmgCreatedAt` | 送審的 DMG 與它的 SHA-256（resume 以同目錄的 `dmgFileName` 為準） |
+| `submissionID`、`submissionCreatedAt`、`notarizationStatus`、`lastCheckedAt` | 公證：`In Progress`／`Accepted`／`Invalid`／`Rejected` |
+| `releaseStatus` | `built` → `pending` → `finalizing` → `finalized`；或 `invalid`、`submission-failed`；演練為 `unnotarized`、`preview` |
+| `finalSHA256`、`finalizedAt` | staple 後最終 DMG 的 SHA-256 |
 
 ## 本機演練（不送 Apple）
 
@@ -143,14 +255,14 @@ git push origin v0.2.0
 LINT_SKIP_NOTARIZE=1 ./Scripts/release.sh
 ```
 
-需要本機鑰匙圈有 Developer ID Application 憑證。產物在 `dist/release/`，檔名帶 `-unnotarized`，不能發佈。要在本機真的公證，改設 `APPLE_API_KEY_PATH`、`APPLE_API_KEY_ID`、`APPLE_API_ISSUER_ID`（不設 `LINT_SKIP_NOTARIZE`）。
+需要本機鑰匙圈有 Developer ID Application 憑證。產物在 `dist/release/`，檔名帶 `-unnotarized`，不能發佈。設 `LINT_RELEASE_OUTPUT_DIR=<絕對路徑>` 可以改輸出到一個新的（或空的）目錄，並多產生 `release-state.json`；`dist/release/` 仍是預設。要在本機真的公證，用上面的 `Scripts/formal-release.sh`（`release.sh` 公證時一定要有 `LINT_RELEASE_OUTPUT_DIR`，不接受 `dist/release/`）。
 
 日常開發與本機安裝不受影響：`./Scripts/package-app.sh`（含 `release` 引數）照舊用 Apple Development 憑證簽章；只有 `LINT_RELEASE_BUILD=1` 才走嚴格的 Developer ID 路徑。
 
 ## 流程檢查了什麼
 
-- 工作流程：tag 格式、tag 存在且就是 checkout 的 commit、commit 在 `main` 上、tag 版本 = Info.plist 版本、6 個 secrets 都在、`swift test` 通過。
-- `release.sh`：只接受**恰好一個** `Developer ID Application` 憑證（不 fallback 到 Apple Development 或 ad-hoc）；簽章有 `runtime` flag、安全時間戳、`app.lint.assistant`、`TeamIdentifier` 符合 `APPLE_TEAM_ID`、entitlements 與 `Resources/Lint.entitlements` 一致且沒有 `get-task-allow`；DMG 只含 `Lint.app` 與 `Applications` 連結、已簽章；公證必須 `Accepted`（否則印出 `notarytool log` 並失敗）；`stapler` 附上並驗證票證；`hdiutil verify`；掛載最終 DMG 對裡面的 app 做 `codesign` 與 `spctl` 驗證；產出並自我驗證 SHA-256。
+- 工作流程：tag 格式、tag 存在且就是 checkout 的 commit、commit 在 `main` 上、tag 版本 = Info.plist 版本、這個 tag 沒有 PENDING 的送審、6 個 secrets 都在、`swift test` 通過。`release.sh` 公證前還要求 checkout 乾淨且就是該 tag 的 commit。
+- `release.sh`：只接受**恰好一個** `Developer ID Application` 憑證（不 fallback 到 Apple Development 或 ad-hoc）；簽章有 `runtime` flag、安全時間戳、`app.lint.assistant`、`TeamIdentifier` 符合 `APPLE_TEAM_ID`、entitlements 與 `Resources/Lint.entitlements` 一致且沒有 `get-task-allow`；DMG 只含 `Lint.app` 與 `Applications` 連結、已簽章；公證必須 `Accepted` 才 staple（`In Progress` 為 PENDING、`Invalid` 印出 `notarytool log` 並失敗，兩者都不刪 DMG）；resume 前重算 SHA-256 必須等於送審時的值；`stapler` 附上並驗證票證；`hdiutil verify`；掛載最終 DMG 對裡面的 app 做 `codesign` 與 `spctl` 驗證；產出並自我驗證 SHA-256。
 - 內建的 llama.cpp（`release.sh` 對建置出的 App 與 DMG 裡的 App 各檢查一次）：`LlamaRuntime/<arch>/` 存在、`runtime-info.json` 的架構與 tag／SHA-256 等於 manifest、授權文件在；`Lint.app` 裡**每一個**非主程式的 Mach-O 都是薄的、與 App 同架構、簽章有效，正式版還要求是 Developer ID、Hardened Runtime、安全時間戳、與 App 同一個 Team ID（`codesign --deep` 不會檢查 `Resources` 裡的程式，所以逐一檢查）；SwiftPM 資源 bundle、`Localizable.strings`、圖示與 `PkgInfo` 都在。
 - 預覽版（`LINT_PREVIEW_BUILD=1`）：ad-hoc 簽章、`runtime` flag、entitlements、版本與 build number、DMG 內容、SHA-256；不呼叫任何 Apple 服務，DMG 不簽章。
 
@@ -162,9 +274,14 @@ LINT_SKIP_NOTARIZE=1 ./Scripts/release.sh
 | `not reachable from main` | 先把該 commit 合併進 `main` 再打 tag |
 | `secret … is missing or empty` | `release` 環境缺 secret（名稱見上表），或 workflow 沒有進到 `release` 環境（檢查 Deployment branches and tags） |
 | `no valid 'Developer ID Application' code signing identity` | `.p12` 沒包含私鑰、憑證過期或被撤銷、密碼錯誤；訊息會列出鑰匙圈裡實際有的憑證 |
-| `notarization failed … Invalid` | 看 log 裡的 `issues`。常見：缺 Hardened Runtime、沒有安全時間戳、未簽章的可執行檔、`get-task-allow` |
+| `NOTARIZATION REJECTED … Invalid` | 看 log（`notarization-log.json`）裡的 `issues`。常見：缺 Hardened Runtime、沒有安全時間戳、未簽章的可執行檔、`get-task-allow`。修好後發新的一版 |
+| `NOTARIZATION PENDING` | 不是錯誤：Apple 還在處理（等待逾時 exit 124 也是這個）。稍後 resume，不要重建 |
+| `the DMG was changed or replaced after it was submitted` | 送審後 DMG 被改過或換掉；停止，不 staple。找回原檔，或重新發版 |
+| `the submitted DMG is missing` | 同上；不要重建來頂替 |
+| `already has a pending notarization`（Release workflow） | 這個 tag 已有 PENDING 的送審；用 Resume Release。確定要放棄時才刪掉那個 artifact |
+| `a notarized release needs its own directory` | 公證的建置要 `LINT_RELEASE_OUTPUT_DIR`；本機用 `Scripts/formal-release.sh` |
 | `notarytool` 回 401 / 403 | Key ID / Issuer ID / `.p8` 不成對，或不是 **Team** key（Access 至少 Developer） |
-| `stapler` Error 65 | 公證通過後票證要一點時間才會出現在 Apple 的 CDN；腳本會重試 5 次，仍失敗就重跑 |
+| `stapler` Error 65 | 公證通過後票證要一點時間才會出現在 Apple 的 CDN；腳本會重試 5 次，仍失敗就再 resume（不要重建） |
 | `hdiutil … Resource busy` | Spotlight／XProtect 短暫占用剛掛載的磁碟區；腳本已用分步建立與必要時 `-force` 卸載處理 |
 
 ## 憑證輪替

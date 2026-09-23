@@ -163,7 +163,6 @@
 "連線測試" = "Connection Test";
 "已自訂" = "Customized";
 "使用內建預設" = "Using built-in default";
-"翻譯目標語言" = "Translation target language";
 "額外指示" = "Extra instructions";
 "若下方 System Prompt 已自訂覆寫，以覆寫內容為準。" = "If the System Prompt below is overridden, the override takes precedence.";
 "每個模式與語氣組合可分開覆寫，改完即生效。" = "Each mode and tone combination can be overridden separately; changes apply immediately.";
@@ -178,7 +177,6 @@
 "結束 Lint" = "Quit Lint";
 "沒有可覆蓋的選取" = "No selection to overwrite";
 "文法校對與潤飾" = "Proofread & polish";
-"翻譯" = "Translate";
 "自訂 Prompt" = "Custom prompt";
 "語氣" = "Tone";
 "保留原語氣" = "Preserve Tone";
@@ -394,3 +392,4 @@
 "記憶體用量很高，可能當機" = "very high memory use, may freeze the Mac";
 "需下載 %@" = "%@ download";
 "這個模型很大，執行時會佔用大量記憶體；在 16 GB 的 Mac 上可能讓系統變得非常緩慢，甚至當機。記憶體吃緊時請改用 Gemma 4 E4B 或 Apple Intelligence。" = "This model is large and uses a lot of memory while it runs. On a 16 GB Mac it can make the system very slow or even unresponsive. If memory is tight, use Gemma 4 E4B or Apple Intelligence instead.";
+"翻譯成中文" = "Translate to Chinese";

@@ -60,7 +60,11 @@ enum AppleOnDeviceModel {
     /// The model's context in tokens, from the runtime (macOS 26 reports 4096 before 26.4 exposed it).
     static func contextSize() -> Int? {
         #if canImport(FoundationModels)
-        if #available(macOS 26.0, *) { return SystemLanguageModel.default.contextSize }
+        // 0 has been seen while the system could not load the model: that is no size to split by.
+        if #available(macOS 26.0, *) {
+            let size = SystemLanguageModel.default.contextSize
+            return size > 0 ? size : nil
+        }
         #endif
         return nil
     }

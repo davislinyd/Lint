@@ -127,8 +127,9 @@ final class WritingPipelineTests: XCTestCase {
     }
 
     func testAPieceTheModelSaysIsTooLongIsSplitAgainAtMostTwice() async throws {
-        let text = "one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen"
-        let limit = 8
+        let text = (1...60).map { "Sentence \($0) is here and says a few things." }.joined(separator: " ")
+        XCTAssertGreaterThan(WritingChunker.estimatedTokens(text), WritingPipeline.minimumTokensToSplit * 2)
+        let limit = WritingChunker.estimatedTokens(text) / 3
         let model = FakeModel { _, piece in
             if WritingChunker.estimatedTokens(piece) > limit { throw AppleIntelligenceError.contextSizeExceeded }
             return piece
@@ -149,6 +150,25 @@ final class WritingPipelineTests: XCTestCase {
             // 1 + 2 + 4 requests: the whole text, its halves, their halves; then it gives up.
             XCTAssertLessThanOrEqual(hopeless.calls.count, 7)
         }
+    }
+
+    func testAShortPieceIsNeverSplitWhenTheAnswerRunsAway() async throws {
+        let model = FakeModel { _, _ in throw AppleIntelligenceError.contextSizeExceeded }
+        do {
+            _ = try await WritingPipeline.run(
+                source: "Your team keeps missing the deadlines. Fix it by Monday.", mode: .proofread, tone: .professional,
+                systemPrompt: "P", budget: nil
+            ) { try model.generate($0, $1) }
+            XCTFail("expected contextSizeExceeded")
+        } catch AppleIntelligenceError.contextSizeExceeded {
+            XCTAssertEqual(model.calls.count, 1, "a sentence is not cut into fragments")
+        }
+    }
+
+    func testAnAnswerMayBeAFewTimesLongerThanTheTextAndNoMore() {
+        XCTAssertEqual(WritingPipeline.responseTokenLimit(for: "Fix it."), 256, "a floor for short texts")
+        let long = String(repeating: "word ", count: 300)
+        XCTAssertEqual(WritingPipeline.responseTokenLimit(for: long), WritingChunker.estimatedTokens(long) * 4 + 128)
     }
 
     func testOnlyAProofreadIsToldWhichLanguageTheTextIsIn() async throws {

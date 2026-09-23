@@ -24,7 +24,6 @@ final class SettingsStore {
         static let provider = "app.lint.providerKind"
         static let appLanguage = "app.lint.appLanguage"
         static let customPrompt = "app.lint.customPrompt"
-        static let translateTarget = "app.lint.translateTarget"
         static let lastMode = "app.lint.lastMode"
         static let proofreadTone = "app.lint.lastTone.proofread"
         static let translateTone = "app.lint.lastTone.translate"
@@ -91,9 +90,6 @@ final class SettingsStore {
     /// Empty / missing → built-in default.
     var systemPromptOverrides: [String: String] {
         didSet { defaults.set(systemPromptOverrides, forKey: Keys.systemPromptOverrides) }
-    }
-    var translateTarget: String {
-        didSet { defaults.set(translateTarget, forKey: Keys.translateTarget) }
     }
     var lastMode: WritingMode {
         didSet { defaults.set(lastMode.rawValue, forKey: Keys.lastMode) }
@@ -213,7 +209,6 @@ final class SettingsStore {
         customPrompt = defaults.string(forKey: Keys.customPrompt) ?? ""
         systemPromptOverrides =
             defaults.dictionary(forKey: Keys.systemPromptOverrides) as? [String: String] ?? [:]
-        translateTarget = defaults.string(forKey: Keys.translateTarget) ?? "繁體中文"
         lastMode = LegacyWritingMode.resolve(defaults.string(forKey: Keys.lastMode) ?? "")?.mode ?? .proofread
         tones = WritingToneMemory(
             proofread: WritingTone(rawValue: defaults.string(forKey: Keys.proofreadTone) ?? "") ?? .preserve,
@@ -411,8 +406,14 @@ final class SettingsStore {
         for mode: WritingMode, tone: WritingTone, profile: WritingPromptProfile = .standard
     ) -> String {
         WritingPromptComposer.compose(
-            mode: mode, tone: tone, customPrompt: customPrompt, translateTarget: translateTarget, profile: profile
+            mode: mode, tone: tone, customPrompt: customPrompt, profile: profile
         )
+    }
+
+    /// The prompts the chosen engine gets (see `WritingPromptProfile.for(provider:)`): what the
+    /// prompt settings show and compare an edit against.
+    var promptProfile: WritingPromptProfile {
+        WritingPromptProfile.for(provider: providerKind)
     }
 
     /// The user's own override wins whatever the engine: it is their wording of the task.
@@ -436,7 +437,7 @@ final class SettingsStore {
         var copy = systemPromptOverrides
         let key = WritingPromptComposer.overrideKey(mode: mode, tone: tone)
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        let builtIn = defaultSystemPrompt(for: mode, tone: tone)
+        let builtIn = defaultSystemPrompt(for: mode, tone: tone, profile: promptProfile)
         if trimmed.isEmpty || text == builtIn {
             copy.removeValue(forKey: key)
         } else {

@@ -99,7 +99,7 @@ public struct AppleModelMetadata: Codable, Equatable, Sendable {
             osVersion: ProcessInfo.processInfo.operatingSystemVersionString,
             variant: AppleOnDeviceModel.variantName(),
             contextSize: AppleOnDeviceModel.contextSize(),
-            promptVersion: WritingPromptComposer.onDevicePromptVersion
+            promptVersion: WritingPromptComposer.englishPromptVersion
         )
     }
 }

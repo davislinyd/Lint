@@ -20,6 +20,16 @@ public struct WritingPipelineResult: Equatable, Sendable {
 /// prompt is the user's own task: it is sent whole and not checked.
 public enum WritingPipeline {
     public static let maximumSplitDepth = 2
+    /// A piece shorter than this is never split: when the model runs out of context on it, it was the
+    /// answer that ran away, not the text that was too long (measured: a two-sentence professional
+    /// rewrite that turned into an invented list until the context was full).
+    public static let minimumTokensToSplit = 256
+
+    /// How long an answer to `text` may get. Proofreading, a tone rewrite and a translation into
+    /// Chinese all stay close to the text's length; an answer many times longer is being made up.
+    public static func responseTokenLimit(for text: String) -> Int {
+        max(256, WritingChunker.estimatedTokens(text) * 4 + 128)
+    }
 
     /// - Parameter generate: sends one request (system prompt, text) and returns the full answer.
     public static func run(
@@ -58,8 +68,7 @@ public enum WritingPipeline {
             return WritingPipelineResult(text: piece, outcome: .accepted, firstAnswer: piece, requests: 0, pieces: 0)
         }
         // A small model drifts into another language unless told which one this text is in.
-        let prompt = mode == .proofread
-            ? systemPrompt + "\n" + WritingOutputGuard.languageInstruction(for: piece) : systemPrompt
+        let prompt = WritingPromptComposer.withLanguageLine(systemPrompt, for: piece, mode: mode)
         do {
             var requests = 0
             let result = try await GuardedWriter.run(
@@ -72,7 +81,8 @@ public enum WritingPipeline {
                 text: result.text, outcome: result.outcome, firstAnswer: result.attempts.first ?? result.text,
                 requests: requests, pieces: 1
             )
-        } catch AppleIntelligenceError.contextSizeExceeded where depth < maximumSplitDepth {
+        } catch AppleIntelligenceError.contextSizeExceeded
+            where depth < maximumSplitDepth && WritingChunker.estimatedTokens(piece) >= minimumTokensToSplit {
             let halves = WritingChunker.chunks(piece, maxTokens: max(WritingChunker.estimatedTokens(piece) / 2, 1))
             guard halves.count > 1 else { throw AppleIntelligenceError.contextSizeExceeded }
             var results: [WritingPipelineResult] = []

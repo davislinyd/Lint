@@ -257,6 +257,18 @@ public final class LocalAISetupCoordinator {
         return message
     }
 
+    /// Apple Intelligence is taking the requests, so a llama-server Lint started only holds memory the
+    /// system model may need. Seen once on a 16 GB Mac under memory pressure: while Lint's llama-server
+    /// held Gemma 4 E4B, Apple's model reported a context size of 0 and failed every request, and it
+    /// recovered about a minute after llama-server released the model. A second attempt with the
+    /// model resident did not fail, so that is not proven to be the cause; the memory is freed either
+    /// way. A server Lint did not start is left alone.
+    public func releaseForAppleIntelligence() {
+        guard case .running(_, managedByLint: true) = serverStatus else { return }
+        server.stopIfStartedByUs()
+        serverStatus = server.status
+    }
+
     /// Called when the app quits.
     public func stopManagedServer() {
         server.stopIfStartedByUs()

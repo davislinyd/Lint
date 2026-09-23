@@ -95,9 +95,11 @@ final class WritingOutputGuardTests: XCTestCase {
         let source = "Could you review my pull request when you have a moment? It only touches the login flow."
         XCTAssertEqual(WritingOutputGuard.assess(source: source, output: source, mode: .proofread, tone: .preserve), [])
         let rewritten = "When you get a chance, please take a look at my PR — the changes are limited to how users sign in."
-        guard case .excessiveChange = WritingOutputGuard.assess(source: source, output: rewritten, mode: .proofread, tone: .preserve).first else {
-            return XCTFail("a paraphrase of correct text must not pass as a proofread")
-        }
+        let issues = WritingOutputGuard.assess(source: source, output: rewritten, mode: .proofread, tone: .preserve)
+        XCTAssertTrue(
+            issues.contains { if case .excessiveChange = $0 { return true } else { return false } },
+            "a paraphrase of correct text must not pass as a proofread: \(issues)"
+        )
         XCTAssertEqual(
             WritingOutputGuard.assess(source: source, output: rewritten, mode: .proofread, tone: .concise), [],
             "a tone rewrite is meant to change the wording"
@@ -182,6 +184,34 @@ final class WritingOutputGuardTests: XCTestCase {
         )
     }
 
+    func testAPreserveProofreadKeepsAcronymsButAToneRewriteMaySpellThemOut() {
+        let source = "Thanks! I'll take a look at the PR this afternoon, the CI is green."
+        let expanded = "Thanks! I'll take a look at the press release this afternoon, the CI is green."
+        XCTAssertEqual(WritingOutputGuard.assess(source: source, output: expanded, mode: .proofread, tone: .preserve), [.missing(["PR"])])
+        XCTAssertEqual(
+            WritingOutputGuard.assess(source: "Please reply ASAP.", output: "Please reply as soon as possible.", mode: .proofread, tone: .formal), []
+        )
+        XCTAssertEqual(ProtectedLiterals.extract(from: "Meet at 3 PM (UTC+8) about MFA and HTTP2, OK?", kinds: [.acronym]), ["PM", "UTC", "MFA", "HTTP2", "OK"])
+        XCTAssertEqual(ProtectedLiterals.extract(from: "I think a Q3 plan is fine.", kinds: [.acronym]), [], "one capital is not an acronym")
+    }
+
+    func testATemplateSlotTheTextDidNotHaveIsMadeUp() {
+        // Measured: Apple's model, asked for a formal tone, opened a one-line text with a greeting slot.
+        let source = "hey, just wanted to check if you got my last email about the contract. lmk asap thanks"
+        let framed = "Dear [Name],\n\nI am writing to ask whether you received my last email about the contract."
+        XCTAssertTrue(
+            WritingOutputGuard.assess(source: source, output: framed, mode: .proofread, tone: .formal).contains(.added(["[Name]"]))
+        )
+        XCTAssertEqual(
+            ProtectedLiterals.extract(from: "Hi {name}, order #{order_id} arrives in %d days, [Your Name]", kinds: [.placeholder]),
+            ["{name}", "{order_id}", "%d", "[Your Name]"]
+        )
+        XCTAssertEqual(
+            WritingOutputGuard.assess(source: "Hi {name}, your order ships in %d days.", output: "嗨 {name}，您的訂單將在 %d 天內出貨。", mode: .translate, tone: .preserve), [],
+            "a translation keeps the slots it was given"
+        )
+    }
+
     func testFixingCapitalsIsNotAddingContent() {
         XCTAssertEqual(
             WritingOutputGuard.assess(
@@ -238,6 +268,14 @@ final class WritingOutputGuardTests: XCTestCase {
         XCTAssertEqual(
             WritingOutputGuard.tidy("line  \nnext", source: "line  \nnext"), "line  \nnext",
             "a source that uses trailing spaces itself keeps them"
+        )
+        XCTAssertEqual(
+            WritingOutputGuard.tidy("I’ve attached “the” report.", source: "I've attached the report."),
+            "I've attached \"the\" report.", "the text's straight quotes are kept"
+        )
+        XCTAssertEqual(
+            WritingOutputGuard.tidy("It’s “done”.", source: "It’s done."), "It’s “done”.",
+            "a text that already uses typographic quotes keeps them"
         )
     }
 

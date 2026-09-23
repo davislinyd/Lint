@@ -39,6 +39,7 @@ struct WritingEvalEnvironment: Codable {
     var appleVariant: String?
     var contextSize: Int?
     var guarded: Bool
+    var temperature: Double?
     var hardware: String
 }
 
@@ -81,9 +82,10 @@ struct WritingEvalRun: Codable {
 ///     # then put the runs side by side in .build/eval/comparison.md
 ///     LINT_EVAL_COMPARE=1 swift test --filter WritingEvalReportTests
 ///
-/// The app's paths are reproduced exactly: Apple gets the on-device prompts, `WritingPipeline`'s
-/// check and single retry, one fresh session per request and greedy sampling; llama gets the
-/// standard prompts, temperature 0.3 and no guard. `LINT_EVAL_GUARD=0|1` overrides the guard.
+/// The app's paths are reproduced exactly: Apple gets the English prompts, `WritingPipeline`'s
+/// check and single retry, one fresh session per request and greedy sampling; llama gets the English
+/// prompts with the language line, temperature 0.3 and no guard. `LINT_EVAL_GUARD=0|1` overrides the
+/// guard, `LINT_EVAL_TEMPERATURE` the temperature, `LINT_EVAL_PROFILE=standard` the prompts.
 final class WritingEvalRunTests: XCTestCase {
     func testRunEveryFixtureThroughOneEngine() async throws {
         let environment = ProcessInfo.processInfo.environment
@@ -93,6 +95,8 @@ final class WritingEvalRunTests: XCTestCase {
         let onDevice = engine == "apple"
         let guarded = environment["LINT_EVAL_GUARD"].map { $0 == "1" } ?? onDevice
         let only = environment["LINT_EVAL_ONLY"].map { Set($0.split(separator: ",").map(String.init)) }
+        // The app sends llama-server 0.3; LINT_EVAL_TEMPERATURE tries another (0 = greedy).
+        let temperature = environment["LINT_EVAL_TEMPERATURE"].flatMap(Double.init) ?? 0.3
 
         let provider: any LLMProvider
         let model: String
@@ -113,7 +117,10 @@ final class WritingEvalRunTests: XCTestCase {
             model = environment["LINT_EVAL_MODEL"] ?? ProviderKind.localLlama.defaultModel
         }
         let metadata = AppleModelMetadata.current()
-        let profile: WritingPromptProfile = onDevice ? .onDevice : .standard
+        // As the app: the English prompts for Apple and for Lint's local model. LINT_EVAL_PROFILE=standard
+        // gives a llama model the original Chinese prompts, to compare.
+        let profile: WritingPromptProfile = environment["LINT_EVAL_PROFILE"] == "standard"
+            ? .standard : .english(onDevice ? .appleOnDevice : .localModel)
 
         let fixtures = try WritingEvalFixtures.load()
         var results: [WritingEvalResult] = []
@@ -124,8 +131,10 @@ final class WritingEvalRunTests: XCTestCase {
             func generate(_ systemPrompt: String, _ text: String) async throws -> String {
                 let request = ChatRequest(
                     model: model, systemPrompt: systemPrompt, userText: text,
+                    // The app caps the on-device answer; llama keeps the app's default.
+                    maxTokens: onDevice ? WritingPipeline.responseTokenLimit(for: text) : 4096,
                     reasoningEffort: onDevice ? nil : .low,
-                    temperature: onDevice ? nil : 0.3,
+                    temperature: onDevice ? nil : temperature,
                     transformsUserText: true
                 )
                 var output = ""
@@ -163,7 +172,10 @@ final class WritingEvalRunTests: XCTestCase {
                     case .flagged: outcome = "flagged"
                     }
                 } else {
-                    output = try await generate(systemPrompt, testCase.input)
+                    // The unguarded path of the app adds the language line itself (the pipeline does it otherwise).
+                    let prompt = profile.isEnglish
+                        ? WritingPromptComposer.withLanguageLine(systemPrompt, for: testCase.input, mode: mode) : systemPrompt
+                    output = try await generate(prompt, testCase.input)
                     first = output
                 }
             } catch {
@@ -187,11 +199,11 @@ final class WritingEvalRunTests: XCTestCase {
             label: label, startedAt: Date(),
             environment: WritingEvalEnvironment(
                 engine: engine, model: model, osVersion: metadata.osVersion, appVersion: Self.appVersion,
-                promptProfile: onDevice ? "onDevice" : "standard",
-                promptVersion: onDevice ? metadata.promptVersion : nil,
+                promptProfile: profile.isEnglish ? "english (\(onDevice ? "apple" : "local"))" : "standard",
+                promptVersion: profile.isEnglish ? metadata.promptVersion : nil,
                 appleVariant: onDevice ? metadata.variant : nil,
                 contextSize: onDevice ? metadata.contextSize : nil,
-                guarded: guarded, hardware: Self.hardware
+                guarded: guarded, temperature: onDevice ? nil : temperature, hardware: Self.hardware
             ),
             results: results
         )
@@ -266,6 +278,8 @@ final class WritingEvalReportTests: XCTestCase {
                 print("[eval] skipped \(file.lastPathComponent): not a run of this harness")
                 return nil
             }
+            // Only the cases still in the fixtures count: a run is re-scored on the current set.
+            run.results = run.results.filter { result in fixtures.cases.contains { $0.id == result.id } }
             run.results = run.results.map { result in
                 guard let testCase = fixtures.cases.first(where: { $0.id == result.id }) else { return result }
                 var updated = result
@@ -286,18 +300,25 @@ final class WritingEvalReportTests: XCTestCase {
         var markdown = "# Lint writing evaluation\n\n"
         markdown += "Fixtures: `Tests/LintCoreTests/Eval/WritingEvalFixtures.json` (version \(fixtures.version), \(fixtures.cases.count) cases). "
         markdown += "Only objective checks are counted here; grammar errors left in, meaning changes and added facts are judged by reading the answers below.\n\n"
-        markdown += "## Runs\n\n| Run | Engine | Model | OS | Prompt | Guard | Hardware |\n|---|---|---|---|---|---|---|\n"
+        markdown += "## Runs\n\n| Run | Engine | Model | OS | Prompt | Guard, temperature | Hardware |\n|---|---|---|---|---|---|---|\n"
         for run in runs {
             let env = run.environment
             let model = [env.model, env.appleVariant, env.contextSize.map { "ctx \($0)" }].compactMap { $0 }.joined(separator: ", ")
-            markdown += "| \(run.label) | \(env.engine) | \(model) | \(env.osVersion) | \(env.promptProfile) \(env.promptVersion ?? "") | \(env.guarded ? "on" : "off") | \(env.hardware) |\n"
+            let guardNote = (env.guarded ? "on" : "off") + (env.temperature.map { ", t=\($0)" } ?? "")
+            markdown += "| \(run.label) | \(env.engine) | \(model) | \(env.osVersion) | \(env.promptProfile) \(env.promptVersion ?? "") | \(guardNote) | \(env.hardware) |\n"
         }
         markdown += "\n## Objective checks\n\n"
-        markdown += "| Run | Cases | Any check failed | Clean sentences changed | Literal lost | Language | Simplified chars | Mainland terms | Lines/lists | Preamble | Retried | Kept source | Flagged | Request failed |\n"
-        markdown += "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|\n"
+        markdown += "| Run | Cases | Any check failed | Errors left (cases / pieces) | Clean sentences changed | Literal lost | Language | Simplified chars | Mainland terms | Lines/lists | Preamble | Retried | Kept source | Flagged | Request failed |\n"
+        markdown += "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|\n"
         for run in runs {
             let cscr = run.cleanSentenceChangeRate.map { "\($0.changed)/\($0.of) (\(Int((Double($0.changed) / Double($0.of) * 100).rounded()))%)" } ?? "n/a"
-            markdown += "| \(run.label) | \(run.results.count) | \(run.results.filter { !$0.failures.isEmpty }.count) | \(cscr) "
+            let unfixedPieces = run.results.reduce(0) { total, result in
+                guard let testCase = fixtures.cases.first(where: { $0.id == result.id }) else { return total }
+                return total + (testCase.mustFix ?? []).filter(result.output.contains).count
+            }
+            let fixable = fixtures.cases.reduce(0) { $0 + ($1.mustFix?.count ?? 0) }
+            markdown += "| \(run.label) | \(run.results.count) | \(run.results.filter { !$0.failures.isEmpty }.count) "
+            markdown += "| \(count(run, "fixes")) / \(unfixedPieces) of \(fixable) | \(cscr) "
             markdown += "| \(count(run, "preserves")) | \(count(run, "language")) | \(count(run, "simplified-chinese")) | \(count(run, "taiwan-wording")) "
             markdown += "| \(count(run, "line-structure")) | \(count(run, "no-preamble")) "
             markdown += "| \(run.results.filter { $0.outcome == "retried" }.count) | \(run.results.filter { $0.outcome == "keptSource" }.count) "

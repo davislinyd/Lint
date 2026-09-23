@@ -4,6 +4,12 @@ name: Release
 # This workflow holds the Developer ID private key and the App Store Connect API key, so it
 # must never run on pull requests (no pull_request / pull_request_target trigger).
 # Maintainer setup and the release procedure: docs/RELEASING.md
+#
+# The DMG is submitted to Apple once. If Apple answers within LINT_NOTARY_TIMEOUT, it is stapled,
+# verified and drafted here. If Apple is still "In Progress", the run ends as NOTARIZATION PENDING
+# instead of holding a runner for hours: the exact submitted DMG and its release-state.json are kept
+# as the artifact "pending-release-<tag>" (byte-for-byte checked after upload), and
+# resume-release.yml finishes that same file later. Never re-run this workflow to resume.
 
 # Only exact vX.Y.Z tags are official releases. A tag with a suffix (v0.2.0-preview.1) is an
 # unsigned preview published by hand and must never start this workflow.
@@ -21,9 +27,12 @@ on:
 
 permissions:
   contents: write
+  actions: read # look for a pending submission of the same tag
 
+# One publishing flow per tag at a time; resume-release.yml uses the same group. Other tags, CI and
+# development are never blocked by a release that is waiting for Apple.
 concurrency:
-  group: release
+  group: release-${{ inputs.tag || github.ref_name }}
   cancel-in-progress: false
 
 defaults:
@@ -67,6 +76,19 @@ jobs:
           plist_version=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Resources/Info.plist)
           if [ "${TAG#v}" != "$plist_version" ]; then
             echo "::error::Version mismatch: tag is ${TAG#v}, Resources/Info.plist is $plist_version"
+            exit 1
+          fi
+
+      # A submitted DMG is resumed, never rebuilt: a new build is a different file that the pending
+      # submission's ticket does not belong to.
+      - name: Refuse to rebuild while a submission of this tag is pending
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          pending=$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=pending-release-$TAG&per_page=100" \
+            --jq '[.artifacts[] | select(.expired | not) | "run \(.workflow_run.id) (artifact \(.id))"] | join(", ")')
+          if [ -n "$pending" ]; then
+            echo "::error::$TAG already has a pending notarization: $pending. Finish it with the Resume Release workflow. To abandon it on purpose, delete that artifact first."
             exit 1
           fi
 
@@ -120,20 +142,131 @@ jobs:
           umask 077
           printf '%s' "$P8_BASE64" | base64 --decode -o "$RUNNER_TEMP/AuthKey.p8"
 
-      - name: Build, sign, notarize and verify
+      # Exit codes (Scripts/release.sh): 0 finalized, 75 pending, 65 Invalid, 69 status unavailable.
+      # What happens next is decided by release-state.json, not by the exit code alone: whenever a
+      # submission exists and is not finalized, its DMG is kept.
+      - name: Build, sign, submit, and finalize if Apple answers in time
         id: release
         env:
           LINT_RELEASE_TAG: ${{ env.TAG }}
+          LINT_RELEASE_OUTPUT_DIR: ${{ runner.temp }}/lint-release/artifacts
+          LINT_NOTARY_TIMEOUT: 45m
           LINT_BUILD_NUMBER: ${{ github.run_number }}
           LINT_KEYCHAIN: ${{ runner.temp }}/lint-release.keychain-db
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
           APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
           APPLE_API_KEY_PATH: ${{ runner.temp }}/AuthKey.p8
-        run: ./Scripts/release.sh
+        run: |
+          rc=0
+          ./Scripts/release.sh || rc=$?
+          echo "exit_code=$rc" >>"$GITHUB_OUTPUT"
+          echo "release.sh exit code $rc"
+
+      # Read from the file, so a submitted DMG is kept even when the step above was cancelled or
+      # timed out while it waited.
+      - name: Read the release state
+        id: state
+        if: always()
+        env:
+          ARTIFACTS: ${{ runner.temp }}/lint-release/artifacts
+        run: |
+          status=none
+          if [ -f "$ARTIFACTS/release-state.json" ]; then
+            status=$(plutil -extract releaseStatus raw -o - "$ARTIFACTS/release-state.json")
+          fi
+          echo "release_status=$status" >>"$GITHUB_OUTPUT"
+          echo "artifacts=$ARTIFACTS" >>"$GITHUB_OUTPUT"
+          echo "release status: $status"
+
+      - name: Keep the submitted DMG for Resume Release
+        id: keep
+        if: always() && (steps.state.outputs.release_status == 'pending' || steps.state.outputs.release_status == 'finalizing')
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: pending-release-${{ env.TAG }}
+          path: |
+            ${{ steps.state.outputs.artifacts }}/*.dmg
+            ${{ steps.state.outputs.artifacts }}/release-state.json
+            ${{ steps.state.outputs.artifacts }}/notarization-submit.json
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 30
+
+      # Prove the round trip now, while the original is still on this runner: the downloaded DMG
+      # must be byte-identical to the submitted one and match the SHA-256 recorded at submission.
+      - name: Check that the kept artifact is byte-identical
+        if: always() && steps.keep.outputs.artifact-id != ''
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          artifact-ids: ${{ steps.keep.outputs.artifact-id }}
+          path: ${{ runner.temp }}/roundtrip
+
+      - name: Compare the round trip and report NOTARIZATION PENDING
+        if: always() && steps.keep.outputs.artifact-id != ''
+        env:
+          ARTIFACTS: ${{ steps.state.outputs.artifacts }}
+          ROUNDTRIP: ${{ runner.temp }}/roundtrip
+        run: |
+          state="$ARTIFACTS/release-state.json"
+          name=$(plutil -extract dmgFileName raw -o - "$state")
+          recorded=$(plutil -extract dmgSHA256 raw -o - "$state")
+          submission=$(plutil -extract submissionID raw -o - "$state")
+          notarization=$(plutil -extract notarizationStatus raw -o - "$state")
+          cmp "$ARTIFACTS/$name" "$ROUNDTRIP/$name"
+          cmp "$state" "$ROUNDTRIP/release-state.json"
+          downloaded=$(shasum -a 256 "$ROUNDTRIP/$name" | awk '{print $1}')
+          if [ "$(plutil -extract releaseStatus raw -o - "$state")" = pending ] && [ "$downloaded" != "$recorded" ]; then
+            echo "::error::the kept DMG's SHA-256 $downloaded differs from the submitted $recorded"
+            exit 1
+          fi
+          echo "::warning::NOTARIZATION PENDING for $TAG: submission $submission is '$notarization' at Apple and not finalized yet. The DMG was kept."
+          {
+            echo "## NOTARIZATION PENDING: $TAG"
+            echo
+            echo "Submission \`$submission\` is **$notarization** at Apple and is not finalized yet (a notarytool timeout is not a rejection). The exact submitted DMG and its state were kept as the artifact \`pending-release-$TAG\` and verified byte-for-byte after upload."
+            echo
+            echo "| | |"
+            echo "|---|---|"
+            echo "| DMG | \`$name\` |"
+            echo "| Submitted SHA-256 | \`$recorded\` |"
+            echo "| Release run | \`$GITHUB_RUN_ID\` |"
+            echo
+            echo "Finish it later (do not re-run Release, never rebuild):"
+            echo
+            echo '```sh'
+            echo "gh workflow run resume-release.yml --repo $GITHUB_REPOSITORY -f tag=$TAG -f run_id=$GITHUB_RUN_ID -f dmg_sha256=$recorded"
+            echo '```'
+          } >>"$GITHUB_STEP_SUMMARY"
+
+      - name: Keep the rejection diagnostics
+        if: always() && steps.state.outputs.release_status == 'invalid'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: rejected-release-${{ env.TAG }}-${{ github.run_id }}
+          path: |
+            ${{ steps.state.outputs.artifacts }}/release-state.json
+            ${{ steps.state.outputs.artifacts }}/notarization-*.json
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Fail unless the release is finalized or pending
+        if: always() && steps.release.outcome != 'skipped'
+        env:
+          RC: ${{ steps.release.outputs.exit_code }}
+          STATUS: ${{ steps.state.outputs.release_status }}
+        run: |
+          case "$RC:$STATUS" in
+            0:finalized|75:pending) exit 0 ;;
+            65:*) echo "::error::Apple rejected the submission (Invalid); see the log above and the rejected-release artifact. Nothing is published." ;;
+            69:*) echo "::error::the notarization status could not be read (API key or network). The submission and its DMG were kept; run Resume Release later." ;;
+            *) echo "::error::the release failed (exit code $RC, release status $STATUS)" ;;
+          esac
+          exit 1
 
       # A draft: download and test the DMG on another Mac, then publish it from the GitHub UI.
       - name: Create the draft GitHub Release
+        if: steps.release.outputs.exit_code == '0' && steps.state.outputs.release_status == 'finalized'
         env:
           GH_TOKEN: ${{ github.token }}
           DMG_PATH: ${{ steps.release.outputs.dmg }}

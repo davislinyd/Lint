@@ -45,7 +45,10 @@ final class InstallScriptTests: XCTestCase {
     }
 
     func testNoScriptInstallsOrCallsHomebrew() throws {
-        for name in ["install.sh", "fetch-llama-runtime.sh", "sign-llama-runtime.sh", "package-app.sh", "run-dev.sh", "release.sh"] {
+        for name in [
+            "install.sh", "fetch-llama-runtime.sh", "sign-llama-runtime.sh", "package-app.sh", "run-dev.sh", "release.sh",
+            "resume-release.sh", "formal-release.sh",
+        ] {
             for line in try codeLines(name) {
                 for forbidden in ["brew install", "/opt/homebrew", "command -v brew", "brew --prefix", "brew.sh", "HOMEBREW"] {
                     XCTAssertFalse(line.contains(forbidden), "\(name) must not use Homebrew: \(line)")

@@ -50,6 +50,9 @@ final class FloatingPanelViewModel {
     private let llm: LLMService
     private let learning: LearningCoordinator
     private let localAI: LocalAISetupCoordinator
+    private let appleIntelligence: any AppleIntelligenceAvailabilityChecking
+    /// Only the newest request may put its answer on screen (see `WritingRequestTickets`).
+    private var tickets = WritingRequestTickets()
     private var translationTask: Task<Void, Never>?
     private var streamTask: Task<Void, Never>?
 
@@ -62,6 +65,8 @@ final class FloatingPanelViewModel {
         let tone: WritingTone
         /// Memories that were in the prompt that produced it.
         let usedMemoryIDs: [UUID]
+        /// The engine that wrote it (Automatic resolved), as recorded with feedback.
+        let provider: ProviderKind
     }
     private var generated: GeneratedSuggestion?
 
@@ -74,6 +79,10 @@ final class FloatingPanelViewModel {
     private var prefetchUsedMemoryIDs: [UUID] = []
     private var prefetchFinished = false
     private var prefetchError: String?
+    /// The engine the prefetch went to, and for the on-device path what the output check made of it.
+    private var prefetchProvider: ProviderKind = .localLlama
+    private var prefetchNote: String?
+    private var prefetchIsSuggestion = true
     private var prefetchAttachedToUI = false
     /// zh-TW gloss of the finished prefetch, fetched in the background so the bubble opens complete.
     private var prefetchTranslationTask: Task<Void, Never>?
@@ -85,13 +94,15 @@ final class FloatingPanelViewModel {
 
     init(
         settings: SettingsStore, capture: TextCaptureService, llm: LLMService, learning: LearningCoordinator,
-        localAI: LocalAISetupCoordinator
+        localAI: LocalAISetupCoordinator,
+        appleIntelligence: any AppleIntelligenceAvailabilityChecking = SystemAppleIntelligence()
     ) {
         self.settings = settings
         self.capture = capture
         self.llm = llm
         self.learning = learning
         self.localAI = localAI
+        self.appleIntelligence = appleIntelligence
         loadSelectionFromSettings()
     }
 
@@ -122,11 +133,16 @@ final class FloatingPanelViewModel {
         isPrefetching = true
         isPrefetchReady = false
         onPrefetchStateChange?()
+        prefetchNote = nil
+        prefetchIsSuggestion = true
         let adopted = result
         // Built now, not when the request goes out: it has to be the prompt that `key` stands for.
-        let basePrompt = Self.terseSystemPrompt(settings.effectiveSystemPrompt(for: key.mode, tone: key.tone))
+        let prompts = (
+            standard: Self.terseSystemPrompt(settings.effectiveSystemPrompt(for: key.mode, tone: key.tone)),
+            onDevice: settings.effectiveSystemPrompt(for: key.mode, tone: key.tone, profile: .onDevice)
+        )
         prefetchTask = Task { [weak self] in
-            await self?.runPrefetch(for: adopted, key: key, basePrompt: basePrompt)
+            await self?.runPrefetch(for: adopted, key: key, prompts: prompts)
         }
     }
 
@@ -155,15 +171,19 @@ final class FloatingPanelViewModel {
     /// The local model can be paged out while idle, making the next request take seconds
     /// (seen 4–13 s). Touch it (same system prompt as prefetch, so its KV prefix is cached
     /// too) as soon as typing starts, so the load overlaps with typing instead of the check.
+    /// Only for Lint's local server. Apple Intelligence is not warmed up: `LanguageModelSession.prewarm`
+    /// made no measurable difference on the development Mac (docs/APPLE-INTELLIGENCE.md), so the model
+    /// is touched only by a real request.
     func warmUpIfIdle() {
-        guard settings.wantsManagedLocalServer,
-              Date().timeIntervalSince(lastModelActivity) > 60 else { return }
+        guard Date().timeIntervalSince(lastModelActivity) > 60 else { return }
         lastModelActivity = Date()
         Task { [weak self] in
             guard let self else { return }
+            let route = await self.resolveRoute()
+            guard self.settings.wantsManagedLocalServer(for: route) else { return }
             do {
-                try await self.ensureLocalServerIfNeeded()
-                let config = try self.settings.runtimeConfig()
+                try await self.ensureLocalServerIfNeeded(for: route)
+                let config = try self.settings.runtimeConfig(for: .localLlama)
                 let request = ChatRequest(
                     model: config.model,
                     systemPrompt: Self.terseSystemPrompt(self.settings.effectiveSystemPrompt(
@@ -192,6 +212,8 @@ final class FloatingPanelViewModel {
         prefetchUsedMemoryIDs = []
         prefetchFinished = false
         prefetchError = nil
+        prefetchNote = nil
+        prefetchIsSuggestion = true
         prefetchAttachedToUI = false
         onPrefetchStateChange?()
     }
@@ -214,13 +236,15 @@ final class FloatingPanelViewModel {
             if prefetchFinished {
                 isStreaming = false
                 errorMessage = prefetchError
+                statusNote = prefetchNote
                 prefetchTask = nil
                 isPrefetching = false
                 onPrefetchStateChange?()
                 if prefetchError == nil, !resultText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    generated = GeneratedSuggestion(
-                        source: text, text: resultText, mode: mode, tone: tone, usedMemoryIDs: prefetchUsedMemoryIDs
-                    )
+                    generated = prefetchIsSuggestion ? GeneratedSuggestion(
+                        source: text, text: resultText, mode: mode, tone: tone, usedMemoryIDs: prefetchUsedMemoryIDs,
+                        provider: prefetchProvider
+                    ) : nil
                     if let gloss = prefetchTranslation {
                         cancelTranslation()
                         translationText = gloss
@@ -319,6 +343,7 @@ final class FloatingPanelViewModel {
     func cancelStream() {
         streamTask?.cancel()
         streamTask = nil
+        tickets.invalidate()
         if prefetchAttachedToUI {
             cancelPrefetch()
         }
@@ -375,7 +400,7 @@ final class FloatingPanelViewModel {
             originalText: generated?.source ?? originalText,
             generatedText: generated?.text,
             finalText: resultText,
-            provider: settings.providerKind.rawValue,
+            provider: (generated?.provider ?? settings.providerKind).rawValue,
             model: settings.model,
             usedMemoryIDs: generated?.usedMemoryIDs ?? []
         )
@@ -390,8 +415,38 @@ final class FloatingPanelViewModel {
         streamTask = Task { await runTestConnection() }
     }
 
-    private func ensureLocalServerIfNeeded() async throws {
-        guard settings.wantsManagedLocalServer else { return }
+    /// Where a request goes now (see `WritingEngineRouter`). Cheap: Apple Intelligence's status is a
+    /// property read, and local AI is only looked at (never started) if it has not been yet.
+    private func resolveRoute() async -> WritingEngineRoute {
+        let selected = settings.providerKind
+        let apple = selected == .automatic || selected == .appleIntelligence
+            ? appleIntelligence.currentStatus() : .unavailable
+        if selected == .automatic, !apple.isAvailable, !localAI.hasChecked {
+            await localAI.refresh()
+        }
+        return WritingEngineRouter.route(
+            selected: selected, apple: apple,
+            localAIReady: localAI.hasChecked && localAI.runtimeReady && localAI.modelReady
+        )
+    }
+
+    /// The engine for a request, ready to use: Lint's local server is started only when the request
+    /// goes to it. When nothing can take the request, a friendly error (with the local AI setup
+    /// button only where `WritingEngineRouter.offersLocalAISetup` says so).
+    private func prepareEngine() async throws -> WritingEngineRoute {
+        let route = await resolveRoute()
+        if case .unavailable(let status) = route {
+            if WritingEngineRouter.offersLocalAISetup(selected: settings.providerKind, apple: status, localAIReady: false) {
+                setupErrorPending = true
+            }
+            throw AppleIntelligenceError.unavailable(status)
+        }
+        try await ensureLocalServerIfNeeded(for: route)
+        return route
+    }
+
+    private func ensureLocalServerIfNeeded(for route: WritingEngineRoute) async throws {
+        guard settings.wantsManagedLocalServer(for: route) else { return }
         do {
             try await localAI.ensureServerRunning()
         } catch let error as LocalAIError where error.needsSetup {
@@ -410,10 +465,12 @@ final class FloatingPanelViewModel {
     }
 
     private func runPrefetch(
-        for result: TextCaptureService.CaptureResult, key: WritingRequestKey, basePrompt: String
+        for result: TextCaptureService.CaptureResult, key: WritingRequestKey,
+        prompts: (standard: String, onDevice: String)
     ) async {
+        let route: WritingEngineRoute
         do {
-            try await ensureLocalServerIfNeeded()
+            route = try await prepareEngine()
         } catch {
             errorMessage = error.localizedDescription
             return
@@ -429,31 +486,49 @@ final class FloatingPanelViewModel {
         }
 
         do {
-            let config = try settings.runtimeConfig()
+            guard let kind = route.providerKind else { return }
+            let config = try settings.runtimeConfig(for: kind)
+            prefetchProvider = kind
+            let onDevice = route == .appleIntelligence
+            let basePrompt = onDevice ? prompts.onDevice : prompts.standard
             let personalized = await personalize(basePrompt, for: result.text, mode: key.mode, tone: key.tone)
             // More typing cancels this prefetch; do not send the model a request for stale text.
             if Task.isCancelled { return }
             prefetchUsedMemoryIDs = personalized.usedMemoryIDs
-            let request = ChatRequest(
-                model: config.model,
-                systemPrompt: personalized.systemPrompt,
-                userText: result.text,
-                reasoningEffort: .low,
-                temperature: Self.rewriteTemperature(for: config.kind),
-                fastMode: settings.fastMode
-            )
-            let stream = try llm.stream(config: config, request: request)
-            for try await event in stream {
-                if Task.isCancelled { break }
-                switch event {
-                case .text(let token):
-                    prefetchBuffer.append(token)
-                    if prefetchAttachedToUI {
-                        resultText = prefetchBuffer
-                    }
-                case .usage(let usage):
-                    if prefetchAttachedToUI {
-                        lastUsage = usage
+            if onDevice {
+                let written = try await writeOnDevice(
+                    config: config, systemPrompt: personalized.systemPrompt, source: result.text,
+                    mode: key.mode, tone: key.tone
+                ) { [weak self] usage in
+                    if self?.prefetchAttachedToUI == true { self?.lastUsage = usage }
+                }
+                // A newer selection replaced this prefetch while the model was answering.
+                if Task.isCancelled || prefetchKey != key { return }
+                prefetchBuffer = written.text
+                prefetchNote = Self.note(for: written.outcome)
+                prefetchIsSuggestion = Self.isSuggestion(written.outcome)
+            } else {
+                let request = ChatRequest(
+                    model: config.model,
+                    systemPrompt: personalized.systemPrompt,
+                    userText: result.text,
+                    reasoningEffort: .low,
+                    temperature: Self.rewriteTemperature(for: config.kind),
+                    fastMode: settings.fastMode
+                )
+                let stream = try llm.stream(config: config, request: request)
+                for try await event in stream {
+                    if Task.isCancelled { break }
+                    switch event {
+                    case .text(let token):
+                        prefetchBuffer.append(token)
+                        if prefetchAttachedToUI {
+                            resultText = prefetchBuffer
+                        }
+                    case .usage(let usage):
+                        if prefetchAttachedToUI {
+                            lastUsage = usage
+                        }
                     }
                 }
             }
@@ -466,15 +541,16 @@ final class FloatingPanelViewModel {
                 resultText = prefetchBuffer
                 isStreaming = false
                 errorMessage = prefetchBuffer.isEmpty ? (prefetchError ?? String(localized: "沒有收到建議。")) : nil
+                statusNote = prefetchNote
                 if errorMessage == nil {
-                    generated = GeneratedSuggestion(
+                    generated = prefetchIsSuggestion ? GeneratedSuggestion(
                         source: result.text, text: prefetchBuffer, mode: key.mode, tone: key.tone,
-                        usedMemoryIDs: personalized.usedMemoryIDs
-                    )
+                        usedMemoryIDs: personalized.usedMemoryIDs, provider: kind
+                    ) : nil
                     scheduleTranslationOfResult()
                 }
             } else if isPrefetchReady {
-                startPrefetchTranslation()
+                startPrefetchTranslation(route: route)
             }
             onPrefetchStateChange?()
         } catch is CancellationError {
@@ -493,9 +569,53 @@ final class FloatingPanelViewModel {
         }
     }
 
+    /// The on-device path: the text is split if it is too long for the model's context, every answer
+    /// is checked, a failed one is retried once, and a proofread that still fails keeps the source
+    /// (`WritingPipeline`). One request per piece; each answer arrives whole.
+    private func writeOnDevice(
+        config: LLMRuntimeConfig, systemPrompt: String, source: String, mode: WritingMode, tone: WritingTone,
+        onUsage: (TokenUsage) -> Void
+    ) async throws -> WritingPipelineResult {
+        let budget = AppleFoundationModelProvider.contextSize.map {
+            WritingChunkBudget(contextSize: $0, instructions: systemPrompt)
+        }
+        return try await WritingPipeline.run(
+            source: source, mode: mode, tone: tone, systemPrompt: systemPrompt, budget: budget
+        ) { prompt, text in
+            let request = ChatRequest(
+                model: config.model, systemPrompt: prompt, userText: text, reasoningEffort: nil,
+                transformsUserText: mode != .custom
+            )
+            var answer = ""
+            for try await event in try llm.stream(config: config, request: request) {
+                switch event {
+                case .text(let token): answer += token
+                case .usage(let usage): onUsage(usage)
+                }
+            }
+            return answer
+        }
+    }
+
+    /// What to tell the user when the output check changed what they see.
+    private static func note(for outcome: GuardedWritingResult.Outcome) -> String? {
+        switch outcome {
+        case .accepted, .acceptedAfterRetry: nil
+        case .keptSource: String(localized: "模型的建議改動過多或漏掉了原文內容，所以保留原文。")
+        case .flagged: String(localized: "這份結果可能漏掉或改動了原文的部分內容，使用前請先核對。")
+        }
+    }
+
+    /// The source text kept as a fallback is not something the model suggested, so it is not
+    /// feedback on a suggestion either.
+    private static func isSuggestion(_ outcome: GuardedWritingResult.Outcome) -> Bool {
+        if case .keptSource = outcome { return false }
+        return true
+    }
+
     private func runAdoptedCapture(_ result: TextCaptureService.CaptureResult) async {
         do {
-            try await ensureLocalServerIfNeeded()
+            _ = try await prepareEngine()
         } catch {
             errorMessage = error.localizedDescription
             return
@@ -510,7 +630,7 @@ final class FloatingPanelViewModel {
         let captured = await capture.capture()
         showPanel()
         do {
-            try await ensureLocalServerIfNeeded()
+            _ = try await prepareEngine()
         } catch {
             errorMessage = error.localizedDescription
             return
@@ -570,14 +690,15 @@ final class FloatingPanelViewModel {
         保留專有名詞、產品名、程式碼與 URL。
         """
 
-    /// Local model only — a cloud provider would pay for a second request per typing pause.
-    private func startPrefetchTranslation() {
-        guard settings.wantsManagedLocalServer else { return }
+    /// Lint's local model only — a cloud provider would pay for a second request per typing pause,
+    /// and Apple Intelligence gets no request for a suggestion the user may never open.
+    private func startPrefetchTranslation(route: WritingEngineRoute) {
+        guard settings.wantsManagedLocalServer(for: route) else { return }
         let source = prefetchBuffer.trimmingCharacters(in: .whitespacesAndNewlines)
         prefetchTranslationTask = Task { [weak self] in
             guard let self else { return }
             do {
-                let config = try self.settings.runtimeConfig()
+                let config = try self.settings.runtimeConfig(for: .localLlama)
                 let request = ChatRequest(
                     model: config.model,
                     systemPrompt: Self.translationSystemPrompt,
@@ -602,15 +723,22 @@ final class FloatingPanelViewModel {
         translationText = ""
         defer { isTranslating = false }
         do {
-            try await ensureLocalServerIfNeeded()
-            let config = try settings.runtimeConfig()
+            let route = try await prepareEngine()
+            guard let kind = route.providerKind else { return }
+            let config = try settings.runtimeConfig(for: kind)
+            let onDevice = route == .appleIntelligence
             let request = ChatRequest(
                 model: config.model,
-                systemPrompt: Self.translationSystemPrompt,
+                systemPrompt: onDevice
+                    ? WritingPromptComposer.compose(
+                        mode: .translate, tone: .preserve, customPrompt: "", translateTarget: "繁體中文", profile: .onDevice
+                    )
+                    : Self.translationSystemPrompt,
                 userText: source,
                 maxTokens: 512,
                 reasoningEffort: .low,
-                fastMode: true
+                fastMode: true,
+                transformsUserText: onDevice
             )
             let stream = try llm.stream(config: config, request: request)
             var out = ""
@@ -635,8 +763,9 @@ final class FloatingPanelViewModel {
     }
 
     private func runStream(forceLowReasoning: Bool = false) async {
+        let route: WritingEngineRoute
         do {
-            try await ensureLocalServerIfNeeded()
+            route = try await prepareEngine()
         } catch {
             errorMessage = error.localizedDescription
             return
@@ -651,6 +780,7 @@ final class FloatingPanelViewModel {
         let generationSource = originalText
         let generationMode = mode
         let generationTone = tone
+        let ticket = tickets.issue()
         errorMessage = nil
         resultText = ""
         generated = nil
@@ -659,11 +789,17 @@ final class FloatingPanelViewModel {
         isStreaming = true
         defer { isStreaming = false }
         var usedMemoryIDs: [UUID] = []
+        var isSuggestion = true
+        guard let kind = route.providerKind else { return }
         do {
-            let config = try settings.runtimeConfig()
+            let config = try settings.runtimeConfig(for: kind)
+            let onDevice = route == .appleIntelligence
             let effort: ReasoningEffort = forceLowReasoning ? .low : settings.reasoningEffort
             let systemPrompt: String
-            if forceLowReasoning {
+            if onDevice {
+                // The on-device prompts already ask for the bare text.
+                systemPrompt = settings.effectiveSystemPrompt(for: generationMode, tone: generationTone, profile: .onDevice)
+            } else if forceLowReasoning {
                 systemPrompt = Self.terseSystemPrompt(
                     settings.effectiveSystemPrompt(for: generationMode, tone: generationTone)
                 )
@@ -673,42 +809,61 @@ final class FloatingPanelViewModel {
             let personalized = await personalize(systemPrompt, for: generationSource, mode: generationMode, tone: generationTone)
             if Task.isCancelled { return }
             usedMemoryIDs = personalized.usedMemoryIDs
-            let request = ChatRequest(
-                model: config.model,
-                systemPrompt: personalized.systemPrompt,
-                userText: generationSource,
-                reasoningEffort: effort,
-                temperature: Self.rewriteTemperature(for: config.kind),
-                fastMode: settings.fastMode
-            )
-            let stream = try llm.stream(config: config, request: request)
-            for try await event in stream {
-                if Task.isCancelled { break }
-                switch event {
-                case .text(let token):
-                    resultText.append(token)
-                case .usage(let usage):
-                    lastUsage = usage
+            if onDevice {
+                let written = try await writeOnDevice(
+                    config: config, systemPrompt: personalized.systemPrompt, source: generationSource,
+                    mode: generationMode, tone: generationTone
+                ) { [weak self] usage in
+                    if self?.tickets.isCurrent(ticket) == true { self?.lastUsage = usage }
+                }
+                // A newer request (or a cancel) owns the screen now: this answer is dropped.
+                guard !Task.isCancelled, tickets.isCurrent(ticket) else { return }
+                resultText = written.text
+                statusNote = Self.note(for: written.outcome)
+                isSuggestion = Self.isSuggestion(written.outcome)
+            } else {
+                let request = ChatRequest(
+                    model: config.model,
+                    systemPrompt: personalized.systemPrompt,
+                    userText: generationSource,
+                    reasoningEffort: effort,
+                    temperature: Self.rewriteTemperature(for: config.kind),
+                    fastMode: settings.fastMode
+                )
+                let stream = try llm.stream(config: config, request: request)
+                for try await event in stream {
+                    if Task.isCancelled { break }
+                    switch event {
+                    case .text(let token):
+                        resultText.append(token)
+                    case .usage(let usage):
+                        lastUsage = usage
+                    }
                 }
             }
         } catch is CancellationError {
             return
         } catch {
+            guard tickets.isCurrent(ticket) else { return }
             errorMessage = error.localizedDescription
             return
         }
-        if !Task.isCancelled, errorMessage == nil, !resultText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            generated = GeneratedSuggestion(
-                source: generationSource, text: resultText, mode: generationMode, tone: generationTone,
-                usedMemoryIDs: usedMemoryIDs
-            )
+        if !Task.isCancelled, tickets.isCurrent(ticket), errorMessage == nil,
+           !resultText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            if isSuggestion {
+                generated = GeneratedSuggestion(
+                    source: generationSource, text: resultText, mode: generationMode, tone: generationTone,
+                    usedMemoryIDs: usedMemoryIDs, provider: kind
+                )
+            }
             scheduleTranslationOfResult()
         }
     }
 
     private func runTestConnection() async {
+        let route: WritingEngineRoute
         do {
-            try await ensureLocalServerIfNeeded()
+            route = try await prepareEngine()
         } catch {
             errorMessage = error.localizedDescription
             return
@@ -719,7 +874,8 @@ final class FloatingPanelViewModel {
         isStreaming = true
         defer { isStreaming = false }
         do {
-            let config = try settings.runtimeConfig()
+            guard let kind = route.providerKind else { return }
+            let config = try settings.runtimeConfig(for: kind)
             let request = ChatRequest(
                 model: config.model,
                 systemPrompt: "Reply with the single word pong. No other text.",

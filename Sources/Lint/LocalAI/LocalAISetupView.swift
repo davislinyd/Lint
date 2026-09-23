@@ -150,6 +150,12 @@ struct LocalAISetupView: View {
                     .foregroundStyle(.orange)
             } else {
                 Text("Lint 需要一個 AI 模型才能在本機運作。模型不在 App 裡，安裝前會先詢問你。")
+                if app.appleIntelligence.currentStatus().isAvailable {
+                    Text("這台 Mac 也可以改用 Apple Intelligence：使用 macOS 內建的裝置端模型，不必下載。")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
             downloadOutcomeNote
         }
@@ -185,6 +191,12 @@ struct LocalAISetupView: View {
         return VStack(alignment: .leading, spacing: 12) {
             Text(model.displayName)
                 .font(.headline)
+            if model.memoryClass == .large {
+                Label(LocalServerSection.largeModelWarning, systemImage: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.orange)
+                    .font(.callout)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             VStack(alignment: .leading, spacing: 6) {
                 if let size {
                     bullet(String(localized: "下載大小：約 \(ModelInstallError.formatBytes(size))"))
@@ -277,6 +289,13 @@ struct LocalAISetupView: View {
                 } else {
                     Button("稍後") { later() }
                     Spacer()
+                    // No download is needed for Apple Intelligence: offered whenever this Mac can use it.
+                    if app.appleIntelligence.currentStatus().isAvailable {
+                        Button("改用 Apple Intelligence") {
+                            app.settings.selectProvider(.appleIntelligence)
+                            onClose()
+                        }
+                    }
                     Button(primaryModelButtonTitle) { showingConsent = true }
                         .keyboardShortcut(.defaultAction)
                 }

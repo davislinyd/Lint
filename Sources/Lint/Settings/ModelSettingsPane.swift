@@ -11,9 +11,16 @@ struct ModelSettingsPane: View {
         app.settings.providerKind.usesChatGPTLogin && ProviderKind.chatgptAccount.isEnabled
     }
 
+    private var isOnDeviceChoice: Bool {
+        app.settings.providerKind == .automatic || app.settings.providerKind == .appleIntelligence
+    }
+
     var body: some View {
         Form {
             providerSection
+            if isOnDeviceChoice {
+                AppleIntelligenceSection(app: app)
+            }
             if app.settings.providerKind == .localLlama {
                 LocalServerSection(app: app)
             }
@@ -47,6 +54,8 @@ struct ModelSettingsPane: View {
 
             if app.settings.providerKind == .localLlama {
                 localRows
+            } else if isOnDeviceChoice {
+                EmptyView()
             } else if usesChatGPTLogin {
                 chatGPTRows
             } else {
@@ -62,8 +71,20 @@ struct ModelSettingsPane: View {
     @ViewBuilder
     private var providerFooter: some View {
         VStack(alignment: .leading, spacing: 4) {
+            switch app.settings.providerKind {
+            case .automatic:
+                Text("Apple Intelligence 可以使用時就用它；不能用時，改用已經設定好的 Lint 本機 AI。不會因此自動下載模型。")
+            case .appleIntelligence:
+                Text("使用 macOS 內建的裝置端模型，不需要另外下載模型。")
+            case .localLlama:
+                Text("使用 Lint 下載到這台 Mac 的本機模型，記憶體與磁碟用量較高。")
+            default:
+                EmptyView()
+            }
             if usesChatGPTLogin {
                 Text("非官方 ChatGPT 網頁 session（Plus／Pro）。OpenAI 可能隨時封鎖，且可能違反服務條款。")
+            } else if isOnDeviceChoice {
+                EmptyView()
             } else {
                 Text("寫作建議用 Low。越高越慢，因為會先花時間做 reasoning。")
                 if !ProviderKind.chatgptAccount.isEnabled {
@@ -230,6 +251,51 @@ struct ModelSettingsPane: View {
             }
         } header: {
             Text("連線測試")
+        }
+    }
+}
+
+/// Apple Intelligence's state for the Automatic and Apple Intelligence choices, and for Automatic
+/// what it falls back to. Reading the status is cheap; it never starts a request or a download.
+private struct AppleIntelligenceSection: View {
+    var app: AppModel
+
+    var body: some View {
+        // `SystemLanguageModel` is observable, so this updates when the model finishes downloading.
+        let status = app.appleIntelligence.currentStatus()
+        Section {
+            LabeledContent("Apple Intelligence") {
+                if status.isAvailable {
+                    Label("可以使用", systemImage: "checkmark.circle.fill")
+                        .foregroundStyle(.green)
+                } else {
+                    Label("無法使用", systemImage: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
+                }
+            }
+            if !status.isAvailable {
+                Text(status.userMessage).sectionNote()
+            }
+            if app.settings.providerKind == .automatic {
+                LabeledContent("Lint 本機 AI（備援）") {
+                    if app.localAI.hasChecked, app.localAI.runtimeReady, app.localAI.modelReady {
+                        Text("已安裝")
+                    } else {
+                        HStack {
+                            Text("未安裝").foregroundStyle(.secondary)
+                            Button("設定本機 AI…") { app.presentLocalAISetup() }
+                        }
+                    }
+                }
+            }
+        } header: {
+            Text("AI 引擎")
+        } footer: {
+            Text("Apple Intelligence 只使用這台 Mac 上的裝置端模型：Lint 不會把文字送到 Apple 的伺服器或 Private Cloud Compute。")
+                .sectionNote()
+        }
+        .task {
+            if app.settings.providerKind == .automatic { await app.localAI.refresh() }
         }
     }
 }

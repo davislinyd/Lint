@@ -121,7 +121,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             menu.addItem(open)
         }
 
-        if app.settings.providerKind == .localLlama, !app.localAI.isSetupComplete {
+        if app.offersLocalAISetup {
             let setup = NSMenuItem(title: String(localized: "設定本機 AI…"), action: #selector(openLocalAISetup), keyEquivalent: "")
             setup.target = self
             menu.addItem(setup)

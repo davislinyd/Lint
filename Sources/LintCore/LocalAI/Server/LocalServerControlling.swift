@@ -29,7 +29,9 @@ public protocol LocalServerControlling: AnyObject {
     /// The last lines llama-server printed when it failed (bounded), for diagnostics only.
     var logTail: String { get }
 
-    /// True when the OpenAI-compatible `/v1/models` endpoint answers on loopback.
+    /// True when the OpenAI-compatible `/v1/models` endpoint answers on loopback. A server that
+    /// released its model while idle still answers, and is still healthy: sleeping is not a
+    /// failure, and the next suggestion loads the model again by itself.
     func isHealthy(port: Int) async -> Bool
     /// Launches `plan` and waits until it is healthy, unless something already is on `port`.
     /// - Returns: `true` if a new process was launched.

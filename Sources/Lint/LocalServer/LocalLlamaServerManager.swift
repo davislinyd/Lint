@@ -19,6 +19,12 @@ final class LocalLlamaServerManager: LocalServerControlling {
     private init() {}
 
     /// True when the OpenAI-compatible `/v1/models` endpoint answers.
+    ///
+    /// This is also the check that runs while nothing is happening, so it must not undo
+    /// `--sleep-idle-seconds`. Measured against the bundled build (b11046): a server whose model is
+    /// asleep still answers `/v1/models` with 200 straight away, polling it does not reload the
+    /// model, and it does not reset the idle timer — a server polled every 15 s went to sleep on
+    /// schedule and stayed there. Only a completion request wakes it.
     func isHealthy(port: Int) async -> Bool {
         guard let url = URL(string: "http://\(LlamaServerLaunchPlan.host):\(port)/v1/models") else { return false }
         var request = URLRequest(url: url)

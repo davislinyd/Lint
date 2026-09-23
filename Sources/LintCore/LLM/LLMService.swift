@@ -22,6 +22,11 @@ public struct LLMService: Sendable {
             throw LLMError.emptyAPIKey
         }
         switch config.kind {
+        case .automatic:
+            // A choice to be resolved (`WritingEngineRouter`), not something to send a request to.
+            throw LLMError.unresolvedProvider
+        case .appleIntelligence:
+            return AppleFoundationModelProvider()
         case .openai, .openaiCompatible, .localLlama:
             return OpenAICompatibleProvider(
                 id: config.kind,

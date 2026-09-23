@@ -76,6 +76,12 @@ public struct LocalModelManager: Sendable {
         return names.reduce(0) { $0 + (fileSize(at: directory.appendingPathComponent($1)) ?? 0) }
     }
 
+    /// Anything of `model` on disk: installed, damaged, or partly downloaded.
+    public func hasLocalCopy(of model: ModelDescriptor) -> Bool {
+        if case .notInstalled = status(of: model) { return partialDownloadBytes(of: model) > 0 }
+        return true
+    }
+
     /// Deletes the installed model and any unfinished download of it.
     public func remove(_ model: ModelDescriptor) throws {
         for directory in [paths.installDirectory(for: model), paths.stagingDirectory(for: model)]

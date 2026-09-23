@@ -5,13 +5,22 @@ import Foundation
 ///
 /// Order matters for a local model, which caches the prompt from its start: the task comes first, so
 /// the tones of one task share a prefix.
+///
+/// The same task and tone can be worded for a different kind of model (`WritingPromptProfile`):
+/// what is asked for stays the same, only how it is said changes.
 public enum WritingPromptComposer {
     public static func compose(
         mode: WritingMode,
         tone: WritingTone,
         customPrompt: String,
-        translateTarget: String
+        translateTarget: String,
+        profile: WritingPromptProfile = .standard
     ) -> String {
+        if profile == .onDevice {
+            return OnDeviceWritingPrompts.compose(
+                mode: mode, tone: tone, customPrompt: customPrompt, translateTarget: translateTarget
+            )
+        }
         switch mode {
         case .proofread:
             return [

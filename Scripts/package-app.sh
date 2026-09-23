@@ -57,6 +57,13 @@ APP="${LINT_DIST_DIR:-$ROOT/dist}/Lint.app"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS"
 cp "$BIN_DIR/Lint" "$APP/Contents/MacOS/Lint"
+# Apple Intelligence (FoundationModels) is a system framework that exists only from macOS 26 on,
+# and Lint still runs on older macOS: it must be weak-linked, and nothing of it is ever copied in.
+if otool -L "$APP/Contents/MacOS/Lint" 2>/dev/null | grep -q '/FoundationModels.framework/'; then
+  otool -l "$APP/Contents/MacOS/Lint" | awk '/ cmd LC_/ { cmd = $2 } /FoundationModels\.framework/ { print cmd }' \
+    | grep -qx LC_LOAD_WEAK_DYLIB \
+    || fail "FoundationModels is linked strongly: Lint would not launch on macOS before 26"
+fi
 cp "$ROOT/Resources/Info.plist" "$APP/Contents/Info.plist"
 if [ -n "${LINT_BUILD_NUMBER:-}" ]; then
   /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $LINT_BUILD_NUMBER" "$APP/Contents/Info.plist"

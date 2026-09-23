@@ -100,7 +100,7 @@ final class AppleIntelligenceTests: XCTestCase {
 
     func testMetadataNamesThePromptVersionAndTheOS() {
         let metadata = AppleModelMetadata.current()
-        XCTAssertEqual(metadata.promptVersion, WritingPromptComposer.onDevicePromptVersion)
+        XCTAssertEqual(metadata.promptVersion, WritingPromptComposer.englishPromptVersion)
         XCTAssertFalse(metadata.osVersion.isEmpty)
     }
 }

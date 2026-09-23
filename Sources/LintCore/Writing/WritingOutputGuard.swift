@@ -70,7 +70,7 @@ public enum TextScript: Equatable, Sendable {
 /// reliably is listed.
 public enum ProtectedLiterals {
     public enum Kind: CaseIterable, Sendable {
-        case url, email, codeSpan, path, identifier, number
+        case url, email, codeSpan, path, identifier, placeholder, acronym, number
     }
 
     static let urlPattern = #"https?://[^\s<>"'`）」』，。、]+"#
@@ -81,6 +81,14 @@ public enum ProtectedLiterals {
     /// Code-like names: camelCase (`getUserId`), snake_case (`max_retries`), a call (`fetch()`),
     /// a command-line flag (`--dry-run`). Ordinary words never match.
     static let identifierPattern = #"(?<![\w-])(?:--?[a-z][\w-]*[a-z0-9]|[A-Za-z]\w*\(\)|[a-z]+[A-Z][A-Za-z0-9]*|[A-Za-z0-9]+(?:_[A-Za-z0-9]+)+)(?![\w])"#
+    /// A template slot: `[Name]`, `[Recipient's Name]`, `{name}`, `{order_id}`, `%s`, `%d`. One that is
+    /// not in the text was made up (measured: a formal rewrite that opened with "Dear [Name],", a
+    /// professional one that invented a list around "[project name]").
+    static let placeholderPattern = #"\[[A-Za-z][A-Za-z' ]{0,30}\]|\{\{?[A-Za-z_][\w.]*\}?\}|%[sd@]"#
+    /// Two or more capitals, maybe with digits: PR, CI, SLO, VPN, MFA, UTC, HTTP2. A proofread that
+    /// keeps the tone keeps them (measured: "the PR" became "the press release"); a tone rewrite may
+    /// spell out ASAP, so only the preserve policy protects them.
+    static let acronymPattern = #"(?<![\w-])[A-Z]{2,}[0-9]*(?![\w-])"#
     /// Digits with their own separators kept together: 1,250,000 · 41.2 · 2027-01-31 · 09:15 · 10/10 ·
     /// 10.0.0.12; and a single digit standing on its own ("1 hour"). A digit followed by "." ("1. first")
     /// is a list marker, which the line check covers, and a digit inside a word ("Q3", "p95") is part of
@@ -98,7 +106,9 @@ public enum ProtectedLiterals {
         var covered: [Range<String.Index>] = []
         let ordered: [(Kind, String)] = [
             (.url, urlPattern), (.email, emailPattern), (.codeSpan, codeSpanPattern),
-            (.path, pathPattern), (.identifier, identifierPattern), (.number, numberPattern),
+            (.path, pathPattern), (.placeholder, placeholderPattern), (.identifier, identifierPattern),
+            (.acronym, acronymPattern),
+            (.number, numberPattern),
         ]
         for (kind, pattern) in ordered where kinds.contains(kind) {
             guard let regex = try? NSRegularExpression(pattern: pattern) else { continue }
@@ -222,13 +232,13 @@ public struct WritingGuardPolicy: Equatable, Sendable {
         case .translate:
             // Numbers and dates may legitimately be localised ("2026/10/15" → "2026 年 10 月 15 日").
             return WritingGuardPolicy(
-                protectedKinds: [.url, .email, .codeSpan, .path, .identifier], keepsLanguage: false,
+                protectedKinds: [.url, .email, .codeSpan, .path, .placeholder, .identifier], keepsLanguage: false,
                 limitsChange: false, fallsBackToSource: false
             )
         case .proofread:
             return WritingGuardPolicy(
                 protectedKinds: tone == .preserve
-                    ? Set(ProtectedLiterals.Kind.allCases) : [.url, .email, .codeSpan, .path, .identifier],
+                    ? Set(ProtectedLiterals.Kind.allCases) : [.url, .email, .codeSpan, .path, .placeholder, .identifier],
                 keepsLanguage: true,
                 limitsChange: tone == .preserve,
                 fallsBackToSource: true
@@ -343,6 +353,14 @@ public enum WritingOutputGuard {
                 var line = line
                 while let last = line.last, last == " " || last == "\t" { line.removeLast() }
                 return line
+            }
+        }
+        // A model that writes typographic quotes ("I’ve") where the text has straight ones changes
+        // every contraction; the text's own style wins.
+        if !source.contains(where: { "‘’“”".contains($0) }) {
+            lines = lines.map { line in
+                line.replacingOccurrences(of: "’", with: "'").replacingOccurrences(of: "‘", with: "'")
+                    .replacingOccurrences(of: "“", with: "\"").replacingOccurrences(of: "”", with: "\"")
             }
         }
         let leading = source.prefix { $0.isWhitespace }

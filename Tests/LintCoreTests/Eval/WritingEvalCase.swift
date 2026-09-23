@@ -16,11 +16,14 @@ struct WritingEvalCase: Decodable {
     var mode: String
     /// The raw value of `WritingTone`.
     var tone: String
-    var translateTarget: String?
     var input: String
     var outputLanguage: Language
     /// Substrings that have to come out the other side untouched: numbers, URLs, names, commands.
     var mustPreserve: [String]?
+    /// Pieces of the input that are wrong (a grammar error, an unnatural phrase, a word the tone
+    /// rules out) and must not survive into the answer. Case-sensitive. It catches an error left in;
+    /// whether the fix itself is good is still for a person to read.
+    var mustFix: [String]?
     /// The text is already right, so the answer should be the same text.
     var expectUnchanged: Bool?
     /// A list or an email: the lines have to survive.
@@ -35,8 +38,7 @@ struct WritingEvalCase: Decodable {
     /// one has the bubble's "bare text only" line, as a selection suggestion does.
     func systemPrompt(profile: WritingPromptProfile) -> String {
         let prompt = WritingPromptComposer.compose(
-            mode: writingMode, tone: writingTone, customPrompt: "",
-            translateTarget: translateTarget ?? "繁體中文", profile: profile
+            mode: writingMode, tone: writingTone, customPrompt: "", profile: profile
         )
         return profile == .standard ? prompt + "\n回覆只要修正後的全文，不要解釋。" : prompt
     }
@@ -99,6 +101,10 @@ enum WritingEvalChecks {
         }
         for token in testCase.mustPreserve ?? [] where !output.contains(token) {
             failures.append(Failure(check: "preserves", detail: "\(token) is missing"))
+        }
+        let unfixed = (testCase.mustFix ?? []).filter(output.contains)
+        if !unfixed.isEmpty {
+            failures.append(Failure(check: "fixes", detail: "still there: " + unfixed.joined(separator: " | ")))
         }
         if let detail = languageFailure(testCase.outputLanguage, in: output) {
             failures.append(Failure(check: "language", detail: detail))

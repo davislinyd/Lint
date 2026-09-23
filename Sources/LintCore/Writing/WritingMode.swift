@@ -12,7 +12,7 @@ public enum WritingMode: String, CaseIterable, Identifiable, Sendable, Codable {
     public var title: String {
         switch self {
         case .proofread: String(localized: "文法校對與潤飾")
-        case .translate: String(localized: "翻譯")
+        case .translate: String(localized: "翻譯成中文")
         case .custom: String(localized: "自訂 Prompt")
         }
     }

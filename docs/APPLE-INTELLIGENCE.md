@@ -48,12 +48,17 @@ do is unchanged and not covered by this statement.
   `permissiveContentTransformations` (the user's own text can quote anything). A custom prompt, the
   connection test and anything else keep the default guardrails. Responses are plain `String`; no
   `@Generable`.
-- **Prompts:** `WritingPromptProfile.onDevice` (`OnDeviceWritingPrompts`, version `apple-2`): short
-  English instructions with the same product meaning as the standard prompts. Every proofread piece
-  also gets one line naming the language of the text. A user's own prompt override is used as is.
+- **Prompts:** `WritingPromptProfile.english` (`EnglishWritingPrompts`, version `english-9`, see the
+  third round below; the same prompts go to Lint's local model, with their own layout rule): English
+  instructions with the same product meaning as the standard prompts. Preserve-tone proofreading asks
+  for every error an English teacher would mark (grammar, wrong or word-for-word-translated words,
+  spelling, punctuation) while keeping every correct word, with three examples whose error types the
+  fixtures do not contain. Every proofread piece also gets one line naming the language of the text.
+  A user's own prompt override is used as is.
 - **Checks** (`WritingOutputGuard`, `WritingPipeline`, on-device path only; the Gemma path is
   unchanged): protected literals (URLs, email addresses, code spans, paths, identifiers, numbers,
-  IPv4) must survive; literals the source does not contain must not appear (made-up content); a
+  IPv4, and in a preserve proofread all-capital acronyms such as PR or CI) must survive; straight
+  quotes stay straight when the text has no typographic ones; literals the source does not contain must not appear (made-up content); a
   proofread must stay in its language (including stray Chinese words or punctuation in English); a
   preserve proofread may change at most 50% of the tokens of an 8–400-token text and must keep its
   lines and list markers; the answer must not repeat Lint's instructions. One retry with the problem
@@ -69,13 +74,17 @@ do is unchanged and not covered by this statement.
   late answer from ever replacing a newer one.
 - **Background work:** Learning, Dreaming, status checks and the prefetch gloss never call the
   on-device model. Availability is a property read and never loads the model.
+- **Memory:** a request routed to Apple Intelligence stops a llama-server Lint started, since it is
+  not needed. Seen once under memory pressure: while Lint's server held Gemma 4 E4B, the system model
+  reported a context size of 0 and failed every request until the server released the model; a
+  second attempt did not reproduce it. A reported context size of 0 is never used to split text.
 - **Errors** map to `AppleIntelligenceError` with a user message; the framework's own description is
   logged (`app.lint.assistant` / `AppleIntelligence`) and never shown.
 - **Learning:** unchanged. A proofread that fell back to the source is not recorded as a suggestion.
 
 ## Evaluation (2026-09-23)
 
-Fixtures: `Tests/LintCoreTests/Eval/WritingEvalFixtures.json`, version 3, 116 cases written for this
+Fixtures (first round): `Tests/LintCoreTests/Eval/WritingEvalFixtures.json`, version 3, 116 cases written for this
 repository (85 from the earlier local-model work, 31 new): proofreading (grammar, tense, articles,
 prepositions, plurals, punctuation, capitals, spelling), 23 already-correct texts (casual, technical,
 business, intentional fragments, Chinese, mixed), preservation (names, numbers, dates, currency,
@@ -142,9 +151,90 @@ weights are not attributed to any app process; the figures are system-wide wired
 | Protected literal failures near zero | Passes for proofreading; translation transliterates names |
 | Latency / resources clearly improved | Resources yes (no download, no server, memory released when idle); warm latency about equal |
 
-**Recommendation: Gemma remains the default; Apple Intelligence is optional.** It suits a user who
-wants proofreading that never rewrites correct text and no model download, and accepts that it
-misses errors. Not yet compared: Gemma 4 12B, and Gemma with the same guard.
+**Recommendation (first round): Gemma remains the default; Apple Intelligence is optional.** It suits
+a user who wants proofreading that never rewrites correct text and no model download, and accepts
+that it misses errors. See the second round below.
+
+## Second round (2026-09-23): teacher-level proofreading, Gemma with the guard
+
+A user found Apple Intelligence fixing only typos and basic grammar. What matters for Lint is
+editing English text; English-to-Chinese translation is kept as a reference. So the fixtures
+(version 5) now hold 102 cases: 88 English proofreading and tone cases and 14 English-to-Traditional-
+Chinese translations. Chinese proofreading, mixed-language and Chinese-to-English cases were removed
+(the first round above was measured on version 3, which still had them). `mustFix` lists the pieces
+of the input that are errors and must not survive (92 pieces), including 12 common unnatural English
+phrasings (`english-natural`, e.g. "open the light", "explain you") and 12 held-out cases
+(`english-holdout`) written before tuning and never used to tune a prompt.
+
+Removing cases needed no new model runs: every case is sent on its own and Apple samples greedily, so
+the stored answers were re-scored on the current set. All numbers MEASURED on the same Mac; Gemma 4 E4B
+through Lint's own server with the tuned arguments.
+
+| Run | English errors left (of 92 pieces) | Held-out errors fixed | Correct English texts changed (of 17) | Serious meaning errors seen |
+|---|---|---|---|---|
+| Apple `apple-2` (fix only clear errors) | 33 | 6 / 12 | 0 | – |
+| Apple `apple-3` (teacher + copy editor) | 7 of 80 (held-out not run) | – | 7 (synonym swaps, "ship" → "send") | several |
+| Apple `apple-4` (teacher, correct words stay) | 11 | 11 / 12 | 3 | 3 ("give us" → "I give you", "find attach" → "kindly attach", an added "the legal team at") |
+| **Apple `apple-5` (shipped)** | **11** | **11 / 12** | **2** | 1 ("find attach the report" → "find the report") |
+| Apple `apple-6` (no Chinese example) | 12 | 11 / 12 | 3 | 3 ("PR" → "press release", "find attach" → "kindly attach", an added "the legal team at") |
+| Gemma E4B, no guard, t=0.3, three runs | 2, 2, 3 | – | 8, 6, 6 | an English list translated into Chinese in 2 of 3 runs |
+| Gemma E4B + guard, t=0.3 | 5 | – | 7 | – |
+| Gemma E4B + guard, t=0 | 3 | – | 6 | – |
+| **Gemma E4B with the apple-5 prompts** (`LINT_EVAL_PROFILE=onDevice`), one run | **2** | – | **2** | layout: a list lost its "- " markers, a formal email became one line |
+
+- The 11 English errors apple-5 still leaves: present perfect not used (3), "until" for a deadline
+  (2), "an university", a lower-case "we" at the start, "reply me", "the server is normal", "the
+  price is too expensive", "go to Japan for travel".
+- apple-4/5/6 differ mostly in which random mistakes they make; apple-5 made the fewest serious ones.
+- Cost: the apple-5 prompt is 534 tokens against 249; measured back to back, median latency 1.35 s
+  against 0.84 s per request.
+- The guard does not help Gemma: its over-edits are small word swaps below the 50% change limit, so
+  correct texts changed about as often, while falling back to the source threw away other corrections
+  in the same text (added backticks and "9:15 AM" were the triggers). It stays on the Apple path only.
+- Gemma's first request after idle release took 36.9 s (the model reloading), against about 1 s warm.
+- Gemma's over-editing comes mostly from its prompt, not the model: with the same English teacher
+  prompts Apple gets, Gemma E4B changed 2 of 17 correct texts (6–8 with its own Chinese-language
+  prompt) and still left only 2 of 92 errors. One run at t=0.3, so the exact figures move a little;
+  the gap is far outside the spread of the three runs with its own prompt.
+- Lint does not translate into English any more: translation always goes into Traditional Chinese
+  (Taiwan) as a reading aid, and the translation-target setting is gone. The prompts for that
+  direction are unchanged, so the translation results above still stand.
+
+**Recommendation (second round):** Gemma 4 E4B stays the default model, and should be given the
+English teacher prompts: that combination left the fewest errors (2 of 92) and changed as few correct
+texts as Apple (2 of 17). Apple Intelligence (11 of 92 left, 2 of 17 changed) is the choice for no
+download and low memory. Before switching Gemma's prompts, the tone rewrites need a check that they
+keep line breaks and list markers.
+
+## Third round (2026-09-23): English prompts for Gemma, rules per model
+
+Gemma 4 E4B (Lint Local AI) now gets the English prompts too; OpenAI-compatible endpoints and cloud
+providers keep the original Chinese ones, which were never measured against them
+(`WritingPromptProfile.for(provider:)`). Tone rewrites were found to merge or reorder lines, so the
+prompts gained a layout rule, and one sentence of it did opposite things on the two models:
+
+| Layout rule | Gemma: a formal email's lines, greeting and sign-off (2 runs each) | Apple: formal and professional rewrites |
+|---|---|---|
+| english-6: "a greeting, paragraphs and a sign-off stay where they are" | kept both times | wrote "Dear [Name]," and a subject line that were not there |
+| english-7: "do not add or remove lines, greetings, subject lines or sign-offs" | merged into one line both times | "Dear [Name]," again, caught by the guard, source kept |
+| english-8: keep existing ones, never add one or a placeholder | merged into one line both times | no correct text changed, fewest errors left |
+
+So the English prompts are worded per model (`EnglishPromptReader`): Gemma gets the english-6 layout
+rule, Apple the english-8 one; everything else is shared (`english-9`). The on-device path also caps
+an answer at four times the text's length plus 128 tokens (at least 256), never splits a piece under
+256 tokens when the context runs out, and treats template slots such as `[Name]`, `[project name]`,
+`{name}` and `%s` that the text did not have as made up.
+
+| Run (102 cases, English + English-to-Chinese) | English errors left (of 92) | Correct texts changed (of 17) | Literals lost | Notes |
+|---|---|---|---|---|
+| Gemma E4B, old Chinese prompts, 3 runs | 2, 2, 3 | 8, 6, 6 | 4–5 | an English list translated into Chinese in 2 of 3 runs |
+| **Gemma E4B, english-9 (its rule = english-6), 2 runs** | **3, 2** | **3, 2** | **1, 1** | lists and emails keep their lines |
+| Apple apple-5 (second round) | 11 | 2 | 6 | – |
+| **Apple english-9** | **12** | **0** | **6** | 9 plus the 3 rude words of two professional rewrites that invented content and fell back to the source |
+
+Gemma remains the default and is now also the most careful engine for English. Apple stays the
+choice for no download and low memory; its professional tone is the weakest part (it invents content,
+which the guard now stops, leaving the text unchanged).
 
 ## Re-running after a macOS or Foundation Models update
 

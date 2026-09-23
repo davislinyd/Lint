@@ -438,3 +438,38 @@ final class ManagedModelSwitchTests: XCTestCase {
         }
     }
 }
+
+/// Choosing Apple Intelligence releases the memory of a llama-server Lint started, and nothing else.
+@MainActor
+final class AppleIntelligenceReleaseTests: XCTestCase {
+    private func coordinator(_ server: FakeServer) -> LocalAISetupCoordinator {
+        LocalAISetupCoordinator(
+            configuration: { LocalAIConfiguration(extraArguments: "") },
+            resolver: FakeResolver(.ready(LlamaRuntimeLocation(binaryURL: URL(fileURLWithPath: "/llama-server"), origin: .bundled))),
+            server: server, settleDelay: .zero
+        )
+    }
+
+    func testAServerLintStartedIsStopped() async throws {
+        let server = FakeServer()
+        server.status = .running(pid: 1234, managedByLint: true)
+        server.healthy = true
+        let coordinator = coordinator(server)
+        await coordinator.refresh()
+        coordinator.releaseForAppleIntelligence()
+        XCTAssertEqual(server.stopCalls, 1)
+        XCTAssertEqual(coordinator.serverStatus, .stopped)
+        coordinator.releaseForAppleIntelligence()
+        XCTAssertEqual(server.stopCalls, 1, "nothing to do the second time")
+    }
+
+    func testAServerSomeoneElseStartedIsLeftAlone() async throws {
+        let server = FakeServer()
+        server.status = .running(pid: nil, managedByLint: false)
+        server.healthy = true
+        let coordinator = coordinator(server)
+        await coordinator.refresh()
+        coordinator.releaseForAppleIntelligence()
+        XCTAssertEqual(server.stopCalls, 0)
+    }
+}

@@ -13,13 +13,10 @@ public enum WritingPromptComposer {
         mode: WritingMode,
         tone: WritingTone,
         customPrompt: String,
-        translateTarget: String,
         profile: WritingPromptProfile = .standard
     ) -> String {
-        if profile == .onDevice {
-            return OnDeviceWritingPrompts.compose(
-                mode: mode, tone: tone, customPrompt: customPrompt, translateTarget: translateTarget
-            )
+        if case .english(let reader) = profile {
+            return EnglishWritingPrompts.compose(mode: mode, tone: tone, customPrompt: customPrompt, reader: reader)
         }
         switch mode {
         case .proofread:
@@ -31,7 +28,7 @@ public enum WritingPromptComposer {
             ].joined(separator: "\n\n")
         case .translate:
             return [
-                translateTask(target: translateTarget),
+                translateTask,
                 priority,
                 toneInstruction(tone, for: .translate),
                 numbered(commonRules),
@@ -39,7 +36,7 @@ public enum WritingPromptComposer {
         case .custom:
             let custom = customPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
             if custom.isEmpty {
-                return compose(mode: .proofread, tone: .preserve, customPrompt: "", translateTarget: translateTarget)
+                return compose(mode: .proofread, tone: .preserve, customPrompt: "")
             }
             // A custom prompt is the user's own task: no tone is added to it.
             return [
@@ -141,9 +138,10 @@ public enum WritingPromptComposer {
         return lines.joined(separator: "\n")
     }
 
-    private static func translateTask(target: String) -> String {
-        let trimmed = target.trimmingCharacters(in: .whitespacesAndNewlines)
-        let language = trimmed.isEmpty ? "繁體中文" : trimmed
+    /// Translation only ever goes into Traditional Chinese: it is there to help read English, and
+    /// Lint does not translate into English.
+    private static var translateTask: String {
+        let language = "繁體中文"
         return """
             你是專業翻譯。把使用者文字翻譯成\(language)。
 

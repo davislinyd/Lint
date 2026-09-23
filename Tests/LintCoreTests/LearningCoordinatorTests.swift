@@ -346,7 +346,7 @@ final class LearningCoordinatorTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: url.path), "personalizing never creates the database")
     }
 
-    func testTheTranslationTargetDecidesWhichTerminologyApplies() async throws {
+    func testATranslationMemoryAppliesToTranslationOnly() async throws {
         let coordinator = learner()
         let pairs = [
             ("This software needs an update.", "這個軟件需要更新才能使用新功能", "這個軟體需要更新才能使用新功能"),
@@ -366,21 +366,14 @@ final class LearningCoordinatorTests: XCTestCase {
         XCTAssertEqual(memory.state, .active)
         XCTAssertEqual(memory.modeScope, .translate)
 
-        func used(for target: String, mode: WritingMode = .translate) async -> [UUID] {
+        func used(mode: WritingMode = .translate) async -> [UUID] {
             await coordinator.personalize(
-                prompt: basePrompt, for: "Where can I download the software?", mode: mode,
-                translateTarget: target, config: on
+                prompt: basePrompt, for: "Where can I download the software?", mode: mode, config: on
             ).usedMemoryIDs
         }
-        for target in ["繁體中文", "", "中文"] {
-            let ids = await used(for: target)
-            XCTAssertEqual(ids, [memory.id], "target \"\(target)\"")
-        }
-        for target in ["English", "日文", "簡體中文"] {
-            let ids = await used(for: target)
-            XCTAssertTrue(ids.isEmpty, "target \"\(target)\"")
-        }
-        let proofreading = await used(for: "繁體中文", mode: .proofread)
+        let translating = await used()
+        XCTAssertEqual(translating, [memory.id], "translation writes Traditional Chinese, where the memory applies")
+        let proofreading = await used(mode: .proofread)
         XCTAssertTrue(proofreading.isEmpty, "a translation memory stays out of proofreading")
     }
 

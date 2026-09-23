@@ -137,12 +137,29 @@ final class FloatingPanelViewModel {
         prefetchIsSuggestion = true
         let adopted = result
         // Built now, not when the request goes out: it has to be the prompt that `key` stands for.
-        let prompts = (
+        let prompts = PrefetchPrompts(
             standard: Self.terseSystemPrompt(settings.effectiveSystemPrompt(for: key.mode, tone: key.tone)),
-            onDevice: settings.effectiveSystemPrompt(for: key.mode, tone: key.tone, profile: .onDevice)
+            apple: settings.effectiveSystemPrompt(for: key.mode, tone: key.tone, profile: .english(.appleOnDevice)),
+            local: settings.effectiveSystemPrompt(for: key.mode, tone: key.tone, profile: .english(.localModel))
         )
         prefetchTask = Task { [weak self] in
             await self?.runPrefetch(for: adopted, key: key, prompts: prompts)
+        }
+    }
+
+    /// A prefetch's prompts, built when it starts: which one is sent depends on the engine the request
+    /// is routed to, which is only known later.
+    private struct PrefetchPrompts {
+        let standard: String
+        let apple: String
+        let local: String
+
+        func prompt(for profile: WritingPromptProfile) -> String {
+            switch profile {
+            case .standard: standard
+            case .english(.appleOnDevice): apple
+            case .english(.localModel): local
+            }
         }
     }
 
@@ -150,8 +167,7 @@ final class FloatingPanelViewModel {
     private func currentRequestKey(for source: String) -> WritingRequestKey {
         let mode = settings.lastMode
         return WritingRequestKey(
-            source: source, mode: mode, tone: settings.tone(for: mode),
-            translateTarget: settings.translateTarget, customPrompt: settings.customPrompt
+            source: source, mode: mode, tone: settings.tone(for: mode), customPrompt: settings.customPrompt
         )
     }
 
@@ -186,9 +202,11 @@ final class FloatingPanelViewModel {
                 let config = try self.settings.runtimeConfig(for: .localLlama)
                 let request = ChatRequest(
                     model: config.model,
-                    systemPrompt: Self.terseSystemPrompt(self.settings.effectiveSystemPrompt(
-                        for: self.settings.lastMode, tone: self.settings.tone(for: self.settings.lastMode)
-                    )),
+                    // The prompt the next request will start with, so llama-server caches its prefix.
+                    systemPrompt: self.settings.effectiveSystemPrompt(
+                        for: self.settings.lastMode, tone: self.settings.tone(for: self.settings.lastMode),
+                        profile: WritingPromptProfile.for(provider: .localLlama)
+                    ),
                     userText: "hi",
                     maxTokens: 1,
                     reasoningEffort: .low,
@@ -384,8 +402,7 @@ final class FloatingPanelViewModel {
             return PersonalizedPrompt(systemPrompt: prompt, usedMemoryIDs: [])
         }
         return await learning.personalize(
-            prompt: prompt, for: text, mode: mode, tone: tone,
-            translateTarget: settings.translateTarget, config: settings.learningConfig
+            prompt: prompt, for: text, mode: mode, tone: tone, config: settings.learningConfig
         )
     }
 
@@ -441,6 +458,9 @@ final class FloatingPanelViewModel {
             }
             throw AppleIntelligenceError.unavailable(status)
         }
+        if route == .appleIntelligence {
+            localAI.releaseForAppleIntelligence()
+        }
         try await ensureLocalServerIfNeeded(for: route)
         return route
     }
@@ -466,7 +486,7 @@ final class FloatingPanelViewModel {
 
     private func runPrefetch(
         for result: TextCaptureService.CaptureResult, key: WritingRequestKey,
-        prompts: (standard: String, onDevice: String)
+        prompts: PrefetchPrompts
     ) async {
         let route: WritingEngineRoute
         do {
@@ -490,7 +510,8 @@ final class FloatingPanelViewModel {
             let config = try settings.runtimeConfig(for: kind)
             prefetchProvider = kind
             let onDevice = route == .appleIntelligence
-            let basePrompt = onDevice ? prompts.onDevice : prompts.standard
+            let profile = WritingPromptProfile.for(provider: kind)
+            let basePrompt = prompts.prompt(for: profile)
             let personalized = await personalize(basePrompt, for: result.text, mode: key.mode, tone: key.tone)
             // More typing cancels this prefetch; do not send the model a request for stale text.
             if Task.isCancelled { return }
@@ -510,7 +531,9 @@ final class FloatingPanelViewModel {
             } else {
                 let request = ChatRequest(
                     model: config.model,
-                    systemPrompt: personalized.systemPrompt,
+                    systemPrompt: profile.isEnglish
+                        ? WritingPromptComposer.withLanguageLine(personalized.systemPrompt, for: result.text, mode: key.mode)
+                        : personalized.systemPrompt,
                     userText: result.text,
                     reasoningEffort: .low,
                     temperature: Self.rewriteTemperature(for: config.kind),
@@ -583,7 +606,8 @@ final class FloatingPanelViewModel {
             source: source, mode: mode, tone: tone, systemPrompt: systemPrompt, budget: budget
         ) { prompt, text in
             let request = ChatRequest(
-                model: config.model, systemPrompt: prompt, userText: text, reasoningEffort: nil,
+                model: config.model, systemPrompt: prompt, userText: text,
+                maxTokens: WritingPipeline.responseTokenLimit(for: text), reasoningEffort: nil,
                 transformsUserText: mode != .custom
             )
             var answer = ""
@@ -683,6 +707,15 @@ final class FloatingPanelViewModel {
         translationTask = Task { await self.translateResult(source) }
     }
 
+    /// The Chinese reading aid under a suggestion: the English translation prompt where the engine
+    /// takes the English prompts, the original short one elsewhere.
+    private static func glossPrompt(for kind: ProviderKind) -> String {
+        let profile = WritingPromptProfile.for(provider: kind)
+        return profile.isEnglish
+            ? WritingPromptComposer.compose(mode: .translate, tone: .preserve, customPrompt: "", profile: profile)
+            : translationSystemPrompt
+    }
+
     private static let translationSystemPrompt = """
         你是翻譯。把使用者文字譯成流暢的台灣繁體中文。
         只輸出譯文，不要引號、標籤或說明。
@@ -701,7 +734,7 @@ final class FloatingPanelViewModel {
                 let config = try self.settings.runtimeConfig(for: .localLlama)
                 let request = ChatRequest(
                     model: config.model,
-                    systemPrompt: Self.translationSystemPrompt,
+                    systemPrompt: Self.glossPrompt(for: .localLlama),
                     userText: source,
                     maxTokens: 512,
                     reasoningEffort: .low,
@@ -729,11 +762,7 @@ final class FloatingPanelViewModel {
             let onDevice = route == .appleIntelligence
             let request = ChatRequest(
                 model: config.model,
-                systemPrompt: onDevice
-                    ? WritingPromptComposer.compose(
-                        mode: .translate, tone: .preserve, customPrompt: "", translateTarget: "繁體中文", profile: .onDevice
-                    )
-                    : Self.translationSystemPrompt,
+                systemPrompt: Self.glossPrompt(for: kind),
                 userText: source,
                 maxTokens: 512,
                 reasoningEffort: .low,
@@ -794,11 +823,12 @@ final class FloatingPanelViewModel {
         do {
             let config = try settings.runtimeConfig(for: kind)
             let onDevice = route == .appleIntelligence
+            let profile = WritingPromptProfile.for(provider: kind)
             let effort: ReasoningEffort = forceLowReasoning ? .low : settings.reasoningEffort
             let systemPrompt: String
-            if onDevice {
-                // The on-device prompts already ask for the bare text.
-                systemPrompt = settings.effectiveSystemPrompt(for: generationMode, tone: generationTone, profile: .onDevice)
+            if profile.isEnglish {
+                // The English prompts already ask for the bare text.
+                systemPrompt = settings.effectiveSystemPrompt(for: generationMode, tone: generationTone, profile: profile)
             } else if forceLowReasoning {
                 systemPrompt = Self.terseSystemPrompt(
                     settings.effectiveSystemPrompt(for: generationMode, tone: generationTone)
@@ -824,7 +854,9 @@ final class FloatingPanelViewModel {
             } else {
                 let request = ChatRequest(
                     model: config.model,
-                    systemPrompt: personalized.systemPrompt,
+                    systemPrompt: profile.isEnglish
+                        ? WritingPromptComposer.withLanguageLine(personalized.systemPrompt, for: generationSource, mode: generationMode)
+                        : personalized.systemPrompt,
                     userText: generationSource,
                     reasoningEffort: effort,
                     temperature: Self.rewriteTemperature(for: config.kind),

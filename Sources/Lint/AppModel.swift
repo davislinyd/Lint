@@ -12,6 +12,7 @@ final class AppModel: NSObject, NSWindowDelegate {
     let llm = LLMService()
     let learning = LearningCoordinator()
     let localAI: LocalAISetupCoordinator
+    let appleIntelligence = SystemAppleIntelligence()
     let panel: FloatingPanelController
     var accessibilityTrusted = AccessibilityPermission.isTrusted
     private var settingsWindow: NSWindow?
@@ -28,7 +29,10 @@ final class AppModel: NSObject, NSWindowDelegate {
             accessibilityTrusted: AccessibilityPermission.isTrusted
         )
         self.localAI = localAI
-        let viewModel = FloatingPanelViewModel(settings: settings, capture: capture, llm: llm, learning: learning, localAI: localAI)
+        let viewModel = FloatingPanelViewModel(
+            settings: settings, capture: capture, llm: llm, learning: learning, localAI: localAI,
+            appleIntelligence: appleIntelligence
+        )
         self.panel = FloatingPanelController(viewModel: viewModel)
         super.init()
         viewModel.onOpenLocalAISetup = { [weak self] in self?.presentLocalAISetup() }
@@ -65,10 +69,31 @@ final class AppModel: NSObject, NSWindowDelegate {
         Task { await self.ensureLocalServerIfNeeded() }
     }
 
+    /// Apple Intelligence takes the requests: Lint's local AI is neither checked nor started for it.
+    var usesAppleIntelligence: Bool {
+        WritingEngineRouter.route(
+            selected: settings.providerKind, apple: appleIntelligence.currentStatus(), localAIReady: false
+        ) == .appleIntelligence
+    }
+
+    /// Whether to offer Lint's local AI setup (menu item, first launch). Never downloads anything.
+    var offersLocalAISetup: Bool {
+        guard !usesAppleIntelligence else { return false }
+        return WritingEngineRouter.offersLocalAISetup(
+            selected: settings.providerKind, apple: appleIntelligence.currentStatus(),
+            localAIReady: !localAI.needsSetup
+        ) || (settings.providerKind == .localLlama && !localAI.isSetupComplete)
+    }
+
     /// At launch: look at what local AI still needs, and start the server if it is ready to start.
     func ensureLocalServerIfNeeded() async {
+        guard !usesAppleIntelligence else { return }
         await localAI.refresh()
-        guard settings.wantsManagedLocalServer, !localAI.needsSetup else { return }
+        let route = WritingEngineRouter.route(
+            selected: settings.providerKind, apple: appleIntelligence.currentStatus(),
+            localAIReady: localAI.runtimeReady && localAI.modelReady
+        )
+        guard settings.wantsManagedLocalServer(for: route), !localAI.needsSetup else { return }
         do {
             try await localAI.ensureServerRunning()
         } catch {
@@ -84,8 +109,11 @@ final class AppModel: NSObject, NSWindowDelegate {
     /// First launch: the Local AI setup screen if the local model still has to be installed (unless
     /// the user said "Later"), otherwise the old behaviour of opening Settings when Accessibility is off.
     func presentInitialOnboarding() async {
-        await localAI.refresh()
-        if settings.providerKind == .localLlama, localAI.needsSetup, !settings.localAISetupDeferred {
+        if !usesAppleIntelligence { await localAI.refresh() }
+        let offersSetup = !usesAppleIntelligence && WritingEngineRouter.offersLocalAISetup(
+            selected: settings.providerKind, apple: appleIntelligence.currentStatus(), localAIReady: !localAI.needsSetup
+        )
+        if offersSetup, !settings.localAISetupDeferred {
             presentLocalAISetup()
         } else if !AccessibilityPermission.isTrusted {
             openSettings()

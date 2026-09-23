@@ -37,7 +37,9 @@ let package = Package(
         .testTarget(
             name: "LintCoreTests",
             dependencies: ["LintCore"],
-            path: "Tests/LintCoreTests"
+            path: "Tests/LintCoreTests",
+            // Read from the repository by path (`WritingEvalFixtures.load()`), not bundled.
+            exclude: ["Eval/WritingEvalFixtures.json"]
         )
     ]
 )

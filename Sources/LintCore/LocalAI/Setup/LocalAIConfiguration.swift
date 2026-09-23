@@ -57,6 +57,8 @@ public struct LocalAIConfiguration: Equatable, Sendable {
     public var managedModel: ModelDescriptor
     public var huggingFaceSpec: String
     public var port: Int
+    /// Seconds of inactivity after which llama-server releases the model's memory; 0 = never.
+    public var idleSleepSeconds: Int
     public var extraArguments: String
     public var autoStart: Bool
 
@@ -67,6 +69,7 @@ public struct LocalAIConfiguration: Equatable, Sendable {
         managedModel: ModelDescriptor = ModelCatalog.recommended,
         huggingFaceSpec: String = ModelCatalog.recommended.huggingFaceSpec,
         port: Int = 8000,
+        idleSleepSeconds: Int = IdleSleepOption.default.seconds,
         extraArguments: String = "",
         autoStart: Bool = true
     ) {
@@ -76,6 +79,7 @@ public struct LocalAIConfiguration: Equatable, Sendable {
         self.managedModel = managedModel
         self.huggingFaceSpec = huggingFaceSpec
         self.port = port
+        self.idleSleepSeconds = idleSleepSeconds
         self.extraArguments = extraArguments
         self.autoStart = autoStart
     }
@@ -100,8 +104,17 @@ public struct LocalAIConfiguration: Equatable, Sendable {
         }
     }
 
+    /// The tuning Lint applies. A model it manages brings its own; an advanced `-hf` model is
+    /// unknown, so it gets Lint's neutral one.
+    public var runtimeProfile: ModelRuntimeProfile {
+        modelSource == .managed ? managedModel.runtimeProfile : .unknownModel
+    }
+
     public func launchPlan(runtime: LlamaRuntimeLocation, model: LocalModelReference) -> LlamaServerLaunchPlan {
-        LlamaServerLaunchPlan.make(runtime: runtime.binaryURL, model: model, port: port, extraArguments: extraArguments)
+        LlamaServerLaunchPlan.make(
+            runtime: runtime.binaryURL, model: model, port: port,
+            profile: runtimeProfile, idleSleepSeconds: idleSleepSeconds, extraArguments: extraArguments
+        )
     }
 }
 
@@ -116,6 +129,33 @@ public enum LocalModelMigration {
     /// The default before Gemma 4. It is no longer in the catalog, so a setting that still holds it was
     /// never a choice: it moves to the recommended model instead of being kept as a custom one.
     public static let retiredDefaultSpec = "Qwen/Qwen2.5-7B-Instruct-GGUF:q4_k_m"
+
+    /// The managed default before Gemma 4 E4B.
+    public static let previousDefaultID = "gemma-4-12b-it-qat-q4_0"
+
+    /// Every install since managed models existed has the default of its day stored as its model,
+    /// whether or not it ever downloaded it. So a stored Gemma 12B id says nothing about a choice.
+    /// What does is the file:
+    ///
+    /// - Gemma 12B on disk, complete or partly downloaded: the user has it and stays on it.
+    /// - No Gemma 12B anywhere: nothing to keep, so the install is pointed at the recommended model,
+    ///   exactly like a new one. Nothing is downloaded; the setup screen offers the smaller model.
+    ///
+    /// Any other id — a model the user picked, or a custom `-hf` source — is left alone.
+    /// - Returns: the id to store instead, or nil to leave the setting as it is.
+    public static func migrateUninstalledPreviousDefault(
+        storedID: String?,
+        source: LocalModelSource,
+        hasLocalCopy: (ModelDescriptor) -> Bool,
+        catalog: [ModelDescriptor] = ModelCatalog.all
+    ) -> String? {
+        guard source == .managed, storedID == previousDefaultID,
+              let previous = catalog.first(where: { $0.id == previousDefaultID }),
+              let recommended = catalog.first(where: \.recommended), recommended.id != previousDefaultID,
+              !hasLocalCopy(previous)
+        else { return nil }
+        return recommended.id
+    }
 
     public static func isRetiredDefault(_ spec: String?) -> Bool {
         (spec ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == retiredDefaultSpec.lowercased()

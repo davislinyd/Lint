@@ -1,6 +1,11 @@
 import Foundation
 
 public enum ProviderKind: String, Codable, CaseIterable, Sendable, Identifiable {
+    /// Not a provider of its own: Apple Intelligence when it is available, otherwise Lint's local AI
+    /// if that is already set up (see `WritingEngineRouter`). Never passed to `LLMService`.
+    case automatic
+    /// Apple's on-device `SystemLanguageModel` (Foundation Models). Nothing leaves the Mac.
+    case appleIntelligence
     case openai
     case localLlama
     case openaiCompatible
@@ -12,6 +17,8 @@ public enum ProviderKind: String, Codable, CaseIterable, Sendable, Identifiable 
 
     public var title: String {
         switch self {
+        case .automatic: String(localized: "自動")
+        case .appleIntelligence: "Apple Intelligence"
         case .openai: "OpenAI"
         case .localLlama: String(localized: "本機 llama.cpp（由 Lint 管理）")
         case .openaiCompatible: String(localized: "OpenAI 相容端點（Ollama / LM Studio / 自訂）")
@@ -25,6 +32,9 @@ public enum ProviderKind: String, Codable, CaseIterable, Sendable, Identifiable 
 
     public var defaultBaseURL: URL {
         switch self {
+        case .automatic, .appleIntelligence:
+            // Only there because every configuration has a URL; nothing is ever sent to it.
+            URL(string: "lint-on-device://apple-intelligence")!
         case .openai:
             URL(string: "https://api.openai.com/v1")!
         case .localLlama, .openaiCompatible:
@@ -40,6 +50,7 @@ public enum ProviderKind: String, Codable, CaseIterable, Sendable, Identifiable 
 
     public var defaultModel: String {
         switch self {
+        case .automatic, .appleIntelligence: "SystemLanguageModel"
         case .openai: "gpt-4o"
         case .localLlama, .openaiCompatible: ModelCatalog.recommended.huggingFaceSpec
         case .anthropic: "claude-3-5-sonnet-latest"
@@ -50,7 +61,7 @@ public enum ProviderKind: String, Codable, CaseIterable, Sendable, Identifiable 
 
     public var requiresAPIKey: Bool {
         switch self {
-        case .localLlama, .openaiCompatible, .chatgptAccount:
+        case .automatic, .appleIntelligence, .localLlama, .openaiCompatible, .chatgptAccount:
             return false
         default:
             return true
@@ -131,6 +142,9 @@ public struct ChatRequest: Sendable {
     public var temperature: Double?
     /// Prefer Fast mode / priority tier when the backend supports it.
     public var fastMode: Bool
+    /// The request rewrites the user's own text (proofread, translate, tone). A provider with a
+    /// safety mode made for transforming content may use it; nothing else reads this.
+    public var transformsUserText: Bool
 
     public init(
         model: String,
@@ -139,7 +153,8 @@ public struct ChatRequest: Sendable {
         maxTokens: Int = 4096,
         reasoningEffort: ReasoningEffort? = .low,
         temperature: Double? = nil,
-        fastMode: Bool = true
+        fastMode: Bool = true,
+        transformsUserText: Bool = false
     ) {
         self.model = model
         self.systemPrompt = systemPrompt
@@ -148,6 +163,7 @@ public struct ChatRequest: Sendable {
         self.reasoningEffort = reasoningEffort
         self.temperature = temperature
         self.fastMode = fastMode
+        self.transformsUserText = transformsUserText
     }
 }
 
@@ -157,6 +173,7 @@ public enum LLMError: Error, LocalizedError, Sendable {
     case notLoggedInToChatGPT
     case httpStatus(Int, String)
     case decoding
+    case unresolvedProvider
 
     public var errorDescription: String? {
         switch self {
@@ -167,9 +184,15 @@ public enum LLMError: Error, LocalizedError, Sendable {
         case .notLoggedInToChatGPT:
             String(localized: "請先在設定中登入 ChatGPT（Plus／Pro）")
         case .httpStatus(let code, let body):
-            String(localized: "HTTP \(code)：\(body)")
+            // llama-server's own words for "the prompt does not fit" are raw JSON; the text is
+            // never cut short, so say what happened and what to do about it.
+            body.contains("exceed_context_size_error")
+                ? String(localized: "這段文字對本機 AI 來說太長了。請分段處理，或在「設定 → 模型 → 進階」的額外參數加上較大的 -c（例如 -c 8192）後重新啟動。")
+                : String(localized: "HTTP \(code)：\(body)")
         case .decoding:
             String(localized: "無法解析模型回應")
+        case .unresolvedProvider:
+            String(localized: "尚未決定要用哪個 AI 引擎")
         }
     }
 }

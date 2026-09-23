@@ -92,6 +92,8 @@ final class InstallScriptTests: XCTestCase {
             "swift build", "Info.plist", "PlistBuddy", "LINT_BUILD_NUMBER", "AppIcon.icns", "Resources/*.lproj",
             "\"$BIN_DIR\"/*.bundle", "PkgInfo", "LINT_RELEASE_BUILD", "--options runtime --timestamp", "Apple Development",
             "fetch-llama-runtime.sh", "sign-llama-runtime.sh", "LlamaRuntime",
+            // FoundationModels must stay weak-linked, or Lint stops launching before macOS 26.
+            "LC_LOAD_WEAK_DYLIB",
         ] {
             XCTAssertTrue(text.contains(needle), "package-app.sh lost: \(needle)")
         }

@@ -232,6 +232,8 @@ public final class LocalAISetupCoordinator {
             }
             return
         }
+        // A cancelled task's health check fails without asking the server: that says nothing about it.
+        try Task.checkCancellation()
         guard configuration.autoStart else { throw LocalAIError.serverNotRunning(port: configuration.port) }
         try await launch(configuration)
     }

@@ -252,7 +252,7 @@ struct MemoryExtractor: Sendable {
             return MemoryCandidate(
                 dedupKey: "grammar:en:articles",
                 kind: .grammar, language: "en", modeScope: nil, toneScope: nil, triggers: [],
-                instruction: "英文常漏用或誤用冠詞（a／an／the）：請特別檢查單數可數名詞前的冠詞。"
+                instruction: MemoryWording.articles.chinese
             )
 
         case .spelling(let old, let new):
@@ -262,8 +262,8 @@ struct MemoryExtractor: Sendable {
                 kind: .spelling, language: "en", modeScope: nil, toneScope: nil,
                 triggers: triggers(for: [old], context: context),
                 instruction: context.userChoice
-                    ? "使用者偏好「\(right)」而非「\(wrong)」。"
-                    : "使用者常把「\(right)」誤寫成「\(wrong)」；原文出現「\(wrong)」時請確認是否應為「\(right)」，僅在語意符合時修正。"
+                    ? MemoryWording.preferredSpelling(wrong: wrong, right: right).chinese
+                    : MemoryWording.misspelling(wrong: wrong, right: right).chinese
             )
 
         case .extraPreposition(let verb, let preposition):
@@ -272,7 +272,7 @@ struct MemoryExtractor: Sendable {
                 dedupKey: "grammar:en:\(phrase)",
                 kind: .grammar, language: "en", modeScope: nil, toneScope: nil,
                 triggers: triggers(for: [verb, preposition], context: context),
-                instruction: "「\(phrase)」中的「\(preposition.key)」有時是多餘的（使用者曾刪掉）；請確認是否應寫成「\(verb.key)」，僅在語意需要時修正。"
+                instruction: MemoryWording.extraPreposition(verb: verb.key, preposition: preposition.key).chinese
             )
 
         case .replacement(let old, let new):
@@ -285,8 +285,8 @@ struct MemoryExtractor: Sendable {
                 kind: kind, language: "en", modeScope: scope.mode, toneScope: scope.tone,
                 triggers: triggers(for: old, context: context),
                 instruction: context.userChoice
-                    ? "使用者偏好用「\(to)」取代「\(from)」。"
-                    : "使用者接受過把「\(from)」改成「\(to)」；原文出現「\(from)」時可考慮這樣改。"
+                    ? MemoryWording.preferredReplacement(from: from, to: to).chinese
+                    : MemoryWording.acceptedReplacement(from: from, to: to).chinese
             )
 
         case .terminology(let old, let new):
@@ -298,7 +298,7 @@ struct MemoryExtractor: Sendable {
                 dedupKey: Self.key(.terminology, language, scope, "\(from)>\(to)"),
                 kind: .terminology, language: language, modeScope: scope.mode, toneScope: scope.tone,
                 triggers: triggers(for: old, context: context),
-                instruction: "用詞：請用「\(to)」，不要用「\(from)」。"
+                instruction: MemoryWording.terminology(from: from, to: to).chinese
             )
         }
     }

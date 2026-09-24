@@ -18,7 +18,7 @@ Get the latest `Lint-<version>-macOS-arm64.dmg` from [GitHub Releases](https://g
 
 1. Open the DMG and drag **Lint** into **Applications**.
 2. Launch Lint from Applications. A pencil icon appears in the menu bar and the **Set Up Local AI** window opens.
-3. It reports the Local AI runtime as ready, because llama.cpp is already inside Lint. The AI model is the one thing still missing: Lint shows its size (about 7 GB) and where it is stored, and starts downloading only after you click **Download and Install**. It shows progress, verifies the download, then starts the local server.
+3. It reports the Local AI runtime as ready, because llama.cpp is already inside Lint. The AI model is the one thing still missing: Lint shows its size (about 5.2 GB for the default Gemma 4 E4B) and where it is stored, and starts downloading only after you click **Download and Install**. It shows progress, verifies the download, then starts the local server.
 4. Allow **Lint** under System Settings → Privacy & Security → Accessibility (the setup window guides you and updates when it is on).
 5. Optional: verify the download with `shasum -a 256 -c Lint-<version>-macOS-arm64.dmg.sha256`, run in the folder that holds both files.
 
@@ -86,6 +86,7 @@ Without permission the app still works, but falls back to simulated ⌘C / ⌘V 
 ### Settings
 
 - Providers: local llama.cpp (managed by Lint), OpenAI, OpenAI-compatible endpoint (Ollama / LM Studio / custom), Anthropic, Gemini
+- AI engine: **Automatic**, **Apple Intelligence** or **Lint Local AI**. Apple Intelligence uses the on-device model built into macOS 26 or later (no separate download; Lint uses only the on-device model, never Private Cloud Compute). Automatic uses it when it is available and otherwise Lint's local AI if that is already set up; it never starts a download on its own. Existing settings are kept on upgrade. See [docs/APPLE-INTELLIGENCE.md](docs/APPLE-INTELLIGENCE.md) for how it was evaluated against Gemma.
 - API keys are stored in Keychain (service `app.lint.assistant`)
 - Default endpoint: `http://127.0.0.1:8000/v1`
 - Ollama: `http://127.0.0.1:11434/v1`; LM Studio: `http://127.0.0.1:1234/v1`
@@ -97,6 +98,8 @@ Without permission the app still works, but falls back to simulated ⌘C / ⌘V 
 - **Downloads are safe to interrupt:** cancel, lose the connection or even quit Lint, and the partial file stays under `~/Library/Application Support/Lint/Downloads`; downloading again continues from where it stopped. A file that fails its size, GGUF-header or SHA-256 check is deleted and never used, and the model only appears under `Models/` once every file has passed, in one step.
 - **Disk space:** before downloading, Lint checks for about 1.2× what is still missing and tells you how much it needs and how much the Mac has.
 - **Slow first start:** loading a 4–5 GB model can take minutes on a Mac that is short of memory. Lint waits up to 10 minutes and, if the server is still loading, leaves it running instead of starting over. If it fails, Settings → Model → Details shows the last lines it printed.
+- **Models:** Gemma 4 E4B (default, about 5.2 GB), Qwen3 4B (optional, 2.5 GB) and Gemma 4 12B (optional, 7 GB) can be picked in Settings → Model. Gemma 4 12B is marked as a memory risk: on a 16 GB Mac it can make the system very slow or unresponsive. Switching never deletes a model; one you already have is never downloaded again. An upgrade keeps the model you have installed; an install that only had 12B stored as the old default and never downloaded it moves to E4B.
+- **Tuning and idle release:** Lint passes each managed model its own llama-server arguments (context 3072, q8_0 KV cache, `--reasoning off` for Gemma 4); the advanced *extra arguments* field starts empty and only overrides the options it names. After 5 minutes without a suggestion (Settings → Model → Memory) llama-server releases the model's memory and reloads it on the next request, which takes a few seconds. A stored copy of an old built-in default argument string is cleared on upgrade; anything you typed is kept.
 - **Upgrading:** a model that is already in the Hugging Face cache (from `llama-server -hf`) keeps being used, so nothing is downloaded twice. The old Homebrew `llama-server` paths in Settings switch to the built-in runtime; a path you chose yourself stays as a custom runtime.
 
 ### Writing modes
@@ -142,7 +145,7 @@ macOS 選單列 AI 寫作助手：全域快捷鍵擷取選取文字，送到 LLM
 
 1. 開啟 DMG，把 **Lint** 拖進 **Applications**。
 2. 從「應用程式」開啟 Lint，選單列會出現鉛筆圖示，並開啟「設定本機 AI」視窗。
-3. 視窗會顯示本機 AI 執行環境已就緒，因為 llama.cpp 已經在 Lint 裡面。還缺的只有 AI 模型：Lint 會列出大小（約 7 GB）與存放位置，按下**下載並安裝**之後才開始下載，並顯示進度、驗證檔案，再啟動本機服務。
+3. 視窗會顯示本機 AI 執行環境已就緒，因為 llama.cpp 已經在 Lint 裡面。還缺的只有 AI 模型：Lint 會列出大小（預設的 Gemma 4 E4B 約 5.2 GB）與存放位置，按下**下載並安裝**之後才開始下載，並顯示進度、驗證檔案，再啟動本機服務。
 4. 到 系統設定 → 隱私權與安全性 → 輔助功能，勾選 **Lint**（設定視窗會引導，開啟後自動更新）。
 5. 選用：在放有 DMG 與 `.sha256` 的資料夾執行 `shasum -a 256 -c Lint-<版本>-macOS-arm64.dmg.sha256` 驗證下載。
 

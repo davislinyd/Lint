@@ -24,6 +24,23 @@ final class OpenAICompatibleProviderTests: XCTestCase {
         XCTAssertEqual(messages[1]["content"] as? String, "hello")
     }
 
+    func testOnlyTheLocalServerGetsTheLongTimeout() throws {
+        let request = ChatRequest(model: "m", systemPrompt: "s", userText: "u")
+        let base = URL(string: "http://127.0.0.1:8000/v1")!
+        let local = try OpenAICompatibleProvider.makeURLRequest(
+            baseURL: base, apiKey: "", request: request, timeout: OpenAICompatibleProvider.localRequestTimeout
+        )
+        XCTAssertEqual(local.timeoutInterval, 300, "a model waking from idle sleep is not a dead connection")
+        let other = try OpenAICompatibleProvider.makeURLRequest(baseURL: base, apiKey: "", request: request)
+        XCTAssertEqual(other.timeoutInterval, URLRequest(url: base).timeoutInterval)
+    }
+
+    func testAPromptTooLongForTheContextGetsAMessageAPersonCanActOn() {
+        let message = LLMError.httpStatus(400, #"{"error":{"type":"exceed_context_size_error"}}"#).localizedDescription
+        XCTAssertFalse(message.contains("exceed_context_size_error"))
+        XCTAssertTrue(message.contains("-c"))
+    }
+
     func testOmitsAuthorizationWhenKeyEmpty() throws {
         let request = ChatRequest(model: "m", systemPrompt: "s", userText: "u")
         let urlRequest = try OpenAICompatibleProvider.makeURLRequest(

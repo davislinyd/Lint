@@ -64,6 +64,7 @@
 "複製" = "Copy";
 "沒有選取文字。可直接在左側輸入，再按「產生」。" = "No text selected. Type on the left, then click “Generate”.";
 "沒有原文可送出。" = "No original text to send.";
+"Lint 只校對英文，這段文字裡沒有英文。" = "Lint edits English only, and this text has no English in it.";
 "未授權輔助功能，已改用剪貼簿擷取。" = "Accessibility isn’t authorized; captured the text through the clipboard instead.";
 "此應用程式無法用輔助功能讀取選取，已改用剪貼簿。" = "This app doesn’t expose its selection to Accessibility; used the clipboard instead.";
 "連線成功但沒有收到正文（可能全是 reasoning）。" = "Connected, but no answer text was received (it may all be reasoning).";
@@ -163,7 +164,6 @@
 "連線測試" = "Connection Test";
 "已自訂" = "Customized";
 "使用內建預設" = "Using built-in default";
-"翻譯目標語言" = "Translation target language";
 "額外指示" = "Extra instructions";
 "若下方 System Prompt 已自訂覆寫，以覆寫內容為準。" = "If the System Prompt below is overridden, the override takes precedence.";
 "每個模式與語氣組合可分開覆寫，改完即生效。" = "Each mode and tone combination can be overridden separately; changes apply immediately.";
@@ -178,7 +178,6 @@
 "結束 Lint" = "Quit Lint";
 "沒有可覆蓋的選取" = "No selection to overwrite";
 "文法校對與潤飾" = "Proofread & polish";
-"翻譯" = "Translate";
 "自訂 Prompt" = "Custom prompt";
 "語氣" = "Tone";
 "保留原語氣" = "Preserve Tone";
@@ -260,7 +259,6 @@
 "自動（Lint 內建）" = "Automatic (built into Lint)";
 "自訂 llama-server" = "Custom llama-server";
 "額外參數" = "Extra arguments";
-"建議（Apple Silicon 校對）：--jinja --no-skip-chat-parsing -ngl 99 -fa on -c 4096 -np 1 -t 6 --reasoning off。長文可把 -c 改 8192。--reasoning off 會關閉 Gemma 4 的思考，否則每段要等數十秒。服務一律只綁定 127.0.0.1，額外參數裡的 --host 會被忽略。" = "Recommended (tuned for Apple Silicon): --jinja --no-skip-chat-parsing -ngl 99 -fa on -c 4096 -np 1 -t 6 --reasoning off. Use -c 8192 for long documents. --reasoning off turns off Gemma 4’s thinking; without it every reply takes tens of seconds. The server always binds to 127.0.0.1; any --host in the extra arguments is ignored.";
 "詳細資訊" = "Details";
 
 /* Local AI setup (bundled runtime, managed model) */
@@ -347,3 +345,52 @@
 "模型設定不正確，無法安裝。" = "The model configuration is invalid and cannot be installed.";
 "無法寫入模型檔案：%@" = "Couldn’t write the model file: %@";
 "先前已下載的 %@ 會保留，再次下載會從中斷處接續。" = "The %@ downloaded earlier is kept; downloading again continues from where it stopped.";
+
+/* AI engine: Apple Intelligence (on-device Foundation Models) and Automatic */
+"自動" = "Automatic";
+"尚未決定要用哪個 AI 引擎" = "No AI engine has been chosen yet";
+"Apple Intelligence 可以使用。" = "Apple Intelligence is available.";
+"這台 Mac 不支援 Apple Intelligence。" = "This Mac doesn’t support Apple Intelligence.";
+"Apple Intelligence 尚未開啟。可以在「系統設定 › Apple Intelligence 與 Siri」開啟。" = "Apple Intelligence is turned off. You can turn it on in System Settings › Apple Intelligence & Siri.";
+"Apple Intelligence 的模型還在下載或準備中，完成後就能使用，請稍後再試。" = "The Apple Intelligence model is still downloading or being prepared. It can be used once that finishes; please try again later.";
+"Apple Intelligence 需要 macOS 26 或更新版本。" = "Apple Intelligence requires macOS 26 or later.";
+"Apple Intelligence 目前無法使用。" = "Apple Intelligence isn’t available right now.";
+"文字太長，Apple Intelligence 一次處理不了。請分段選取後再試。" = "The text is too long for Apple Intelligence to handle at once. Select a shorter part and try again.";
+"Apple Intelligence 的安全機制拒絕處理這段文字。可以改用 Lint 本機 AI。" = "Apple Intelligence’s safety guardrails declined this text. You can use Lint Local AI instead.";
+"Apple Intelligence 拒絕處理這段文字。" = "Apple Intelligence declined to process this text.";
+"Apple Intelligence 不支援這段文字的語言。" = "Apple Intelligence doesn’t support the language of this text.";
+"macOS 暫時限制了 Apple Intelligence 的使用次數，請稍後再試。" = "macOS is temporarily limiting how often Apple Intelligence can be used. Please try again later.";
+"Apple Intelligence 正在處理另一個要求，請稍後再試。" = "Apple Intelligence is busy with another request. Please try again shortly.";
+"Apple Intelligence 的模型還沒準備好，請稍後再試。" = "The Apple Intelligence model isn’t ready yet. Please try again later.";
+"Apple Intelligence 回應逾時，請再試一次。" = "Apple Intelligence took too long to respond. Please try again.";
+"Apple Intelligence 無法產生建議，請再試一次。" = "Apple Intelligence couldn’t produce a suggestion. Please try again.";
+"模型的建議改動過多或漏掉了原文內容，所以保留原文。" = "The model’s suggestion changed too much or dropped part of the text, so the original text was kept.";
+"這份結果可能漏掉或改動了原文的部分內容，使用前請先核對。" = "This result may have dropped or changed part of the original. Please check it before using it.";
+"Apple Intelligence 可以使用時就用它；不能用時，改用已經設定好的 Lint 本機 AI。不會因此自動下載模型。" = "Uses Apple Intelligence when it’s available, otherwise Lint Local AI if it’s already set up. No model is downloaded automatically.";
+"使用 macOS 內建的裝置端模型，不需要另外下載模型。" = "Uses the on-device model provided by macOS. No separate model download.";
+"使用 Lint 下載到這台 Mac 的本機模型，記憶體與磁碟用量較高。" = "Uses the local model Lint downloads to this Mac. Higher memory and disk use.";
+"可以使用" = "Available";
+"Lint 本機 AI（備援）" = "Lint Local AI (fallback)";
+"未安裝" = "Not installed";
+"AI 引擎" = "AI Engine";
+"Apple Intelligence 只使用這台 Mac 上的裝置端模型：Lint 不會把文字送到 Apple 的伺服器或 Private Cloud Compute。" = "Apple Intelligence here uses only the on-device model on this Mac: Lint does not send your text to Apple’s servers or Private Cloud Compute.";
+"改用 Apple Intelligence" = "Use Apple Intelligence Instead";
+"這台 Mac 也可以改用 Apple Intelligence：使用 macOS 內建的裝置端模型，不必下載。" = "This Mac can also use Apple Intelligence instead: the on-device model built into macOS, with nothing to download.";
+
+/* Local AI: per-model tuning and idle release */
+"記憶體" = "Memory";
+"閒置後釋放" = "Release when idle";
+"永不釋放" = "Never";
+"1 分鐘" = "1 minute";
+"5 分鐘" = "5 minutes";
+"10 分鐘" = "10 minutes";
+"30 分鐘" = "30 minutes";
+"閒置一段時間沒有使用本機 AI 時，Lint 會請 llama-server 釋放模型佔用的記憶體；服務本身仍在執行。下一次的建議會多花幾秒重新載入模型。" = "After a spell without a suggestion, Lint has llama-server release the memory the model is holding; the server itself keeps running. The next suggestion takes a few seconds longer while the model loads again.";
+"按「重新啟動」後新的閒置設定才會生效。" = "Click Restart to apply the new idle setting.";
+"留空即可：Lint 會依所選模型套用自己的參數（目前為 %@）。這裡填的參數會覆蓋同一個選項，例如長文可填 -c 8192。服務一律只綁定 127.0.0.1，額外參數裡的 --host 會被忽略。" = "Leave this empty: Lint passes its own arguments for the selected model (right now %@). Anything set here replaces Lint's copy of the same option — for long text, try -c 8192. The server always binds to 127.0.0.1 only; a --host in here is ignored.";
+"這段文字對本機 AI 來說太長了。請分段處理，或在「設定 → 模型 → 進階」的額外參數加上較大的 -c（例如 -c 8192）後重新啟動。" = "This text is too long for local AI. Work through it in parts, or add a larger -c (for example -c 8192) to the extra arguments in Settings → Model → Advanced and restart.";
+"建議" = "Recommended";
+"記憶體用量很高，可能當機" = "very high memory use, may freeze the Mac";
+"需下載 %@" = "%@ download";
+"這個模型很大，執行時會佔用大量記憶體；在 16 GB 的 Mac 上可能讓系統變得非常緩慢，甚至當機。記憶體吃緊時請改用 Gemma 4 E4B 或 Apple Intelligence。" = "This model is large and uses a lot of memory while it runs. On a 16 GB Mac it can make the system very slow or even unresponsive. If memory is tight, use Gemma 4 E4B or Apple Intelligence instead.";
+"翻譯成中文" = "Translate to Chinese";

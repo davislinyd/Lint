@@ -171,7 +171,9 @@ final class LocalAISetupCoordinatorTests: XCTestCase {
         XCTAssertTrue(env.coordinator.modelReady)
         let plan = try XCTUnwrap(env.server.startedPlans.first)
         let firstShard = env.paths.installDirectory(for: env.model).appendingPathComponent("m-00001-of-00002.gguf")
-        XCTAssertEqual(plan.arguments, ["-m", firstShard.path, "--host", "127.0.0.1", "--port", "8000", "-ngl", "99"])
+        XCTAssertEqual(Array(plan.arguments.prefix(6)), ["-m", firstShard.path, "--host", "127.0.0.1", "--port", "8000"])
+        XCTAssertEqual(Array(plan.arguments.suffix(2)), ["-ngl", "99"], "the advanced setting comes last")
+        XCTAssertFalse(plan.arguments.contains("-hf"))
         XCTAssertEqual(env.server.startedPlans.count, 1)
 
         env.coordinator.setAccessibilityTrusted(true)
@@ -356,5 +358,118 @@ final class LocalAISetupCoordinatorTests: XCTestCase {
             env.coordinator.cancelInstall()
             await env.coordinator.removeModel()
         }
+    }
+}
+/// Switching the managed model: the running server holds the old one, so it is stopped and started
+/// again — but nothing is deleted, and a model that is already on disk is never downloaded twice.
+@MainActor
+final class ManagedModelSwitchTests: XCTestCase {
+    func testSwitchingModelsRestartsTheServerWithoutDownloadingOrDeletingAnything() async throws {
+        let (first, firstRemote) = TestModel.make(id: "first", shards: [("a.gguf", TestModel.payload("a", count: 4000))])
+        let (second, secondRemote) = TestModel.make(id: "second", shards: [("b.gguf", TestModel.payload("b", count: 5000))])
+        let paths = LocalAIPaths(root: try TestSupport.makeTempDirectory())
+        let transport = FakeTransport(remote: firstRemote.merging(secondRemote) { a, _ in a })
+        let downloader = ModelDownloadManager(paths: paths, transport: transport, diskSpace: FakeDiskSpace(bytes: 1 << 40))
+        let server = FakeServer()
+        let config = ConfigBox(LocalAIConfiguration(managedModel: first, extraArguments: ""))
+        let coordinator = LocalAISetupCoordinator(
+            configuration: { config.value },
+            resolver: FakeResolver(.ready(LlamaRuntimeLocation(binaryURL: URL(fileURLWithPath: "/llama-server"), origin: .bundled))),
+            models: LocalModelManager(paths: paths), downloader: downloader, server: server, settleDelay: .zero
+        )
+        let firstInstalled = await downloader.install(first)
+        XCTAssertEqual(firstInstalled, .installed)
+        let secondInstalled = await downloader.install(second)
+        XCTAssertEqual(secondInstalled, .installed)
+        await coordinator.refresh()
+        let manager = LocalModelManager(paths: paths)
+        XCTAssertTrue(coordinator.installedModelIDs.contains("first"), "the selected model reports as installed")
+        try await coordinator.startServer()
+        XCTAssertEqual(server.startedPlans.count, 1)
+        XCTAssertTrue(server.startedPlans[0].arguments.contains(paths.installDirectory(for: first).appendingPathComponent("a.gguf").path))
+
+        let downloadsBefore = transport.calls.count
+        config.value.managedModel = second
+        await coordinator.managedModelChanged()
+
+        XCTAssertEqual(server.stopCalls, 1, "the old model was loaded; that process is stopped")
+        XCTAssertEqual(server.startedPlans.count, 2)
+        XCTAssertTrue(server.startedPlans[1].arguments.contains(paths.installDirectory(for: second).appendingPathComponent("b.gguf").path))
+        XCTAssertEqual(transport.calls.count, downloadsBefore, "an installed model is never downloaded again")
+        XCTAssertEqual(coordinator.state, .serverReady)
+
+        // And back again: the first model is still there, untouched.
+        config.value.managedModel = first
+        await coordinator.managedModelChanged()
+        XCTAssertEqual(transport.calls.count, downloadsBefore)
+        for model in [first, second] {
+            guard case .installed = manager.status(of: model) else {
+                return XCTFail("\(model.id) was deleted by a switch")
+            }
+        }
+        XCTAssertEqual(coordinator.state, .serverReady)
+    }
+
+    func testSwitchingToAModelThatIsNotInstalledStopsAtTheDownloadPromptInsteadOfDownloading() async throws {
+        let (installed, remote) = TestModel.make(id: "installed", shards: [("a.gguf", TestModel.payload("a", count: 4000))])
+        let (missing, _) = TestModel.make(id: "missing", shards: [("b.gguf", TestModel.payload("b", count: 5000))])
+        let paths = LocalAIPaths(root: try TestSupport.makeTempDirectory())
+        let transport = FakeTransport(remote: remote)
+        let downloader = ModelDownloadManager(paths: paths, transport: transport, diskSpace: FakeDiskSpace(bytes: 1 << 40))
+        let server = FakeServer()
+        let config = ConfigBox(LocalAIConfiguration(managedModel: installed, extraArguments: ""))
+        let coordinator = LocalAISetupCoordinator(
+            configuration: { config.value },
+            resolver: FakeResolver(.ready(LlamaRuntimeLocation(binaryURL: URL(fileURLWithPath: "/llama-server"), origin: .bundled))),
+            models: LocalModelManager(paths: paths), downloader: downloader, server: server, settleDelay: .zero
+        )
+        let done = await downloader.install(installed)
+        XCTAssertEqual(done, .installed)
+        await coordinator.refresh()
+        let downloadsBefore = transport.calls.count
+
+        config.value.managedModel = missing
+        await coordinator.managedModelChanged()
+
+        XCTAssertEqual(coordinator.state, .modelMissing, "the user is asked, never surprised by a download")
+        XCTAssertEqual(transport.calls.count, downloadsBefore)
+        guard case .installed = LocalModelManager(paths: paths).status(of: installed) else {
+            return XCTFail("the model that was there is still there")
+        }
+    }
+}
+
+/// Choosing Apple Intelligence releases the memory of a llama-server Lint started, and nothing else.
+@MainActor
+final class AppleIntelligenceReleaseTests: XCTestCase {
+    private func coordinator(_ server: FakeServer) -> LocalAISetupCoordinator {
+        LocalAISetupCoordinator(
+            configuration: { LocalAIConfiguration(extraArguments: "") },
+            resolver: FakeResolver(.ready(LlamaRuntimeLocation(binaryURL: URL(fileURLWithPath: "/llama-server"), origin: .bundled))),
+            server: server, settleDelay: .zero
+        )
+    }
+
+    func testAServerLintStartedIsStopped() async throws {
+        let server = FakeServer()
+        server.status = .running(pid: 1234, managedByLint: true)
+        server.healthy = true
+        let coordinator = coordinator(server)
+        await coordinator.refresh()
+        coordinator.releaseForAppleIntelligence()
+        XCTAssertEqual(server.stopCalls, 1)
+        XCTAssertEqual(coordinator.serverStatus, .stopped)
+        coordinator.releaseForAppleIntelligence()
+        XCTAssertEqual(server.stopCalls, 1, "nothing to do the second time")
+    }
+
+    func testAServerSomeoneElseStartedIsLeftAlone() async throws {
+        let server = FakeServer()
+        server.status = .running(pid: nil, managedByLint: false)
+        server.healthy = true
+        let coordinator = coordinator(server)
+        await coordinator.refresh()
+        coordinator.releaseForAppleIntelligence()
+        XCTAssertEqual(server.stopCalls, 0)
     }
 }

@@ -5,13 +5,19 @@ import Foundation
 ///
 /// Order matters for a local model, which caches the prompt from its start: the task comes first, so
 /// the tones of one task share a prefix.
+///
+/// The same task and tone can be worded for a different kind of model (`WritingPromptProfile`):
+/// what is asked for stays the same, only how it is said changes.
 public enum WritingPromptComposer {
     public static func compose(
         mode: WritingMode,
         tone: WritingTone,
         customPrompt: String,
-        translateTarget: String
+        profile: WritingPromptProfile = .standard
     ) -> String {
+        if case .english(let reader) = profile {
+            return EnglishWritingPrompts.compose(mode: mode, tone: tone, customPrompt: customPrompt, reader: reader)
+        }
         switch mode {
         case .proofread:
             return [
@@ -22,7 +28,7 @@ public enum WritingPromptComposer {
             ].joined(separator: "\n\n")
         case .translate:
             return [
-                translateTask(target: translateTarget),
+                translateTask,
                 priority,
                 toneInstruction(tone, for: .translate),
                 numbered(commonRules),
@@ -30,7 +36,7 @@ public enum WritingPromptComposer {
         case .custom:
             let custom = customPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
             if custom.isEmpty {
-                return compose(mode: .proofread, tone: .preserve, customPrompt: "", translateTarget: translateTarget)
+                return compose(mode: .proofread, tone: .preserve, customPrompt: "")
             }
             // A custom prompt is the user's own task: no tone is added to it.
             return [
@@ -84,7 +90,7 @@ public enum WritingPromptComposer {
     private static func proofreadTask(tone: WritingTone) -> String {
         let preserving = tone == .preserve
         var lines = [
-            "你是英語母語的資深編輯，同時精通繁體中文寫作，專長校對短訊、郵件、文件與聊天草稿。",
+            "你是英語母語的資深編輯，專長校對短訊、郵件、文件與聊天草稿。",
             "",
             preserving
                 ? "任務：把使用者的文字改成母語者實際會寫的樣子；原意、細節、語氣強度與資訊量都不變。"
@@ -104,9 +110,7 @@ public enum WritingPromptComposer {
                 : "- 沿用原文的美式或英式拼法。",
             "- 不要變得更長、更華麗，也不要加入原文沒有的內容。",
             "",
-            "中文：",
-            "- 修正的／地／得、多餘空白、標點與不通順的詞序，以最小必要修正為主。",
-            "- 中英夾雜時，中文與英文各用該語言的自然寫法，只改有問題的部分，不要整段翻成單一語言。",
+            "中英夾雜時只修改英文部分，中文一字不改，也不要把任何部分翻成另一種語言。",
             "",
             "範例（只示範改法，不要在輸出中重複範例）：",
             "原文：I am agree with your opinion, but we should discuss about the schedule more detail.",
@@ -114,27 +118,23 @@ public enum WritingPromptComposer {
             "",
             "原文：Can you help me check this bug? It make the app crash when I click the button.",
             "輸出：Could you help me look into this bug? It makes the app crash whenever I click the button.",
-            "",
         ]
         // Leaving a correct sentence alone is what "preserve" means; under another tone it would
         // argue against the tone.
         if preserving {
             lines += [
+                "",
                 "原文：Sounds good, I'll send the slides tomorrow. Thanks!",
                 "輸出：Sounds good, I'll send the slides tomorrow. Thanks!",
-                "",
             ]
         }
-        lines += [
-            "原文：我昨天有 review 那個 PR，有些 function name 不太clear。",
-            "輸出：我昨天 review 了那個 PR，有些 function name 不太清楚。",
-        ]
         return lines.joined(separator: "\n")
     }
 
-    private static func translateTask(target: String) -> String {
-        let trimmed = target.trimmingCharacters(in: .whitespacesAndNewlines)
-        let language = trimmed.isEmpty ? "繁體中文" : trimmed
+    /// Translation only ever goes into Traditional Chinese: it is there to help read English, and
+    /// Lint does not translate into English.
+    private static var translateTask: String {
+        let language = "繁體中文"
         return """
             你是專業翻譯。把使用者文字翻譯成\(language)。
 

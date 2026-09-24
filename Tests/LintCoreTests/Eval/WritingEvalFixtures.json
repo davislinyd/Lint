@@ -1,0 +1,1382 @@
+{
+  "version": 6,
+  "about": "Lint's own writing fixtures: English proofreading and tone rewrites (also the English inside mixed Chinese-English text, whose Chinese is left alone), and English-to-Traditional-Chinese translation for reference. Every sentence was written for this repository; nothing is taken from a benchmark corpus. They exist to compare engines on Lint's actual workload, not to score a model in general.",
+  "cases": [
+    {
+      "id": "en-grammar-01",
+      "category": "english-grammar",
+      "mode": "proofread",
+      "tone": "preserve",
+      "input": "I am agree with your opinion, but we should discuss about the schedule more detail.",
+      "outputLanguage": "en",
+      "note": "\"I agree\"; \"discuss the schedule in more detail\".",
+      "mustFix": [
+        "am agree",
+        "discuss about",
+        "schedule more detail"
+      ]
+    },
+    {
+      "id": "en-grammar-02",
+      "category": "english-grammar",
+      "mode": "proofread",
+      "tone": "preserve",
+      "input": "He don't have no time for the meeting yesterday, so we postpone it until next week.",
+      "outputLanguage": "en",
+      "note": "Negation, tense agreement: \"didn't have time\", \"postponed\".",
+      "mustFix": [
+        "don't have no",
+        "we postpone "
+      ]
+    },
+    {
+      "id": "en-grammar-03",
+      "category": "english-grammar",
+      "mode": "proofread",
+      "tone": "preserve",
+      "input": "The datas shows that our user base grew 12% since last quarter, which are encouraging.",
+      "outputLanguage": "en",
+      "note": "\"data show\"/\"data shows\" consistently; \"which is encouraging\". 12% must survive.",
+      "mustPreserve": [
+        "12%"
+      ],
+      "mustFix": [
+        "datas",
+        "which are"
+      ]
+    },
+    {
+      "id": "en-grammar-04",
+      "category": "english-grammar",
+      "mode": "proofread",
+      "tone": "preserve",
+      "input": "Please kindly find attach the report which I mentioned on the meeting in last Friday.",
+      "outputLanguage": "en",
+      "note": "\"attached\", \"mentioned in the meeting last Friday\"; drop \"kindly\" padding.",
+      "mustFix": [
+        "find attach ",
+        "on the meeting",
+        "in last Friday"
+      ]
+    },
+    {
+      "id": "en-grammar-05",
+      "category": "english-grammar",
+      "mode": "proofread",
+      "tone": "preserve",
+      "input": "If I would have known about the deadline, I will finish the draft more early.",
+      "outputLanguage": "en",
+      "note": "Conditional: \"had known\", \"would have finished\", \"earlier\".",
+      "mustFix": [
+        "would have known",
+        "I will finish",
+        "more early"
+      ]
+    },
+    {
+      "id": "en-minimal-01",
+      "category": "english-minimal-edit",
+      "mode": "proofread",
+      "tone": "preserve",
+      "input": "Thanks! I'll take a look at the PR this afternoon and leave comments there.",
+      "outputLanguage": "en",
+      "note": "Already natural. A preserve-tone pass should leave it alone.",
+      "expectUnchanged": true
+    },
+    {
+      "id": "en-minimal-02",
+      "category": "english-minimal-edit",
+      "mode": "proofread",
+      "tone": "preserve",
+      "input": "Quick question: is the staging database still pointing at the old cluster? I got a timeout.",
+      "outputLanguage": "en",
+      "note": "Already natural; at most nothing changes.",
+      "expectUnchanged": true
+    },
+    {
+      "id": "en-minimal-03",
+      "category": "english-minimal-edit",
+      "mode": "proofread",
+      "tone": "preserve",
+      "input": "We need to sync about the launch. I think Wednesday works better for me than Tuesday, because I have a conflict.",
+      "outputLanguage": "en",
+      "note": "Natural, informal. Minor tightening at most; must not become formal."
+    },
+    {
+      "id": "en-minimal-04",
+      "category": "english-minimal-edit",
+      "mode": "proofread",
+      "tone": "preserve",
+      "input": "The build is failing on main since yesterday evening. Its probably the new dependency we added.",
+      "outputLanguage": "en",
+      "note": "Only \"Its\" -> \"It's\" really needs fixing.",
+      "mustFix": [
+        "The build is failing",
+        "Its probably"
+      ]
+    },
+    {
+      "id": "en2zh-01",
+      "category": "en-to-zh-hant",
+      "mode": "translate",
+      "tone": "preserve",
+      "input": "The deployment is scheduled for 2026/10/15 at 22:00 UTC. Please review the runbook at https://example.com/runbook before then.",
+      "outputLanguage": "zh-Hant",
+      "note": "URL 與時間必須原樣保留。日期改寫成「2026 年 10 月 15 日」是可接受的在地化，但日期的值不可改變（人工確認）。",
+      "mustPreserve": [
+        "22:00",
+        "https://example.com/runbook"
+      ]
+    },
+    {
+      "id": "en2zh-02",
+      "category": "en-to-zh-hant",
+      "mode": "translate",
+      "tone": "preserve",
+      "input": "Hi Alice, could you confirm whether the invoice for Q3 has been approved? Bob said it was still pending.",
+      "outputLanguage": "zh-Hant",
+      "note": "人名 Alice、Bob 保留原文；Q3 譯為「第三季」可接受。",
+      "mustPreserve": [
+        "Alice",
+        "Bob"
+      ]
+    },
+    {
+      "id": "en2zh-03",
+      "category": "en-to-zh-hant",
+      "mode": "translate",
+      "tone": "preserve",
+      "input": "We rolled back the release because the error rate went from 0.2% to 4.7% within ten minutes.",
+      "outputLanguage": "zh-Hant",
+      "note": "0.2% 與 4.7% 必須保留。",
+      "mustPreserve": [
+        "0.2%",
+        "4.7%"
+      ]
+    },
+    {
+      "id": "en2zh-04",
+      "category": "en-to-zh-hant",
+      "mode": "translate",
+      "tone": "preserve",
+      "input": "Please install version 3.11.2 or later, then run `make verify` in the repository root.",
+      "outputLanguage": "zh-Hant",
+      "note": "版本號與指令 make verify 保留。",
+      "mustPreserve": [
+        "3.11.2",
+        "make verify"
+      ]
+    },
+    {
+      "id": "tone-formal-01",
+      "category": "tone-formal",
+      "mode": "proofread",
+      "tone": "formal",
+      "input": "hey, just wanted to check if you got my last email about the contract. lmk asap thanks",
+      "outputLanguage": "en",
+      "note": "應轉為正式書信語氣，資訊量不變。",
+      "mustFix": [
+        "lmk",
+        "asap"
+      ]
+    },
+    {
+      "id": "tone-formal-03",
+      "category": "tone-formal",
+      "mode": "proofread",
+      "tone": "formal",
+      "input": "We can't do the 10th. How about the 17th instead?",
+      "outputLanguage": "en",
+      "note": "正式化，日期 10th、17th 必須保留。",
+      "mustPreserve": [
+        "10th",
+        "17th"
+      ]
+    },
+    {
+      "id": "tone-concise-01",
+      "category": "tone-concise",
+      "mode": "proofread",
+      "tone": "concise",
+      "input": "I just wanted to reach out and let you know that, at this point in time, we are still in the process of reviewing the document that you sent over to us last week, and we will get back to you as soon as we possibly can.",
+      "outputLanguage": "en",
+      "note": "大幅縮短但保留「仍在審閱」與「會盡快回覆」兩項資訊。"
+    },
+    {
+      "id": "tone-concise-03",
+      "category": "tone-concise",
+      "mode": "proofread",
+      "tone": "concise",
+      "input": "Due to the fact that the server was down for approximately 45 minutes, we were unable to process a total of 1,280 orders during that particular time period.",
+      "outputLanguage": "en",
+      "note": "縮短；45 與 1,280 必須保留。",
+      "mustPreserve": [
+        "45",
+        "1,280"
+      ]
+    },
+    {
+      "id": "tone-prof-01",
+      "category": "tone-professional",
+      "mode": "proofread",
+      "tone": "professional",
+      "input": "This is totally broken and whoever shipped it clearly didn't test anything.",
+      "outputLanguage": "en",
+      "note": "轉為專業、對事不對人，且不得新增未提及的承諾。",
+      "mustFix": [
+        "totally broken",
+        "whoever shipped"
+      ]
+    },
+    {
+      "id": "tone-prof-03",
+      "category": "tone-professional",
+      "mode": "proofread",
+      "tone": "professional",
+      "input": "I don't know why the numbers are off, maybe someone messed up the import again.",
+      "outputLanguage": "en",
+      "note": "專業語氣，保留不確定性，不得斷定原因。"
+    },
+    {
+      "id": "num-01",
+      "category": "numbers-dates",
+      "mode": "proofread",
+      "tone": "preserve",
+      "input": "The contract value is USD 1,250,000 and it expires on 2027-01-31, 90 days after handover.",
+      "outputLanguage": "en",
+      "note": "所有數字與日期原樣保留。",
+      "mustPreserve": [
+        "1,250,000",
+        "2027-01-31",
+        "90"
+      ]
+    },
+    {
+      "id": "num-03",
+      "category": "numbers-dates",
+      "mode": "proofread",
+      "tone": "preserve",
+      "input": "Please arrive before 09:15 on Monday; the session runs for 1 hour 45 minutes.",
+      "outputLanguage": "en",
+      "note": "09:15、1 hour 45 minutes 保留。",
+      "mustPreserve": [
+        "09:15"
+      ]
+    },
+    {
+      "id": "url-01",
+      "category": "urls",
+      "mode": "proofread",
+      "tone": "preserve",
+      "input": "The docs moved to https://example.com/docs/v2/getting-started?lang=zh-Hant — please update you bookmarks.",
+      "outputLanguage": "en",
+      "note": "完整 URL（含 query）原樣保留；只需修正 \"you\" -> \"your\"。",
+      "mustPreserve": [
+        "https://example.com/docs/v2/getting-started?lang=zh-Hant"
+      ],
+      "mustFix": [
+        "update you bookmarks"
+      ]
+    },
+    {
+      "id": "name-01",
+      "category": "names",
+      "mode": "proofread",
+      "tone": "preserve",
+      "input": "Chen Yi-Ting from Shopee will join the sync, and Kai-Wen owns the PostgreSQL migration.",
+      "outputLanguage": "en",
+      "note": "人名、公司名、產品名原樣保留。",
+      "mustPreserve": [
+        "Chen Yi-Ting",
+        "Shopee",
+        "Kai-Wen",
+        "PostgreSQL"
+      ]
+    },
+    {
+      "id": "punct-01",
+      "category": "punctuation",
+      "mode": "proofread",
+      "tone": "preserve",
+      "input": "We shipped the fix ,tested it and then deployed it .Everything looks fine now",
+      "outputLanguage": "en",
+      "note": "標點與空白修正，句末加句號。",
+      "mustFix": [
+        "fix ,",
+        "it .Everything"
+      ]
+    },
+    {
+      "id": "bullet-01",
+      "category": "bullet-list",
+      "mode": "proofread",
+      "tone": "preserve",
+      "input": "- fix the login redirect\n- update the readme\n- ask design about the empty state",
+      "outputLanguage": "en",
+      "note": "三行條列必須維持三行，且仍以 \"- \" 開頭。",
+      "preserveLineStructure": true
+    },
+    {
+      "id": "email-01",
+      "category": "short-email",
+      "mode": "proofread",
+      "tone": "preserve",
+      "input": "Hi Sarah,\n\nThanks for sending over the numbers. I have a few question about the Q4 forecast, can we have a short call tomorrow?\n\nBest,\nDavis",
+      "outputLanguage": "en",
+      "note": "段落結構與署名保留；\"question\" -> \"questions\"。",
+      "mustPreserve": [
+        "Sarah",
+        "Q4",
+        "Davis"
+      ],
+      "preserveLineStructure": true,
+      "mustFix": [
+        "few question "
+      ]
+    },
+    {
+      "id": "email-02",
+      "category": "short-email",
+      "mode": "proofread",
+      "tone": "formal",
+      "input": "Hi team,\n\nheads up that the office will be close on 10/10. plan accordingly.\n\nThanks",
+      "outputLanguage": "en",
+      "note": "轉正式但保留段落；10/10 保留。",
+      "mustPreserve": [
+        "10/10"
+      ],
+      "preserveLineStructure": true,
+      "mustFix": [
+        "be close on"
+      ]
+    },
+    {
+      "id": "biz-01",
+      "category": "business-writing",
+      "mode": "proofread",
+      "tone": "professional",
+      "input": "We are writing to inform you that due to unforeseen circumstances beyond our control, the delivery of your order #A-99213 will be delay by two weeks.",
+      "outputLanguage": "en",
+      "note": "訂單編號保留；\"will be delayed\"。",
+      "mustPreserve": [
+        "#A-99213"
+      ],
+      "mustFix": [
+        "be delay "
+      ]
+    },
+    {
+      "id": "ok-01",
+      "category": "already-correct",
+      "mode": "proofread",
+      "tone": "preserve",
+      "input": "The migration finished at 03:40 with no errors.",
+      "outputLanguage": "en",
+      "note": "完全正確，應原樣輸出。",
+      "mustPreserve": [
+        "03:40"
+      ],
+      "expectUnchanged": true
+    },
+    {
+      "id": "ok-03",
+      "category": "already-correct",
+      "mode": "proofread",
+      "tone": "preserve",
+      "input": "Let me know if you need anything else.",
+      "outputLanguage": "en",
+      "note": "慣用口語，preserve 下不應改動。",
+      "expectUnchanged": true
+    },
+    {
+      "id": "en-sva-01",
+      "category": "english-grammar",
+      "mode": "proofread",
+      "tone": "preserve",
+      "input": "The list of approved vendors are attached to this email.",
+      "outputLanguage": "en",
+      "note": "主詞動詞一致：\"is attached\"。",
+      "mustFix": [
+        "vendors are"
+      ]
+    },
+    {
+      "id": "en-tense-01",
+      "category": "english-grammar",
+      "mode": "proofread",
+      "tone": "preserve",
+      "input": "Yesterday we deploy the hotfix and it fix the crash on startup.",
+      "outputLanguage": "en",
+      "note": "時態：\"deployed\"、\"fixed\"。",
+      "mustFix": [
+        "we deploy ",
+        "it fix "
+      ]
+    },
+    {
+      "id": "en-article-01",
+      "category": "english-grammar",
+      "mode": "proofread",
+      "tone": "preserve",
+      "input": "Can you send me link to the dashboard? I need it for meeting at 3 pm.",
+      "outputLanguage": "en",
+      "note": "冠詞：\"the link\"、\"the meeting\"；3 pm 保留。",
+      "mustPreserve": [
+        "3 pm"
+      ],
+      "mustFix": [
+        "me link",
+        "for meeting"
+      ]
+    },
+    {
+      "id": "en-prep-01",
+      "category": "english-grammar",
+      "mode": "proofread",
+      "tone": "preserve",
+      "input": "I'm interested on the new role and would like to apply until Friday.",
+      "outputLanguage": "en",
+      "note": "介系詞：\"interested in\"、\"by Friday\"。",
+      "mustFix": [
+        "interested on",
+        "apply until"
+      ]
+    },
+    {
+      "id": "en-plural-01",
+      "category": "english-grammar",
+      "mode": "proofread",
+      "tone": "preserve",
+      "input": "We received three feedbacks and two new requirement from the client.",
+      "outputLanguage": "en",
+      "note": "複數：feedback 不可數（\"three pieces of feedback\" 等）、\"requirements\"。",
+      "mustFix": [
+        "feedbacks",
+        "requirement from"
+      ]
+    },
+    {
+      "id": "en-caps-01",
+      "category": "english-grammar",
+      "mode": "proofread",
+      "tone": "preserve",
+      "input": "i talked to sarah from apple about the ios release on monday.",
+      "outputLanguage": "en",
+      "note": "大寫：I、Sarah、Apple、iOS、Monday。",
+      "mustFix": [
+        "i talked",
+        "sarah",
+        "apple",
+        " ios ",
+        "monday"
+      ]
+    },
+    {
+      "id": "en-spell-01",
+      "category": "english-grammar",
+      "mode": "proofread",
+      "tone": "preserve",
+      "input": "Please recieve the attached documnet and let me know if its definately ok.",
+      "outputLanguage": "en",
+      "note": "拼字：receive、document、it's、definitely；不要改寫其餘部分。",
+      "mustFix": [
+        "recieve",
+        "documnet",
+        "if its",
+        "definately"
+      ]
+    },
+    {
+      "id": "en-punct-01",
+      "category": "english-grammar",
+      "mode": "proofread",
+      "tone": "preserve",
+      "input": "However we still need approval from legal before we can launch which could take a week.",
+      "outputLanguage": "en",
+      "note": "逗號：\"However,\"、\"launch, which\"。",
+      "mustFix": [
+        "However we",
+        "launch which"
+      ]
+    },
+    {
+      "id": "keep-email-01",
+      "category": "preservation",
+      "mode": "proofread",
+      "tone": "preserve",
+      "input": "Please send the signed contract to legal-team@example.com before 5 pm, thanks",
+      "outputLanguage": "en",
+      "note": "電子郵件地址逐字保留。",
+      "mustPreserve": [
+        "legal-team@example.com",
+        "5 pm"
+      ]
+    },
+    {
+      "id": "keep-code-01",
+      "category": "preservation",
+      "mode": "proofread",
+      "tone": "preserve",
+      "input": "Run `npm run build --prod` and than check the logs in `dist/app.log`.",
+      "outputLanguage": "en",
+      "note": "\"than\" → \"then\"；兩段程式碼原樣保留。",
+      "mustPreserve": [
+        "`npm run build --prod`",
+        "`dist/app.log`"
+      ],
+      "mustFix": [
+        "and than"
+      ]
+    },
+    {
+      "id": "keep-file-01",
+      "category": "preservation",
+      "mode": "proofread",
+      "tone": "preserve",
+      "input": "The config file config/settings.prod.yaml have a wrong timeout value.",
+      "outputLanguage": "en",
+      "note": "\"has\"；檔名路徑原樣保留。",
+      "mustPreserve": [
+        "config/settings.prod.yaml"
+      ],
+      "mustFix": [
+        "yaml have"
+      ]
+    },
+    {
+      "id": "keep-product-01",
+      "category": "preservation",
+      "mode": "proofread",
+      "tone": "preserve",
+      "input": "Our team have migrated from Jira to Linear, and GitHub Actions now run our CI on macOS runners.",
+      "outputLanguage": "en",
+      "note": "\"has migrated\"、\"runs\"；產品名原樣保留。",
+      "mustPreserve": [
+        "Jira",
+        "Linear",
+        "GitHub Actions",
+        "macOS"
+      ],
+      "mustFix": [
+        "team have"
+      ]
+    },
+    {
+      "id": "keep-date-01",
+      "category": "preservation",
+      "mode": "proofread",
+      "tone": "preserve",
+      "input": "The review are on 2026-11-03 at 14:30 (UTC+8), and the draft was due 10/28.",
+      "outputLanguage": "en",
+      "note": "\"is on\"；日期時間原樣保留。",
+      "mustPreserve": [
+        "2026-11-03",
+        "14:30",
+        "UTC+8",
+        "10/28"
+      ],
+      "mustFix": [
+        "review are"
+      ]
+    },
+    {
+      "id": "en2zh-tech-01",
+      "category": "en-to-zh-hant",
+      "mode": "translate",
+      "tone": "preserve",
+      "input": "If the cache hit rate drops below 80%, the service falls back to reading from PostgreSQL directly, which adds about 40 ms to p95 latency.",
+      "outputLanguage": "zh-Hant",
+      "note": "技術文件；80%、PostgreSQL、p95 與數值 40 保留（「40 毫秒」可接受）。",
+      "mustPreserve": [
+        "80%",
+        "PostgreSQL",
+        "40",
+        "p95"
+      ]
+    },
+    {
+      "id": "en2zh-conv-01",
+      "category": "en-to-zh-hant",
+      "mode": "translate",
+      "tone": "preserve",
+      "input": "No worries, take your time! Ping me when you're back.",
+      "outputLanguage": "zh-Hant",
+      "note": "口語對話，保留輕鬆語氣，台灣用語。"
+    },
+    {
+      "id": "en2zh-biz-01",
+      "category": "en-to-zh-hant",
+      "mode": "translate",
+      "tone": "preserve",
+      "input": "We'd like to extend the pilot by one month and revisit pricing in the first quarter.",
+      "outputLanguage": "zh-Hant",
+      "note": "商務語氣，資訊完整。"
+    },
+    {
+      "id": "clean-en-01",
+      "category": "already-correct",
+      "mode": "proofread",
+      "tone": "preserve",
+      "input": "I've attached the Q3 report. Let me know if anything looks off.",
+      "outputLanguage": "en",
+      "note": "正確，應原樣輸出。",
+      "expectUnchanged": true
+    },
+    {
+      "id": "clean-en-02",
+      "category": "already-correct",
+      "mode": "proofread",
+      "tone": "preserve",
+      "input": "The deployment finished at 16:05, and all health checks passed.",
+      "outputLanguage": "en",
+      "note": "正確，應原樣輸出。",
+      "expectUnchanged": true
+    },
+    {
+      "id": "clean-en-03",
+      "category": "already-correct",
+      "mode": "proofread",
+      "tone": "preserve",
+      "input": "Could you review my pull request when you have a moment? It only touches the login flow.",
+      "outputLanguage": "en",
+      "note": "正確，應原樣輸出。",
+      "expectUnchanged": true
+    },
+    {
+      "id": "clean-en-04",
+      "category": "already-correct",
+      "mode": "proofread",
+      "tone": "preserve",
+      "input": "Set `LOG_LEVEL=debug` and restart the worker to see the full stack trace.",
+      "outputLanguage": "en",
+      "note": "正確的技術句，應原樣輸出。",
+      "expectUnchanged": true
+    },
+    {
+      "id": "clean-en-05",
+      "category": "already-correct",
+      "mode": "proofread",
+      "tone": "preserve",
+      "input": "lol yeah, that bug got me too. grabbing coffee, back in 10.",
+      "outputLanguage": "en",
+      "note": "刻意的口語小寫，preserve 不應改成正式。",
+      "expectUnchanged": true
+    },
+    {
+      "id": "clean-email-01",
+      "category": "already-correct",
+      "mode": "proofread",
+      "tone": "preserve",
+      "input": "Hi Tom,\n\nThanks for the quick turnaround. The numbers look right to me.\n\nBest,\nAmy",
+      "outputLanguage": "en",
+      "note": "正確的短信，含段落，應原樣輸出。",
+      "expectUnchanged": true,
+      "preserveLineStructure": true
+    },
+    {
+      "id": "clean-url-01",
+      "category": "already-correct",
+      "mode": "proofread",
+      "tone": "preserve",
+      "input": "The full changelog is at https://example.com/changelog, and the migration guide is linked there.",
+      "outputLanguage": "en",
+      "note": "正確，URL 保留，應原樣輸出。",
+      "mustPreserve": [
+        "https://example.com/changelog"
+      ],
+      "expectUnchanged": true
+    },
+    {
+      "id": "frag-01",
+      "category": "fragment",
+      "mode": "proofread",
+      "tone": "preserve",
+      "input": "Noted. Will circle back after lunch.",
+      "outputLanguage": "en",
+      "expectUnchanged": true,
+      "note": "Intentional fragments; correct as written. Must stay unchanged."
+    },
+    {
+      "id": "frag-02",
+      "category": "fragment",
+      "mode": "proofread",
+      "tone": "preserve",
+      "input": "Quick update: staging is green again. More details in the thread.",
+      "outputLanguage": "en",
+      "expectUnchanged": true,
+      "note": "Status-update fragments; nothing to fix."
+    },
+    {
+      "id": "frag-03",
+      "category": "fragment",
+      "mode": "proofread",
+      "tone": "preserve",
+      "input": "Great work, everyone. Especially on such short notice.",
+      "outputLanguage": "en",
+      "expectUnchanged": true,
+      "note": "The second sentence is a deliberate fragment; leave it."
+    },
+    {
+      "id": "clean-tech-01",
+      "category": "clean-technical",
+      "mode": "proofread",
+      "tone": "preserve",
+      "input": "The p95 latency dropped from 420 ms to 180 ms after we enabled HTTP/2 on the edge nodes.",
+      "outputLanguage": "en",
+      "expectUnchanged": true,
+      "mustPreserve": [
+        "p95",
+        "420 ms",
+        "180 ms",
+        "HTTP/2"
+      ],
+      "note": "Correct technical English."
+    },
+    {
+      "id": "clean-biz-01",
+      "category": "clean-business",
+      "mode": "proofread",
+      "tone": "preserve",
+      "input": "Thank you for your patience while we finalize the contract. We expect to send the signed copy by Thursday.",
+      "outputLanguage": "en",
+      "expectUnchanged": true,
+      "note": "Correct business English."
+    },
+    {
+      "id": "clean-casual-01",
+      "category": "clean-casual",
+      "mode": "proofread",
+      "tone": "preserve",
+      "input": "Sounds good to me! Let's just ship it and see what breaks.",
+      "outputLanguage": "en",
+      "expectUnchanged": true,
+      "note": "Correct casual English; must not be made formal."
+    },
+    {
+      "id": "keep-ip-01",
+      "category": "ip-address",
+      "mode": "proofread",
+      "tone": "preserve",
+      "input": "The firewall rule allow traffic from 10.0.12.7 and 192.168.1.0/24 to port 8443.",
+      "outputLanguage": "en",
+      "mustPreserve": [
+        "10.0.12.7",
+        "192.168.1.0/24",
+        "8443"
+      ],
+      "note": "\"allows\"; the addresses and port unchanged.",
+      "mustFix": [
+        "rule allow "
+      ]
+    },
+    {
+      "id": "keep-shell-01",
+      "category": "shell-command",
+      "mode": "proofread",
+      "tone": "preserve",
+      "input": "To fix it, run sudo launchctl kickstart -k system/com.example.agent and than wait a minute.",
+      "outputLanguage": "en",
+      "mustPreserve": [
+        "sudo launchctl kickstart -k system/com.example.agent"
+      ],
+      "note": "\"then\"; the command exactly as written.",
+      "mustFix": [
+        "and than"
+      ]
+    },
+    {
+      "id": "keep-ident-01",
+      "category": "code-identifier",
+      "mode": "proofread",
+      "tone": "preserve",
+      "input": "If getUserConfig() return null, the client fall back to the max_retries default of 3.",
+      "outputLanguage": "en",
+      "mustPreserve": [
+        "getUserConfig()",
+        "max_retries",
+        "3"
+      ],
+      "note": "\"returns\", \"falls back\"; identifiers untouched.",
+      "mustFix": [
+        "() return ",
+        "client fall "
+      ]
+    },
+    {
+      "id": "keep-currency-01",
+      "category": "currency",
+      "mode": "proofread",
+      "tone": "preserve",
+      "input": "The quote was NT$3,500 per seat, which are about $110 USD, plus 5% tax.",
+      "outputLanguage": "en",
+      "mustPreserve": [
+        "NT$3,500",
+        "$110",
+        "5%"
+      ],
+      "note": "\"which is\"; amounts and percentage unchanged.",
+      "mustFix": [
+        "which are"
+      ]
+    },
+    {
+      "id": "keep-path-01",
+      "category": "file-path",
+      "mode": "proofread",
+      "tone": "preserve",
+      "input": "The logs is written to ~/Library/Logs/Lint/app.log on every launch.",
+      "outputLanguage": "en",
+      "mustPreserve": [
+        "~/Library/Logs/Lint/app.log"
+      ],
+      "note": "\"logs are\"; path unchanged.",
+      "mustFix": [
+        "logs is"
+      ]
+    },
+    {
+      "id": "keep-product-02",
+      "category": "product-names",
+      "mode": "proofread",
+      "tone": "preserve",
+      "input": "we tested it on iPhone 17, macOS 27 and the latest version of Chrome, and it work fine.",
+      "outputLanguage": "en",
+      "mustPreserve": [
+        "iPhone 17",
+        "macOS 27",
+        "Chrome"
+      ],
+      "note": "Capital \"We\", \"works\"; product names and versions unchanged.",
+      "mustFix": [
+        "we tested",
+        "it work "
+      ]
+    },
+    {
+      "id": "en2zh-sec-01",
+      "category": "en-to-zh-hant",
+      "mode": "translate",
+      "tone": "preserve",
+      "input": "We detected a phishing campaign targeting finance staff. Enable MFA on all accounts and report suspicious emails to security@example.com.",
+      "outputLanguage": "zh-Hant",
+      "mustPreserve": [
+        "MFA",
+        "security@example.com"
+      ],
+      "note": "Security terms: 網路釣魚/釣魚郵件, 多重要素驗證 (or MFA); the address unchanged."
+    },
+    {
+      "id": "en2zh-net-01",
+      "category": "en-to-zh-hant",
+      "mode": "translate",
+      "tone": "preserve",
+      "input": "Traffic from the guest VLAN is blocked at the firewall, but the default gateway is still reachable from 172.16.0.1.",
+      "outputLanguage": "zh-Hant",
+      "mustPreserve": [
+        "VLAN",
+        "172.16.0.1"
+      ],
+      "note": "Taiwan networking terms: 防火牆, 預設閘道 (not 默認網關)."
+    },
+    {
+      "id": "en2zh-md-01",
+      "category": "en-to-zh-hant",
+      "mode": "translate",
+      "tone": "preserve",
+      "input": "## Release notes\n\n- **Fixed:** crash when opening large files\n- **Added:** dark mode for the settings page\n\nSee `CHANGELOG.md` for details.",
+      "outputLanguage": "zh-Hant",
+      "mustPreserve": [
+        "## ",
+        "- **",
+        "`CHANGELOG.md`"
+      ],
+      "preserveLineStructure": true,
+      "note": "Markdown heading, bold and list markers survive; the file name in code stays."
+    },
+    {
+      "id": "en2zh-ph-01",
+      "category": "en-to-zh-hant",
+      "mode": "translate",
+      "tone": "preserve",
+      "input": "Hi {name}, your order #{order_id} will arrive in %d days.",
+      "outputLanguage": "zh-Hant",
+      "mustPreserve": [
+        "{name}",
+        "#{order_id}",
+        "%d"
+      ],
+      "note": "Placeholders must survive exactly."
+    },
+    {
+      "id": "en2zh-email-01",
+      "category": "en-to-zh-hant",
+      "mode": "translate",
+      "tone": "preserve",
+      "input": "Dear Mr. Lin,\n\nThank you for meeting with us yesterday. As discussed, we will send the revised proposal by Friday, October 16.\n\nBest regards,\nEmma",
+      "outputLanguage": "zh-Hant",
+      "mustPreserve": [
+        "Emma"
+      ],
+      "preserveLineStructure": true,
+      "note": "Natural Taiwan business email (林先生您好); date and name kept; lines kept."
+    },
+    {
+      "id": "en2zh-tw-01",
+      "category": "en-to-zh-hant",
+      "mode": "translate",
+      "tone": "preserve",
+      "input": "Please save the video to the shared drive and update the default settings in the software.",
+      "outputLanguage": "zh-Hant",
+      "note": "Taiwan wording: 影片, 預設, 軟體 — not 視頻, 默認, 軟件."
+    },
+    {
+      "id": "en2zh-list-01",
+      "category": "en-to-zh-hant",
+      "mode": "translate",
+      "tone": "preserve",
+      "input": "1. Back up the database\n2. Run the migration script\n3. Notify the team when it's done",
+      "outputLanguage": "zh-Hant",
+      "preserveLineStructure": true,
+      "note": "A numbered list stays a three-item numbered list."
+    },
+    {
+      "id": "tone-formal-04",
+      "category": "tone-formal",
+      "mode": "proofread",
+      "tone": "formal",
+      "input": "Thx for the heads up! We'll def fix it by tmrw.",
+      "outputLanguage": "en",
+      "note": "Thank you for letting us know; we will fix it by tomorrow. No new promises.",
+      "mustFix": [
+        "Thx",
+        "def ",
+        "tmrw"
+      ]
+    },
+    {
+      "id": "tone-concise-04",
+      "category": "tone-concise",
+      "mode": "proofread",
+      "tone": "concise",
+      "input": "Just a reminder that the deadline for submitting your expense reports is this Friday, March 6, and reports submitted after that date will unfortunately not be able to be processed until next month, except for travel expenses, which can be submitted until March 13.",
+      "outputLanguage": "en",
+      "mustPreserve": [
+        "March 6",
+        "March 13"
+      ],
+      "note": "Shorter, but the deadline, the consequence and the travel-expense exception (March 13) must all remain."
+    },
+    {
+      "id": "tone-prof-04",
+      "category": "tone-professional",
+      "mode": "proofread",
+      "tone": "professional",
+      "input": "Your team keeps missing the deadlines and honestly it's getting ridiculous. Fix it by Monday.",
+      "outputLanguage": "en",
+      "mustPreserve": [
+        "Monday"
+      ],
+      "note": "Firm but professional; the Monday deadline stays; no insult.",
+      "mustFix": [
+        "ridiculous"
+      ]
+    },
+    {
+      "id": "tone-preserve-01",
+      "category": "casual-preserve",
+      "mode": "proofread",
+      "tone": "preserve",
+      "input": "hey! can u send me the slides when u get a sec? no rush",
+      "outputLanguage": "en",
+      "note": "Must stay casual. Capitalizing \"Hey\"/\"Can\" is acceptable; expanding \"u\" or formalizing is an unnecessary edit."
+    },
+    {
+      "id": "en-article-02",
+      "category": "english-grammar",
+      "mode": "proofread",
+      "tone": "preserve",
+      "input": "She is an university student and works as a engineer at the weekends.",
+      "outputLanguage": "en",
+      "note": "\"a university student\", \"an engineer\"; \"at the weekends\" → \"on weekends\" (or British \"at weekends\").",
+      "mustFix": [
+        "an university",
+        "a engineer"
+      ]
+    },
+    {
+      "id": "en-spell-02",
+      "category": "english-grammar",
+      "mode": "proofread",
+      "tone": "preserve",
+      "input": "The goverment has recieved alot of complaints about the new enviroment policy.",
+      "outputLanguage": "en",
+      "note": "government, received, a lot, environmental (or environment).",
+      "mustFix": [
+        "goverment",
+        "recieved",
+        "alot",
+        "enviroment"
+      ]
+    },
+    {
+      "id": "nat-01",
+      "category": "english-natural",
+      "mode": "proofread",
+      "tone": "preserve",
+      "input": "Please open the light, the room is too dark.",
+      "outputLanguage": "en",
+      "mustFix": [
+        "open the light"
+      ],
+      "note": "\"turn on the light\"; the comma splice may become two sentences or a semicolon."
+    },
+    {
+      "id": "nat-02",
+      "category": "english-natural",
+      "mode": "proofread",
+      "tone": "preserve",
+      "input": "I will send you the file until tomorrow.",
+      "outputLanguage": "en",
+      "mustFix": [
+        "until tomorrow"
+      ],
+      "note": "A deadline is \"by tomorrow\"; \"until\" means a duration."
+    },
+    {
+      "id": "nat-03",
+      "category": "english-natural",
+      "mode": "proofread",
+      "tone": "preserve",
+      "input": "We have a big progress on the project this week.",
+      "outputLanguage": "en",
+      "mustFix": [
+        "a big progress"
+      ],
+      "note": "\"progress\" is uncountable: \"made a lot of / good progress\"."
+    },
+    {
+      "id": "nat-04",
+      "category": "english-natural",
+      "mode": "proofread",
+      "tone": "preserve",
+      "input": "Let me explain you the details in tomorrow's meeting.",
+      "outputLanguage": "en",
+      "mustFix": [
+        "explain you"
+      ],
+      "note": "\"explain the details to you\"."
+    },
+    {
+      "id": "nat-05",
+      "category": "english-natural",
+      "mode": "proofread",
+      "tone": "preserve",
+      "input": "She is very good in English, so she can help us to review the contract.",
+      "outputLanguage": "en",
+      "mustFix": [
+        "good in English"
+      ],
+      "note": "\"good at English\"; \"help us (to) review\" is fine either way."
+    },
+    {
+      "id": "nat-06",
+      "category": "english-natural",
+      "mode": "proofread",
+      "tone": "preserve",
+      "input": "I have been working in this company since three years.",
+      "outputLanguage": "en",
+      "mustFix": [
+        "since three years"
+      ],
+      "note": "\"for three years\"; \"at this company\" is more natural."
+    },
+    {
+      "id": "nat-07",
+      "category": "english-natural",
+      "mode": "proofread",
+      "tone": "preserve",
+      "input": "Sorry for the late reply, I was very busy these days.",
+      "outputLanguage": "en",
+      "mustFix": [
+        "was very busy these days"
+      ],
+      "note": "\"I've been very busy lately / these days\"."
+    },
+    {
+      "id": "nat-08",
+      "category": "english-natural",
+      "mode": "proofread",
+      "tone": "preserve",
+      "input": "The price is too expensive for our budget, can you give us a discount?",
+      "outputLanguage": "en",
+      "mustFix": [
+        "price is too expensive"
+      ],
+      "note": "A price is \"too high\" (or \"it is too expensive\"); the comma splice may be fixed."
+    },
+    {
+      "id": "nat-09",
+      "category": "english-natural",
+      "mode": "proofread",
+      "tone": "preserve",
+      "input": "Could you help me check if the server is normal now?",
+      "outputLanguage": "en",
+      "mustFix": [
+        "server is normal"
+      ],
+      "note": "\"working properly / running normally\"."
+    },
+    {
+      "id": "nat-10",
+      "category": "english-natural",
+      "mode": "proofread",
+      "tone": "preserve",
+      "input": "We discussed about the new policy and everyone agreed it.",
+      "outputLanguage": "en",
+      "mustFix": [
+        "discussed about",
+        "agreed it"
+      ],
+      "note": "\"discussed the new policy\", \"agreed to it / agreed with it\"."
+    },
+    {
+      "id": "nat-11",
+      "category": "english-natural",
+      "mode": "proofread",
+      "tone": "preserve",
+      "input": "Please reply me as soon as possible.",
+      "outputLanguage": "en",
+      "mustFix": [
+        "reply me"
+      ],
+      "note": "\"reply to me\"."
+    },
+    {
+      "id": "nat-12",
+      "category": "english-natural",
+      "mode": "proofread",
+      "tone": "preserve",
+      "input": "I'm looking forward to hear from you.",
+      "outputLanguage": "en",
+      "mustFix": [
+        "forward to hear from"
+      ],
+      "note": "\"looking forward to hearing from you\"."
+    },
+    {
+      "id": "hold-01",
+      "category": "english-holdout",
+      "mode": "proofread",
+      "tone": "preserve",
+      "input": "I will go to Japan for travel next month.",
+      "outputLanguage": "en",
+      "mustFix": [
+        "for travel"
+      ],
+      "note": "\"travel to Japan\" / \"go to Japan on vacation\". Held out: never used to tune a prompt."
+    },
+    {
+      "id": "hold-02",
+      "category": "english-holdout",
+      "mode": "proofread",
+      "tone": "preserve",
+      "input": "I am so exciting to join the new team.",
+      "outputLanguage": "en",
+      "mustFix": [
+        "so exciting"
+      ],
+      "note": "\"excited\". Held out: never used to tune a prompt."
+    },
+    {
+      "id": "hold-03",
+      "category": "english-holdout",
+      "mode": "proofread",
+      "tone": "preserve",
+      "input": "The number of users are increasing every month.",
+      "outputLanguage": "en",
+      "mustFix": [
+        "users are increasing"
+      ],
+      "note": "\"The number … is increasing\". Held out: never used to tune a prompt."
+    },
+    {
+      "id": "hold-04",
+      "category": "english-holdout",
+      "mode": "proofread",
+      "tone": "preserve",
+      "input": "She married with a doctor last year.",
+      "outputLanguage": "en",
+      "mustFix": [
+        "married with"
+      ],
+      "note": "\"married a doctor\". Held out: never used to tune a prompt."
+    },
+    {
+      "id": "hold-05",
+      "category": "english-holdout",
+      "mode": "proofread",
+      "tone": "preserve",
+      "input": "We need to enter into the building before 9.",
+      "outputLanguage": "en",
+      "mustFix": [
+        "enter into the building"
+      ],
+      "note": "\"enter the building\"; 9 stays. Held out: never used to tune a prompt."
+    },
+    {
+      "id": "hold-06",
+      "category": "english-holdout",
+      "mode": "proofread",
+      "tone": "preserve",
+      "input": "Can you tell me how much does it cost?",
+      "outputLanguage": "en",
+      "mustFix": [
+        "how much does it cost"
+      ],
+      "note": "Embedded question: \"how much it costs\". Held out: never used to tune a prompt."
+    },
+    {
+      "id": "hold-07",
+      "category": "english-holdout",
+      "mode": "proofread",
+      "tone": "preserve",
+      "input": "Everyone have finished their tasks.",
+      "outputLanguage": "en",
+      "mustFix": [
+        "Everyone have"
+      ],
+      "note": "\"Everyone has\". Held out: never used to tune a prompt."
+    },
+    {
+      "id": "hold-08",
+      "category": "english-holdout",
+      "mode": "proofread",
+      "tone": "preserve",
+      "input": "I have two informations to share with you.",
+      "outputLanguage": "en",
+      "mustFix": [
+        "informations"
+      ],
+      "note": "\"two pieces of information\" / \"two things\". Held out: never used to tune a prompt."
+    },
+    {
+      "id": "hold-09",
+      "category": "english-holdout",
+      "mode": "proofread",
+      "tone": "preserve",
+      "input": "Let's go to shopping after work.",
+      "outputLanguage": "en",
+      "mustFix": [
+        "go to shopping"
+      ],
+      "note": "\"go shopping\". Held out: never used to tune a prompt."
+    },
+    {
+      "id": "hold-10",
+      "category": "english-holdout",
+      "mode": "proofread",
+      "tone": "preserve",
+      "input": "Please return back the book when you finish it.",
+      "outputLanguage": "en",
+      "mustFix": [
+        "return back"
+      ],
+      "note": "\"return the book\". Held out: never used to tune a prompt."
+    },
+    {
+      "id": "hold-11",
+      "category": "english-holdout",
+      "mode": "proofread",
+      "tone": "preserve",
+      "input": "I will call you when I will arrive at the airport.",
+      "outputLanguage": "en",
+      "mustFix": [
+        "when I will arrive"
+      ],
+      "note": "\"when I arrive\". Held out: never used to tune a prompt."
+    },
+    {
+      "id": "hold-12",
+      "category": "english-holdout",
+      "mode": "proofread",
+      "tone": "preserve",
+      "input": "He is used to work late at night.",
+      "outputLanguage": "en",
+      "mustFix": [
+        "used to work late"
+      ],
+      "note": "\"is used to working late\". Held out: never used to tune a prompt."
+    },
+    {
+      "id": "mix-01",
+      "category": "mixed-english",
+      "mode": "proofread",
+      "tone": "preserve",
+      "input": "這個 bug 會讓 app crashed，我明天在 fix 它。",
+      "outputLanguage": "mixed",
+      "mustFix": [
+        "app crashed"
+      ],
+      "mustPreserve": [
+        "我明天在 fix"
+      ],
+      "note": "\"會讓 app crash\". The Chinese is left exactly as written, its slip included: Lint edits English only."
+    },
+    {
+      "id": "mix-02",
+      "category": "mixed-english",
+      "mode": "proofread",
+      "tone": "preserve",
+      "input": "客戶說 the report are missing 兩頁，請把軟件更新後再寄一次。",
+      "outputLanguage": "mixed",
+      "mustFix": [
+        "report are"
+      ],
+      "mustPreserve": [
+        "兩頁",
+        "請把軟件更新後再寄一次"
+      ],
+      "note": "\"the report is missing\". The Chinese is left exactly as written, its slip included: Lint edits English only."
+    },
+    {
+      "id": "mix-03",
+      "category": "mixed-english",
+      "mode": "proofread",
+      "tone": "preserve",
+      "input": "我已經 sended the invoice 給財務，請他們確認一下數據。",
+      "outputLanguage": "mixed",
+      "mustFix": [
+        "sended"
+      ],
+      "mustPreserve": [
+        "給財務，請他們確認一下數據"
+      ],
+      "note": "\"sent the invoice\". The Chinese is left exactly as written, its slip included: Lint edits English only."
+    },
+    {
+      "id": "mix-04",
+      "category": "mixed-english",
+      "mode": "proofread",
+      "tone": "preserve",
+      "input": "明天的 meeting 他說 he don't agree 新的設置流程。",
+      "outputLanguage": "mixed",
+      "mustFix": [
+        "he don't"
+      ],
+      "mustPreserve": [
+        "新的設置流程"
+      ],
+      "note": "\"he doesn't agree\". The Chinese is left exactly as written, its slip included: Lint edits English only."
+    },
+    {
+      "id": "mix-05",
+      "category": "mixed-english",
+      "mode": "proofread",
+      "tone": "preserve",
+      "input": "這個 PR 我 review 過了，有幾個 edge case 還沒 handle。",
+      "outputLanguage": "mixed",
+      "expectUnchanged": true,
+      "note": "Already correct: casual code-switching, nothing in English to fix and the Chinese is left alone."
+    }
+  ]
+}

@@ -37,14 +37,6 @@ struct PromptSettingsPane: View {
                 }
             }
 
-            if mode == .translate {
-                HStack {
-                    Text("翻譯目標語言")
-                    TextField("翻譯目標語言", text: Bindable(app.settings).translateTarget)
-                        .labelsHidden()
-                }
-            }
-
             if mode == .custom {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("額外指示")
@@ -77,7 +69,7 @@ struct PromptSettingsPane: View {
 
     private var systemPromptBinding: Binding<String> {
         Binding(
-            get: { app.settings.effectiveSystemPrompt(for: mode, tone: tone) },
+            get: { app.settings.effectiveSystemPrompt(for: mode, tone: tone, profile: app.settings.promptProfile) },
             set: { app.settings.setSystemPromptOverride($0, for: mode, tone: tone) }
         )
     }

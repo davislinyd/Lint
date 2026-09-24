@@ -36,13 +36,19 @@ public struct ModelDescriptor: Identifiable, Equatable, Sendable {
     /// In load order: `-m` gets the first one.
     public var files: [ModelFile]
     public var recommended: Bool
+    /// How the model picker describes its memory use. Not a claim about quality.
+    public var memoryClass: ModelMemoryClass
+    /// The arguments this model needs from llama-server on top of the shared ones.
+    public var runtimeProfile: ModelRuntimeProfile
     /// What llama-server's `-hf` would be given for the same model. Used to recognise the
     /// pre-existing default setting, and the copy in the Hugging Face cache.
     public var huggingFaceSpec: String
 
     public init(
         id: String, displayName: String, repository: String, revision: String, quantization: String,
-        license: String, files: [ModelFile], recommended: Bool, huggingFaceSpec: String
+        license: String, files: [ModelFile], recommended: Bool,
+        memoryClass: ModelMemoryClass = .balanced,
+        runtimeProfile: ModelRuntimeProfile = ModelRuntimeProfile(), huggingFaceSpec: String
     ) {
         self.id = id
         self.displayName = displayName
@@ -52,6 +58,8 @@ public struct ModelDescriptor: Identifiable, Equatable, Sendable {
         self.license = license
         self.files = files
         self.recommended = recommended
+        self.memoryClass = memoryClass
+        self.runtimeProfile = runtimeProfile
         self.huggingFaceSpec = huggingFaceSpec
     }
 
@@ -69,9 +77,72 @@ public struct ModelDescriptor: Identifiable, Equatable, Sendable {
 }
 
 public enum ModelCatalog {
-    /// Gemma 4 12B, Google's quantization-aware-trained Q4_0: one 7 GB file, small enough for a 16 GB
-    /// Mac. It thinks before answering unless started with `--reasoning off`, which Lint's default
-    /// server arguments do. Size and SHA-256 are from
+    /// Gemma 4 E4B, Google's quantization-aware-trained Q4_0: one 5.2 GB file, and what new installs
+    /// get. Only the language model is downloaded, not the repository's vision projector (mmproj).
+    /// Like the rest of Gemma 4 it thinks before answering unless started with `--reasoning off`.
+    /// Size and SHA-256 are the `lfs` values from
+    /// https://huggingface.co/api/models/google/gemma-4-E4B-it-qat-q4_0-gguf?blobs=true at the pinned
+    /// revision, and were checked against a downloaded copy.
+    public static let gemma4_e4bQATQ4_0: ModelDescriptor = {
+        let repository = "google/gemma-4-E4B-it-qat-q4_0-gguf"
+        let revision = "4b4a2c1d584be7264f87aac328a1bc739ce81b6c"
+        let fileName = "gemma-4-E4B_q4_0-it.gguf"
+        return ModelDescriptor(
+            id: "gemma-4-e4b-it-qat-q4_0",
+            displayName: "Gemma 4 E4B",
+            repository: repository,
+            revision: revision,
+            quantization: "Q4_0 (QAT)",
+            license: "Apache-2.0",
+            files: [
+                ModelFile(
+                    fileName: fileName,
+                    url: URL(string: "https://huggingface.co/\(repository)/resolve/\(revision)/\(fileName)")!,
+                    sizeBytes: 5_154_941_280,
+                    sha256: "676c35070db6dbe52f93e9c864ee0fba4eddea94b9c875d9cb10daff453fbaee"
+                ),
+            ],
+            recommended: true,
+            memoryClass: .balanced,
+            runtimeProfile: ModelRuntimeProfile(reasoningArguments: ["--reasoning", "off"]),
+            huggingFaceSpec: "google/gemma-4-E4B-it-qat-q4_0-gguf"
+        )
+    }()
+
+    /// Qwen3-4B-Instruct-2507 at Q4_K_M: one 2.5 GB file, optional. A non-thinking instruct model, so
+    /// it needs no `--reasoning` switch. Qwen publishes no GGUF of it; this is unsloth's conversion
+    /// (its card declares the base model and Apache-2.0). Size and SHA-256 are the `lfs.oid` from
+    /// https://huggingface.co/api/models/unsloth/Qwen3-4B-Instruct-2507-GGUF/paths-info/<revision>.
+    public static let qwen3_4bInstruct2507Q4_K_M: ModelDescriptor = {
+        let repository = "unsloth/Qwen3-4B-Instruct-2507-GGUF"
+        let revision = "a06e946bb6b655725eafa393f4a9745d460374c9"
+        let fileName = "Qwen3-4B-Instruct-2507-Q4_K_M.gguf"
+        return ModelDescriptor(
+            id: "qwen3-4b-instruct-2507-q4_k_m",
+            displayName: "Qwen3 4B",
+            repository: repository,
+            revision: revision,
+            quantization: "Q4_K_M",
+            license: "Apache-2.0",
+            files: [
+                ModelFile(
+                    fileName: fileName,
+                    url: URL(string: "https://huggingface.co/\(repository)/resolve/\(revision)/\(fileName)")!,
+                    sizeBytes: 2_497_281_120,
+                    sha256: "3605803b982cb64aead44f6c1b2ae36e3acdb41d8e46c8a94c6533bc4c67e597"
+                ),
+            ],
+            recommended: false,
+            memoryClass: .balanced,
+            runtimeProfile: ModelRuntimeProfile(reasoningArguments: []),
+            huggingFaceSpec: "unsloth/Qwen3-4B-Instruct-2507-GGUF:Q4_K_M"
+        )
+    }()
+
+    /// Gemma 4 12B, Google's quantization-aware-trained Q4_0: one 7 GB file. Optional, and marked
+    /// large: on a 16 GB Mac that is already swapping, loading it has taken free memory down to 6%.
+    /// It was the default before Gemma 4 E4B, and whoever has it installed keeps it. It thinks before
+    /// answering unless started with `--reasoning off`. Size and SHA-256 are from
     /// https://huggingface.co/api/models/google/gemma-4-12B-it-qat-q4_0-gguf at the pinned revision.
     public static let gemma4_12bQATQ4_0: ModelDescriptor = {
         let repository = "google/gemma-4-12B-it-qat-q4_0-gguf"
@@ -79,7 +150,7 @@ public enum ModelCatalog {
         let fileName = "gemma-4-12b-it-qat-q4_0.gguf"
         return ModelDescriptor(
             id: "gemma-4-12b-it-qat-q4_0",
-            displayName: "Gemma 4 12B (QAT Q4_0)",
+            displayName: "Gemma 4 12B",
             repository: repository,
             revision: revision,
             quantization: "Q4_0 (QAT)",
@@ -92,12 +163,15 @@ public enum ModelCatalog {
                     sha256: "93567e57a8fe10b23569b9d9ec38cd005deedf71e29477c421a4b83f418a538b"
                 ),
             ],
-            recommended: true,
+            recommended: false,
+            memoryClass: .large,
+            runtimeProfile: ModelRuntimeProfile(reasoningArguments: ["--reasoning", "off"]),
             huggingFaceSpec: "google/gemma-4-12B-it-qat-q4_0-gguf"
         )
     }()
 
-    public static let all: [ModelDescriptor] = [gemma4_12bQATQ4_0]
+    /// Recommended first: this is the order the model picker shows.
+    public static let all: [ModelDescriptor] = [gemma4_e4bQATQ4_0, qwen3_4bInstruct2507Q4_K_M, gemma4_12bQATQ4_0]
 
     public static var recommended: ModelDescriptor {
         all.first(where: \.recommended) ?? all[0]
@@ -105,6 +179,14 @@ public enum ModelCatalog {
 
     public static func descriptor(id: String) -> ModelDescriptor? {
         all.first { $0.id == id }
+    }
+
+    /// The managed model a stored setting selects. A model that is still in the catalog stays
+    /// selected; a missing or unrecognised setting (for example one written by a build with other
+    /// models) falls back to the recommended one.
+    public static func resolveManagedModelID(_ stored: String?) -> String {
+        let id = (stored ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        return descriptor(id: id) == nil ? recommended.id : id
     }
 
     /// The catalog entry a `-hf user/model:quant` setting refers to, if any.

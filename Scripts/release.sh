@@ -316,6 +316,12 @@ verify_app_resources() {
       || die "the app is missing $(basename "$lproj")/Localizable.strings"
   done
   ls -d "$app"/Contents/Resources/*.bundle >/dev/null 2>&1 || die "the app has no SwiftPM resource bundles (KeyboardShortcuts, GRDB)"
+  # Having them is not enough: SwiftPM's native build system looks for them only next to Lint.app and
+  # in the build machine's .build folder, so such an app crashes on every other Mac when Settings
+  # opens (0.3.2 as built on CI). package-app.sh builds with Swift Build, which finds them here.
+  if grep -aq 'could not load resource bundle: from' "$app/Contents/MacOS/Lint"; then
+    die "the app was built with SwiftPM's native build system: its Bundle.module cannot find Contents/Resources/*.bundle on another Mac (build with --build-system swiftbuild)"
+  fi
 }
 
 # The bundled llama.cpp runtime lives in Contents/Resources, where `codesign --deep` does not look for

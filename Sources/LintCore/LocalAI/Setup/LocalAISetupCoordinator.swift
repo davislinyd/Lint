@@ -178,9 +178,12 @@ public final class LocalAISetupCoordinator {
 
     private func finishInstall(_ final: ModelDownloadState, generation: Int) async {
         guard generation == installGeneration else { return }
+        // `state` reads the model that `refresh` looks at: say how the install ended only after it, or
+        // the model shows as missing for a moment after it was installed (a slow CI runner saw that).
+        await refresh()
+        guard generation == installGeneration else { return }
         installTask = nil
         downloadState = final
-        await refresh()
         if case .installed = final, configuration.autoStart, state == .serverStopped {
             try? await startServer() // a failure is reflected in `state`
         }

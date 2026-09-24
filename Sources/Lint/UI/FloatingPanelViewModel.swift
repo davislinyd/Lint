@@ -508,6 +508,8 @@ final class FloatingPanelViewModel {
         let route: WritingEngineRoute
         do {
             route = try await prepareEngine()
+        } catch is CancellationError {
+            return
         } catch {
             errorMessage = error.localizedDescription
             return
@@ -659,6 +661,8 @@ final class FloatingPanelViewModel {
     private func runAdoptedCapture(_ result: TextCaptureService.CaptureResult) async {
         do {
             _ = try await prepareEngine()
+        } catch is CancellationError {
+            return
         } catch {
             errorMessage = error.localizedDescription
             return
@@ -674,6 +678,8 @@ final class FloatingPanelViewModel {
         showPanel()
         do {
             _ = try await prepareEngine()
+        } catch is CancellationError {
+            return
         } catch {
             errorMessage = error.localizedDescription
             return
@@ -819,6 +825,8 @@ final class FloatingPanelViewModel {
         let route: WritingEngineRoute
         do {
             route = try await prepareEngine()
+        } catch is CancellationError {
+            return
         } catch {
             errorMessage = error.localizedDescription
             return
@@ -922,6 +930,8 @@ final class FloatingPanelViewModel {
         let route: WritingEngineRoute
         do {
             route = try await prepareEngine()
+        } catch is CancellationError {
+            return
         } catch {
             errorMessage = error.localizedDescription
             return

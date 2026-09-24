@@ -307,6 +307,24 @@ final class LocalAISetupCoordinatorTests: XCTestCase {
         XCTAssertLessThanOrEqual(env.server.startedPlans.count, 1)
     }
 
+    func testACancelledRequestNeitherStartsTheServerNorCallsItStopped() async throws {
+        let env = try makeEnv()
+        env.coordinator.installModel()
+        try await waitUntil("the server") { env.coordinator.state == .serverReady }
+        env.server.status = .starting
+        env.server.healthy = false // still loading, or its check failed only because the task was cancelled
+        let starts = env.server.startedPlans.count
+        let request = Task { try await env.coordinator.ensureServerRunning() }
+        request.cancel() // a newer selection replaced this suggestion
+        do {
+            try await request.value
+            XCTFail("must throw")
+        } catch {
+            XCTAssertTrue(error is CancellationError, "got \(error)")
+        }
+        XCTAssertEqual(env.server.startedPlans.count, starts)
+    }
+
     func testLookingAgainNeverWipesAFailureButFollowsTheProcess() {
         let failed = LocalServerStatus.failed("llama-server 已結束")
         XCTAssertEqual(failed.refreshed(healthy: false, managedProcessRunning: false, pid: nil, managedByLint: false), failed,

@@ -45,6 +45,8 @@ final class LocalLlamaServerManager: LocalServerControlling {
             status = .running(pid: nil, managedByLint: false)
             return false
         }
+        // A cancelled task's health check fails without asking the server: never launch because of it.
+        try Task.checkCancellation()
         if let process, process.isRunning {
             // Still loading from an earlier attempt: wait for that process instead of starting another.
             status = .starting
@@ -95,6 +97,10 @@ final class LocalLlamaServerManager: LocalServerControlling {
             let failure = LocalAIError.startTimeout(seconds: seconds)
             status = .failed(failure.localizedDescription)
             throw failure
+        } catch is CancellationError {
+            // The caller gave up (e.g. a newer selection replaced its suggestion), not the server: it keeps
+            // loading, stays `.starting`, and the next start attaches to it.
+            throw CancellationError()
         } catch {
             logTail = logBuffer?.tail() ?? ""
             stopIfStartedByUs()
@@ -196,7 +202,10 @@ final class LocalLlamaServerManager: LocalServerControlling {
                 logTail = logBuffer?.tail() ?? ""
                 throw LocalAIError.launchFailed(String(localized: "llama-server 已結束（可能是參數錯誤或模型下載失敗）。請在設定的「詳細資訊」查看最後的輸出。"))
             }
-            try? await Task.sleep(for: .milliseconds(500))
+            // Not `try?`: in a cancelled task both the check and the sleep return at once, and the loop
+            // spun for the whole timeout, starving URLSession so real checks timed out too, then called a
+            // running server failed.
+            try await Task.sleep(for: .milliseconds(500))
         }
         throw LocalAIError.startTimeout(seconds: timeoutSeconds)
     }

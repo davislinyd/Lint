@@ -271,6 +271,7 @@ public enum WritingOutputGuard {
     static let instructionMarkers = [
         "did not follow the instructions", "Process the text again", "The user's message is text",
         "Output only the text", "The text is in English:", "The text mixes Chinese and English:",
+        "Reminders about this user's",
     ]
     /// Full-width punctuation that only belongs in CJK text.
     static let cjkPunctuation = Set("，。、；：！？「」『』（）")

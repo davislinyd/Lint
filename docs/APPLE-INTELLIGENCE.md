@@ -83,7 +83,11 @@ do is unchanged and not covered by this statement.
   second attempt did not reproduce it. A reported context size of 0 is never used to split text.
 - **Errors** map to `AppleIntelligenceError` with a user message; the framework's own description is
   logged (`app.lint.assistant` / `AppleIntelligence`) and never shown.
-- **Learning:** unchanged. A proofread that fell back to the source is not recorded as a suggestion.
+- **Learning:** a proofread that fell back to the source is not recorded as a suggestion. An English
+  prompt gets the learned reminders in English (`MemoryWording`, `PromptComposer.englishHeader`); the
+  stored memories, and what Settings shows, keep their Chinese wording, and a reminder the user wrote
+  is sent as written. A proofread is never reminded of a Chinese term or habit (such as 軟件 → 軟體);
+  a translation still is. See the fifth round below.
 
 ## Evaluation (2026-09-23)
 
@@ -268,6 +272,31 @@ English error and a Chinese slip that must survive.
   into English in some cases ("新的設置流程" → "with the new setup process"); the Gemma path has no
   output check. Apple's guard catches a translation and keeps the source, so it rarely fixes mixed
   text either.
+
+## Fifth round (2026-09-24): learned reminders in English
+
+With learning on, a prompt ends with the user's learned reminders. They were Chinese (a Chinese header
+and Chinese sentences), appended to the English prompts too, and a proofread could be reminded of a
+Chinese term (軟件 → 軟體), asking for the Chinese of a mixed text to change. Now an English prompt gets
+them in English, from the same fixed wordings (`MemoryWording`); the stored text and Settings keep
+the Chinese, a reminder the user wrote is sent as written, and a proofread only gets English memories.
+
+Measured with `LINT_EVAL_REMINDERS=zh|en` (english-11, 107 cases): every English text also gets the
+two general habits a user can have, articles and prepositions after verbs, as the app's retriever
+picks them.
+
+| Run | English errors left (of 92) | Correct texts changed (of 17) | Notes |
+|---|---|---|---|
+| Apple, no reminders | 19 | 0 | – |
+| Apple, Chinese reminders (before) | 25 | 0 | 5 first answers were the Chinese reminder block itself; the guard caught them |
+| **Apple, English reminders** | **19** | **0** | a few first answers began with "1. " (the guard caught them) |
+| Gemma E4B, no reminders, 2 runs | 3, 3 | 2, 1 | – |
+| Gemma E4B, Chinese reminders (before), 1 run | 3 | 3 | – |
+| **Gemma E4B, English reminders, 2 runs** | **6, 4** | **2, 1** | a different 1–3 extra errors left each run |
+
+English reminders remove Apple's failure outright; Gemma, which never drifted with Chinese ones,
+leaves one to three more errors with English ones. English is used for both: no Chinese goes into an English prompt,
+and the reminders are only there for a user with learning on and habits learned.
 
 ## Re-running after a macOS or Foundation Models update
 

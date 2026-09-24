@@ -321,6 +321,16 @@ final class LearningCoordinatorTests: XCTestCase {
         XCTAssertEqual(result.usedMemoryIDs, [memory.id])
     }
 
+    func testAnEnglishPromptGetsWhatWasLearnedInEnglish() async throws {
+        let (coordinator, memory) = try await learnedDiscussAbout()
+        let result = await coordinator.personalize(
+            prompt: basePrompt, for: "we should discuss about the roadmap", mode: .proofread, english: true, config: on
+        )
+        let english = try XCTUnwrap(MemoryWording(chinese: memory.instruction)).english
+        XCTAssertEqual(result.systemPrompt, basePrompt + "\n\n" + PromptComposer.englishHeader + "\n1. " + english)
+        XCTAssertEqual(result.usedMemoryIDs, [memory.id])
+    }
+
     func testThePromptIsUntouchedWhileLearningIsOffOrWhenNothingIsRelevant() async throws {
         let (coordinator, _) = try await learnedDiscussAbout()
 

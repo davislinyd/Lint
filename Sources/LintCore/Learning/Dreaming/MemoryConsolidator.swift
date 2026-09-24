@@ -10,8 +10,7 @@ import Foundation
 struct MemoryConsolidator: Sendable {
     var synthesis: (any MemorySynthesisProvider)?
 
-    static let redundantPrepositionInstruction =
-        "英文常在動詞後多加不必要的介系詞（如 discuss about）：請特別檢查動詞後的介系詞是否多餘，僅在語意不需要時才刪除。"
+    static let redundantPrepositionInstruction = MemoryWording.redundantPrepositions.chinese
 
     /// The identity a rule-worded memory for this cluster is kept under, nil if no rule covers the
     /// cluster. One per family, whatever the sources: sources that turn up later join the same

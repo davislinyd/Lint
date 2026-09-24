@@ -99,6 +99,10 @@ struct MemoryRetriever: Sendable {
             let memory = entry.memory
             guard memory.modeScope == nil || memory.modeScope == query.mode else { continue }
             guard memory.toneScope == nil || memory.toneScope == query.tone else { continue }
+            // Lint edits English only: a proofread is never reminded of a Chinese term or habit, which
+            // would ask for the Chinese of a mixed text to change. A translation, which writes
+            // Chinese, still is.
+            guard query.mode != .proofread || memory.language == "en" else { continue }
             if entry.isHabit {
                 // Covered, and with no trigger of its own to bring it back.
                 guard entry.coveredBy == nil else { continue }

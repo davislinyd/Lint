@@ -1,0 +1,606 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Install and use Lint — step-by-step guide</title>
+<meta name="description" content="A step-by-step guide with screenshots: download Lint, install it, set up its AI, allow Accessibility, and check your first text.">
+<meta name="theme-color" content="#0b0a1a">
+<meta name="color-scheme" content="dark">
+<meta property="og:title" content="Install and use Lint — step-by-step guide">
+<meta property="og:description" content="Download, install, set up and use Lint, the macOS menu-bar AI writing assistant, one step at a time.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://davislinyd.github.io/Lint/guide.html">
+<meta property="og:image" content="https://davislinyd.github.io/Lint/assets/icon.png">
+<link rel="icon" type="image/png" href="assets/favicon.png">
+<style>
+  :root {
+    --bg: #0b0a1a;
+    --bg-elev: rgba(255,255,255,0.045);
+    --border: rgba(255,255,255,0.10);
+    --text: #f5f3ff;
+    --text-dim: #b7b2d6;
+    --indigo: #241c58;
+    --violet: #7c3aed;
+    --violet-light: #a78bfa;
+    --violet-glow: #8b5cf6;
+    --green: #86efac;
+    --amber: #fcd34d;
+    --radius: 16px;
+    --maxw: 880px;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  html { scroll-padding-top: 76px; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang TC", "Segoe UI", "Microsoft JhengHei", Helvetica, Arial, sans-serif;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  img { max-width: 100%; height: auto; display: block; }
+  a { color: var(--violet-light); }
+  h1, h2, h3, p { margin: 0; }
+  code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.9em;
+    background: rgba(255,255,255,0.08);
+    padding: 1px 6px;
+    border-radius: 6px;
+    overflow-wrap: anywhere;
+  }
+
+  .wrap { max-width: var(--maxw); margin: 0 auto; padding: 0 20px; }
+
+  /* language toggle: pure CSS, same as the landing page */
+  .zh { display: none !important; }
+  body:has(#lang-toggle:checked) .en { display: none !important; }
+  body:has(#lang-toggle:checked) span.zh { display: inline !important; }
+  body:has(#lang-toggle:checked) p.zh,
+  body:has(#lang-toggle:checked) div.zh,
+  body:has(#lang-toggle:checked) ul.zh,
+  body:has(#lang-toggle:checked) ol.zh,
+  body:has(#lang-toggle:checked) a.shot.zh,
+  body:has(#lang-toggle:checked) h1.zh,
+  body:has(#lang-toggle:checked) h2.zh,
+  body:has(#lang-toggle:checked) h3.zh { display: block !important; }
+
+  a:focus-visible, button:focus-visible {
+    outline: 2px solid var(--violet-light);
+    outline-offset: 3px;
+    border-radius: 4px;
+  }
+
+  /* Top bar (as on the landing page) */
+  .topbar {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: rgba(11,10,26,0.8);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--border);
+  }
+  .topbar-inner { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; gap: 16px; }
+  .brand { display: flex; align-items: center; gap: 10px; text-decoration: none; color: var(--text); }
+  .brand-mark { width: 28px; height: 28px; border-radius: 8px; }
+  .brand-name { font-weight: 700; font-size: 16px; letter-spacing: 0.2px; }
+  .topnav { display: flex; align-items: center; gap: 18px; }
+
+  .lang-toggle { position: absolute; opacity: 0; width: 1px; height: 1px; }
+  .lang-switch {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 62px;
+    height: 30px;
+    padding: 0 3px;
+    background: rgba(255,255,255,0.08);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    cursor: pointer;
+    user-select: none;
+  }
+  .lang-switch::before {
+    content: "";
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 27px;
+    height: 24px;
+    border-radius: 999px;
+    background: var(--violet-glow);
+    transition: transform 0.2s ease;
+  }
+  body:has(#lang-toggle:checked) .lang-switch::before { transform: translateX(29px); }
+  .lang-switch span { position: relative; z-index: 1; width: 27px; text-align: center; font-size: 11px; font-weight: 700; color: var(--text); }
+  .lang-toggle:focus-visible + .lang-switch { outline: 2px solid var(--violet-light); outline-offset: 3px; }
+
+  .nav-link { display: flex; align-items: center; gap: 6px; text-decoration: none; color: var(--text-dim); font-size: 14px; }
+  .nav-link:hover { color: var(--text); }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 22px;
+    border-radius: 12px;
+    font-weight: 600;
+    font-size: 15px;
+    text-decoration: none;
+    transition: transform 0.15s ease, background 0.15s ease;
+    white-space: nowrap;
+  }
+  .btn-primary { background: var(--violet); color: #fff; }
+  .btn-primary:hover { background: #6d28d9; transform: translateY(-1px); }
+  .btn-small { padding: 8px 16px; font-size: 13px; border-radius: 10px; }
+
+  .kbd-inline {
+    display: inline-block;
+    padding: 1px 7px;
+    border-radius: 6px;
+    background: rgba(255,255,255,0.1);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.92em;
+    white-space: nowrap;
+  }
+
+  /* Hero */
+  .hero {
+    background: linear-gradient(180deg, var(--indigo) 0%, var(--bg) 100%);
+    text-align: center;
+    padding: 64px 0 40px;
+  }
+  .hero-icon { width: 72px; height: 72px; border-radius: 18px; margin: 0 auto 22px; box-shadow: 0 20px 50px -18px rgba(139,92,246,0.65); }
+  .hero h1 { font-size: clamp(30px, 6vw, 44px); font-weight: 800; letter-spacing: -0.02em; margin-bottom: 12px; }
+  .hero-sub { font-size: 16px; color: var(--text-dim); max-width: 600px; margin: 0 auto; }
+  .chips { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 22px; padding: 0; list-style: none; }
+  .chips li { padding: 5px 13px; border-radius: 999px; background: rgba(255,255,255,0.06); border: 1px solid var(--border); font-size: 13px; color: var(--text-dim); }
+
+  /* Contents */
+  .toc { margin: 8px 0 0; }
+  .toc ol { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; padding: 0; list-style: none; counter-reset: part; }
+  .toc li { counter-increment: part; }
+  .toc a {
+    display: flex;
+    gap: 10px;
+    align-items: baseline;
+    padding: 12px 14px;
+    border-radius: 12px;
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    color: var(--text);
+    text-decoration: none;
+    font-size: 14.5px;
+  }
+  .toc a::before { content: counter(part); color: var(--violet-light); font-weight: 700; }
+  .toc a:hover { border-color: var(--violet-light); }
+
+  /* Parts and steps */
+  .part { padding: 56px 0 8px; }
+  .part > h2 { font-size: clamp(24px, 4vw, 30px); font-weight: 800; letter-spacing: -0.01em; margin-bottom: 8px; }
+  .part-lead { color: var(--text-dim); font-size: 15.5px; }
+
+  .step { margin-top: 26px; background: var(--bg-elev); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px; }
+  .step-head { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+  .step-num {
+    flex: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: var(--violet);
+    color: #fff;
+    font-weight: 700;
+    font-size: 14px;
+  }
+  .step h3 { font-size: 19px; font-weight: 700; }
+  .step p { margin-top: 10px; font-size: 15.5px; }
+  .step ul, .step ol { margin: 10px 0 0; padding-left: 22px; font-size: 15.5px; }
+  .step li { margin-top: 6px; }
+  .check { color: var(--green); }
+  .check::before { content: "✓ "; font-weight: 700; }
+  .note {
+    margin-top: 14px;
+    padding: 12px 14px;
+    border-radius: 12px;
+    background: rgba(252,211,77,0.07);
+    border: 1px solid rgba(252,211,77,0.25);
+    font-size: 14.5px;
+    color: var(--text-dim);
+  }
+  .note strong { color: var(--amber); }
+  .step .note p { margin-top: 0; font-size: 14.5px; }
+
+  figure { margin: 18px 0 0; }
+  .shot { display: block; margin: 0 auto; width: fit-content; max-width: 100%; }
+  .shot img { border-radius: 10px; }
+  .shot.flat img { border: 1px solid var(--border); }
+  figcaption { margin-top: 8px; text-align: center; font-size: 13px; color: var(--text-dim); }
+
+  .reqs { margin: 14px 0 0; padding-left: 22px; }
+  .reqs li { margin-top: 6px; }
+
+  .trouble { margin-top: 22px; display: grid; gap: 14px; }
+  .trouble article { background: var(--bg-elev); border: 1px solid var(--border); border-radius: 14px; padding: 18px 20px; }
+  .trouble h3 { font-size: 16px; font-weight: 700; }
+  .trouble p { margin-top: 6px; color: var(--text-dim); font-size: 15px; }
+
+  /* Footer (as on the landing page) */
+  .site-footer { border-top: 1px solid var(--border); padding: 30px 0; margin-top: 72px; }
+  .footer-inner { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
+  .footer-inner p { color: var(--text-dim); font-size: 13px; }
+  .footer-nav { display: flex; gap: 18px; }
+  .footer-nav a { color: var(--text-dim); text-decoration: none; font-size: 13px; }
+  .footer-nav a:hover { color: var(--text); }
+
+  @media (max-width: 560px) {
+    .hero { padding: 48px 0 28px; }
+    .step { padding: 18px 16px; }
+    .nav-link span { display: none; }
+    .topnav { gap: 12px; }
+  }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <a class="brand" href="index.html">
+      <img class="brand-mark" src="assets/icon.png" alt="Lint">
+      <span class="brand-name">Lint</span>
+    </a>
+    <nav class="topnav">
+      <input type="checkbox" id="lang-toggle" class="lang-toggle">
+      <label for="lang-toggle" class="lang-switch" aria-label="Switch language / 切換語言">
+        <span>EN</span><span>中</span>
+      </label>
+      <a class="nav-link" href="https://github.com/davislinyd/Lint" target="_blank" rel="noopener noreferrer">
+        <svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
+        <span>GitHub</span>
+      </a>
+      <a class="btn btn-primary btn-small" href="https://github.com/davislinyd/Lint/releases/latest" target="_blank" rel="noopener noreferrer">
+        <span class="en">Download</span><span class="zh">下載</span>
+      </a>
+    </nav>
+  </div>
+</header>
+
+<main id="top">
+
+  <section class="hero">
+    <div class="wrap">
+      <img class="hero-icon" src="assets/icon.png" alt="Lint app icon">
+      <h1><span class="en">Install and use Lint</span><span class="zh">安裝與使用 Lint</span></h1>
+      <p class="hero-sub">
+        <span class="en">Step by step, from the download to your first suggestion. Each step says what you should see before you go on.</span>
+        <span class="zh">從下載到第一個建議，一步一步來。每一步都會告訴你，繼續之前應該看到什麼。</span>
+      </p>
+      <ul class="chips">
+        <li>Lint 0.3.4</li>
+        <li>macOS 14+</li>
+        <li>Apple Silicon</li>
+      </ul>
+    </div>
+  </section>
+
+  <div class="wrap">
+
+    <nav class="toc" aria-label="Contents">
+      <ol>
+        <li><a href="#before"><span class="en">Before you start</span><span class="zh">開始之前</span></a></li>
+        <li><a href="#download"><span class="en">Download</span><span class="zh">下載</span></a></li>
+        <li><a href="#install"><span class="en">Install</span><span class="zh">安裝</span></a></li>
+        <li><a href="#setup"><span class="en">Set up the AI</span><span class="zh">設定 AI</span></a></li>
+        <li><a href="#accessibility"><span class="en">Allow Accessibility</span><span class="zh">允許輔助功能</span></a></li>
+        <li><a href="#use"><span class="en">Use Lint</span><span class="zh">開始使用</span></a></li>
+        <li><a href="#settings"><span class="en">Settings</span><span class="zh">設定</span></a></li>
+        <li><a href="#trouble"><span class="en">Troubleshooting</span><span class="zh">疑難排解</span></a></li>
+      </ol>
+    </nav>
+
+    <!-- ============================================================ -->
+    <section class="part" id="before">
+      <h2><span class="en">Before you start</span><span class="zh">開始之前</span></h2>
+      <ul class="reqs en">
+        <li>A Mac with Apple silicon, running macOS 14 Sonoma or later.</li>
+        <li>For Lint's own local AI: about 6.2 GB of free disk space (the default model is about 5.15 GB), and an internet connection for that one download.</li>
+        <li>Or, on macOS 26 or later with Apple Intelligence turned on, Lint can use Apple Intelligence instead, with nothing to download.</li>
+      </ul>
+      <ul class="reqs zh">
+        <li>搭載 Apple 晶片、執行 macOS 14 Sonoma 或更新版本的 Mac。</li>
+        <li>使用 Lint 自己的本機 AI：約 6.2 GB 可用空間（預設模型約 5.15 GB），以及下載這一次所需的網路。</li>
+        <li>或者，在 macOS 26 以上且已開啟 Apple Intelligence 的 Mac，Lint 可以改用 Apple Intelligence，不必下載。</li>
+      </ul>
+    </section>
+
+    <!-- ============================================================ -->
+    <section class="part" id="download">
+      <h2><span class="en">Download</span><span class="zh">下載</span></h2>
+
+      <article class="step">
+        <div class="step-head"><span class="step-num">1</span><h3><span class="en">Download the DMG</span><span class="zh">下載 DMG</span></h3></div>
+        <p class="en">Open <a href="https://github.com/davislinyd/Lint/releases/latest" target="_blank" rel="noopener noreferrer">the latest release on GitHub</a> and click <code>Lint-0.3.4-macOS-arm64.dmg</code> under <strong>Assets</strong>. A newer release has a newer number in the name.</p>
+        <p class="zh">打開 <a href="https://github.com/davislinyd/Lint/releases/latest" target="_blank" rel="noopener noreferrer">GitHub 上的最新版本</a>，在 <strong>Assets</strong> 下點 <code>Lint-0.3.4-macOS-arm64.dmg</code>。之後的版本檔名裡的版本號會不同。</p>
+        <p class="check en">The DMG is in your Downloads folder.</p>
+        <p class="check zh">「下載項目」資料夾裡有這個 DMG。</p>
+        <figure>
+          <a class="shot flat" href="assets/guide/shared/github-release.png" target="_blank" rel="noopener"><img src="assets/guide/shared/github-release.png" alt="The Lint v0.3.4 release on GitHub with the DMG under Assets" width="1036" height="466" loading="lazy"></a>
+          <figcaption><span class="en">Click the <code>.dmg</code> file under Assets.</span><span class="zh">在 Assets 下點 <code>.dmg</code> 檔。</span></figcaption>
+        </figure>
+        <div class="note en"><p><strong>Optional:</strong> to check the download, also get <code>Lint-0.3.4-macOS-arm64.dmg.sha256</code>, then run <code>shasum -a 256 -c Lint-0.3.4-macOS-arm64.dmg.sha256</code> in Terminal, in the folder that holds both files. It prints <code>OK</code>.</p></div>
+        <div class="note zh"><p><strong>選用：</strong>想確認下載無誤，可以一併下載 <code>Lint-0.3.4-macOS-arm64.dmg.sha256</code>，在放著這兩個檔案的資料夾打開「終端機」，執行 <code>shasum -a 256 -c Lint-0.3.4-macOS-arm64.dmg.sha256</code>，會印出 <code>OK</code>。</p></div>
+      </article>
+    </section>
+
+    <!-- ============================================================ -->
+    <section class="part" id="install">
+      <h2><span class="en">Install</span><span class="zh">安裝</span></h2>
+
+      <article class="step">
+        <div class="step-head"><span class="step-num">2</span><h3><span class="en">Drag Lint into Applications</span><span class="zh">把 Lint 拖進「應用程式」</span></h3></div>
+        <p class="en">Double-click the DMG. In the window that opens, drag <strong>Lint</strong> onto the <strong>Applications</strong> folder. Then eject the <strong>Lint</strong> disk (⏏ next to it in the Finder sidebar).</p>
+        <p class="zh">雙擊 DMG。在開啟的視窗裡，把 <strong>Lint</strong> 拖到 <strong>Applications</strong> 資料夾上。接著退出 <strong>Lint</strong> 磁碟（Finder 側邊欄裡它旁邊的 ⏏）。</p>
+        <p class="check en">Lint is in your Applications folder.</p>
+        <p class="check zh">「應用程式」資料夾裡有 Lint。</p>
+        <figure>
+          <a class="shot" href="assets/guide/shared/dmg-window.png" target="_blank" rel="noopener"><img src="assets/guide/shared/dmg-window.png" alt="The Lint disk image window with the Applications folder and Lint.app" width="712" height="442" loading="lazy"></a>
+          <figcaption><span class="en">Drag Lint.app onto Applications.</span><span class="zh">把 Lint.app 拖到 Applications 上。</span></figcaption>
+        </figure>
+      </article>
+
+      <article class="step">
+        <div class="step-head"><span class="step-num">3</span><h3><span class="en">Open Lint for the first time</span><span class="zh">第一次打開 Lint</span></h3></div>
+        <p class="en">Open Lint from Applications (or press <span class="kbd-inline">⌘Space</span> and type “Lint”). macOS asks whether to open an app downloaded from the internet: click <strong>Open</strong>. Lint is signed with a Developer ID and notarized by Apple, so macOS asks only this once.</p>
+        <p class="zh">從「應用程式」打開 Lint（或按 <span class="kbd-inline">⌘空白鍵</span> 輸入「Lint」）。macOS 會問你是否要打開從網路下載的 App：按<strong>「打開」</strong>（英文系統顯示為 <strong>Open</strong>）。Lint 以 Developer ID 簽署並通過 Apple 公證，所以只會問這一次。</p>
+        <p class="check en">A pencil icon appears in the menu bar, and the <strong>Set Up Local AI</strong> window opens.</p>
+        <p class="check zh">選單列出現鉛筆圖示，並打開<strong>「設定本機 AI」</strong>視窗。</p>
+        <figure>
+          <a class="shot" href="assets/guide/shared/gatekeeper.png" target="_blank" rel="noopener"><img src="assets/guide/shared/gatekeeper.png" alt="macOS asks whether to open Lint.app, an app downloaded from the Internet" width="372" height="372" loading="lazy"></a>
+          <figcaption><span class="en">macOS asks once. Click Open.</span><span class="zh">macOS 只會問這一次，按「打開」（Open）。</span></figcaption>
+        </figure>
+      </article>
+    </section>
+
+    <!-- ============================================================ -->
+    <section class="part" id="setup">
+      <h2><span class="en">Set up the AI</span><span class="zh">設定 AI</span></h2>
+      <p class="part-lead en">Lint needs a model to write its suggestions. Pick the one that suits your Mac.</p>
+      <p class="part-lead zh">Lint 需要一個模型來產生建議。選一個適合你這台 Mac 的。</p>
+
+      <article class="step">
+        <div class="step-head"><span class="step-num">4</span><h3><span class="en">Choose an AI engine</span><span class="zh">選擇 AI 引擎</span></h3></div>
+        <p class="en">The <strong>Welcome to Lint</strong> window lists what Lint needs: the local AI runtime (already inside Lint), an AI model, and Accessibility. At the bottom, pick one:</p>
+        <p class="zh"><strong>「歡迎使用 Lint」</strong>視窗會列出 Lint 需要的東西：本機 AI 執行環境（已內建）、AI 模型與輔助功能。在下方選一個：</p>
+        <ul class="en">
+          <li><strong>Set Up Local AI</strong> (recommended): Lint runs Gemma 4 E4B on your Mac. It catches more mistakes. One download of about 5.15 GB.</li>
+          <li><strong>Use Apple Intelligence Instead</strong>: uses the on-device model built into macOS, with no download. It mostly fixes typos and basic grammar. This button appears only when your Mac can use Apple Intelligence.</li>
+          <li><strong>Later</strong>: closes the window. You can open it again from the menu bar with <strong>Set Up Local AI…</strong>.</li>
+        </ul>
+        <ul class="zh">
+          <li><strong>「設定本機 AI」</strong>（建議）：Lint 在你的 Mac 上執行 Gemma 4 E4B，能抓出較多錯誤。需要下載一次，約 5.15 GB。</li>
+          <li><strong>「改用 Apple Intelligence」</strong>：使用 macOS 內建的裝置端模型，不必下載，主要修正拼字與基本文法。只有這台 Mac 能使用 Apple Intelligence 時才會出現這個按鈕。</li>
+          <li><strong>「稍後」</strong>：先關閉視窗。之後可從選單列的<strong>「設定本機 AI…」</strong>再打開。</li>
+        </ul>
+        <figure>
+          <a class="shot en" href="assets/guide/en/setup-welcome.png" target="_blank" rel="noopener"><img src="assets/guide/en/setup-welcome.png" alt="The Welcome to Lint window" width="632" height="700" loading="lazy"></a>
+          <a class="shot zh" href="assets/guide/zh/setup-welcome.png" target="_blank" rel="noopener"><img src="assets/guide/zh/setup-welcome.png" alt="「歡迎使用 Lint」視窗" width="632" height="700" loading="lazy"></a>
+          <figcaption><span class="en">What is ready and what is still needed.</span><span class="zh">哪些已就緒、還缺什麼。</span></figcaption>
+        </figure>
+        <p class="en">If you chose Apple Intelligence, skip to <a href="#accessibility">Allow Accessibility</a>.</p>
+        <p class="zh">如果你選了 Apple Intelligence，直接跳到<a href="#accessibility">「允許輔助功能」</a>。</p>
+      </article>
+
+      <article class="step">
+        <div class="step-head"><span class="step-num">5</span><h3><span class="en">Download the model</span><span class="zh">下載模型</span></h3></div>
+        <p class="en">After <strong>Set Up Local AI</strong>, Lint shows what it is about to download: the model, its size, the free space it needs, what your Mac has, and the license. Your text is never sent to a server; the network is only used for this download. Click <strong>Download and Install</strong>.</p>
+        <p class="zh">按下<strong>「設定本機 AI」</strong>後，Lint 會先列出即將下載的內容：模型、大小、需要的可用空間、這台 Mac 目前的空間與授權。你的文字不會送到任何伺服器，只有這次下載需要網路。按<strong>「下載並安裝」</strong>。</p>
+        <figure>
+          <a class="shot en" href="assets/guide/en/setup-consent.png" target="_blank" rel="noopener"><img src="assets/guide/en/setup-consent.png" alt="Lint lists the model, its size, the free space needed and the license" width="632" height="700" loading="lazy"></a>
+          <a class="shot zh" href="assets/guide/zh/setup-consent.png" target="_blank" rel="noopener"><img src="assets/guide/zh/setup-consent.png" alt="Lint 列出模型、大小、需要的空間與授權" width="632" height="700" loading="lazy"></a>
+          <figcaption><span class="en">Before anything is downloaded, Lint shows what it will download.</span><span class="zh">下載之前，Lint 會先列出要下載的內容。</span></figcaption>
+        </figure>
+        <p class="check en">A progress bar. At 100% Lint checks the file (SHA-256), installs it and starts the local AI. The first start can take a minute.</p>
+        <p class="check zh">出現進度條。到 100% 後，Lint 會驗證檔案（SHA-256）、安裝並啟動本機 AI。第一次啟動可能要一分鐘左右。</p>
+        <figure>
+          <a class="shot en" href="assets/guide/en/setup-downloading.png" target="_blank" rel="noopener"><img src="assets/guide/en/setup-downloading.png" alt="The model download in progress" width="632" height="700" loading="lazy"></a>
+          <a class="shot zh" href="assets/guide/zh/setup-downloading.png" target="_blank" rel="noopener"><img src="assets/guide/zh/setup-downloading.png" alt="模型下載中" width="632" height="700" loading="lazy"></a>
+          <figcaption><span class="en">Downloading. You can cancel and continue later.</span><span class="zh">下載中，可以取消，之後再繼續。</span></figcaption>
+        </figure>
+        <div class="note en"><p><strong>Tip:</strong> you can cancel, lose the connection or even quit Lint. The part already downloaded is kept, and the download continues where it stopped.</p></div>
+        <div class="note zh"><p><strong>提示：</strong>可以取消、斷線，甚至結束 Lint。已下載的部分會保留，再次下載時從中斷處繼續。</p></div>
+      </article>
+    </section>
+
+    <!-- ============================================================ -->
+    <section class="part" id="accessibility">
+      <h2><span class="en">Allow Accessibility</span><span class="zh">允許輔助功能</span></h2>
+      <p class="part-lead en">Lint reads the text you select and writes the suggestion back through macOS Accessibility.</p>
+      <p class="part-lead zh">Lint 透過 macOS 的「輔助功能」讀取你選取的文字，並把建議寫回去。</p>
+
+      <article class="step">
+        <div class="step-head"><span class="step-num">6</span><h3><span class="en">Let Lint read and replace text</span><span class="zh">允許 Lint 讀取與取代文字</span></h3></div>
+        <p class="en">When the AI is ready, the window shows the last step. Click <strong>Allow Accessibility</strong> and follow macOS to System Settings, or click <strong>Open System Settings Manually</strong>.</p>
+        <p class="zh">AI 準備好之後，視窗會顯示最後一步。按<strong>「授權輔助功能」</strong>，依 macOS 的提示前往系統設定；或按<strong>「手動打開系統設定」</strong>。</p>
+        <figure>
+          <a class="shot en" href="assets/guide/en/setup-accessibility.png" target="_blank" rel="noopener"><img src="assets/guide/en/setup-accessibility.png" alt="The last step asks for Accessibility" width="632" height="700" loading="lazy"></a>
+          <a class="shot zh" href="assets/guide/zh/setup-accessibility.png" target="_blank" rel="noopener"><img src="assets/guide/zh/setup-accessibility.png" alt="最後一步要求輔助功能權限" width="632" height="700" loading="lazy"></a>
+          <figcaption><span class="en">The last step: Accessibility.</span><span class="zh">最後一步：輔助功能。</span></figcaption>
+        </figure>
+        <p class="en">In <strong>System Settings → Privacy &amp; Security → Accessibility</strong>, turn on <strong>Lint</strong>. On macOS 27 this list is called <strong>Device Control and Data Access</strong>. If Lint is not in the list, click <strong>+</strong> and choose Lint in Applications.</p>
+        <p class="zh">在<strong>「系統設定 → 隱私權與安全性 → 輔助功能」</strong>打開 <strong>Lint</strong>。macOS 27 把這份列表改名為 <strong>Device Control and Data Access</strong>（英文介面名稱）。列表裡沒有 Lint 的話，按 <strong>＋</strong>，在「應用程式」裡選 Lint。</p>
+        <figure>
+          <a class="shot flat" href="assets/guide/shared/accessibility-lint.png" target="_blank" rel="noopener"><img src="assets/guide/shared/accessibility-lint.png" alt="Lint turned on in the Accessibility list of System Settings" width="468" height="40" loading="lazy"></a>
+          <figcaption><span class="en">Lint turned on in the list.</span><span class="zh">在列表中打開 Lint。</span></figcaption>
+        </figure>
+        <p class="check en">Back in the Lint window, Accessibility says <strong>Enabled</strong> and you see <strong>All set</strong>. Click <strong>Done</strong>.</p>
+        <p class="check zh">回到 Lint 視窗，輔助功能顯示<strong>「已啟用」</strong>，並出現<strong>「一切就緒」</strong>。按<strong>「完成」</strong>。</p>
+        <figure>
+          <a class="shot en" href="assets/guide/en/setup-done.png" target="_blank" rel="noopener"><img src="assets/guide/en/setup-done.png" alt="All set: runtime, model and Accessibility are ready" width="632" height="700" loading="lazy"></a>
+          <a class="shot zh" href="assets/guide/zh/setup-done.png" target="_blank" rel="noopener"><img src="assets/guide/zh/setup-done.png" alt="一切就緒：執行環境、模型與輔助功能都準備好了" width="632" height="700" loading="lazy"></a>
+          <figcaption><span class="en">All set.</span><span class="zh">一切就緒。</span></figcaption>
+        </figure>
+        <div class="note en"><p><strong>Without Accessibility</strong> Lint still works, but it falls back to copying and pasting through the clipboard.</p></div>
+        <div class="note zh"><p><strong>沒有輔助功能權限時</strong>，Lint 仍然可以使用，但會改用剪貼簿複製貼上。</p></div>
+      </article>
+    </section>
+
+    <!-- ============================================================ -->
+    <section class="part" id="use">
+      <h2><span class="en">Use Lint</span><span class="zh">開始使用</span></h2>
+      <p class="part-lead en">Lint works in any app where you can select text: Mail, Notes, browsers, Slack and more. It edits English; <strong>Translate to Chinese</strong> helps you read English text in Chinese.</p>
+      <p class="part-lead zh">只要能選取文字的 App 都能用 Lint：郵件、備忘錄、瀏覽器、Slack 等。Lint 修改英文；<strong>「翻譯成中文」</strong>則幫你用中文讀懂英文。</p>
+
+      <article class="step">
+        <div class="step-head"><span class="step-num">7</span><h3><span class="en">Quick check: <span class="kbd-inline">⌥⌘K</span></span><span class="zh">快速檢查：<span class="kbd-inline">⌥⌘K</span></span></h3></div>
+        <p class="en">Select some English text, or just put the cursor in a text field, and press <span class="kbd-inline">⌥⌘K</span>. Lint starts preparing a suggestion as soon as you select text, so it usually appears at once.</p>
+        <p class="zh">選取一段英文，或只把游標放在輸入框裡，按 <span class="kbd-inline">⌥⌘K</span>。Lint 在你選取文字時就開始準備建議，所以通常會立刻出現。</p>
+        <p class="en">A bubble shows the suggestion, with a Chinese translation underneath to help you check the meaning. Press <span class="kbd-inline">⏎</span> to replace your text, <span class="kbd-inline">R</span> to rewrite, <span class="kbd-inline">esc</span> to close, or click <strong>Edit in Full Panel</strong>.</p>
+        <p class="zh">浮窗會顯示建議，下方附中文翻譯，方便你核對意思。按 <span class="kbd-inline">⏎</span> 取代原文、<span class="kbd-inline">R</span> 重寫、<span class="kbd-inline">esc</span> 關閉，或點<strong>「在全面板編輯」</strong>。</p>
+        <figure>
+          <a class="shot en flat" href="assets/guide/en/bubble.png" target="_blank" rel="noopener"><img src="assets/guide/en/bubble.png" alt="The suggestion bubble next to the selected sentence in TextEdit" width="760" height="460" loading="lazy"></a>
+          <a class="shot zh flat" href="assets/guide/zh/bubble.png" target="_blank" rel="noopener"><img src="assets/guide/zh/bubble.png" alt="TextEdit 中選取句子旁的建議浮窗" width="760" height="460" loading="lazy"></a>
+          <figcaption><span class="en"><span class="kbd-inline">⌥⌘K</span>: the suggestion, with a Chinese translation underneath.</span><span class="zh"><span class="kbd-inline">⌥⌘K</span>：建議，下方附中文翻譯。</span></figcaption>
+        </figure>
+      </article>
+
+      <article class="step">
+        <div class="step-head"><span class="step-num">8</span><h3><span class="en">Side by side: <span class="kbd-inline">⌥⌘L</span></span><span class="zh">並排比對：<span class="kbd-inline">⌥⌘L</span></span></h3></div>
+        <p class="en">Select text and press <span class="kbd-inline">⌥⌘L</span>. The full panel shows your original on the left (you can edit it) and the result on the right, with the changes marked.</p>
+        <p class="zh">選取文字後按 <span class="kbd-inline">⌥⌘L</span>。全面板左邊是原文（可以直接修改），右邊是標出修改處的結果。</p>
+        <ul class="en">
+          <li><strong>Mode</strong>: Proofread &amp; polish, Translate to Chinese, or Custom prompt.</li>
+          <li><strong>Tone</strong>: Preserve Tone, Formal, Concise or Professional.</li>
+          <li><strong>Replace Original</strong> <span class="kbd-inline">⌘⏎</span>, <strong>Copy</strong> <span class="kbd-inline">⌥⌘C</span>, <strong>Retry</strong> <span class="kbd-inline">⌥⌘⏎</span>. Tick <strong>Edit</strong> to change the result before you use it.</li>
+        </ul>
+        <ul class="zh">
+          <li><strong>模式</strong>：文法校對與潤飾、翻譯成中文，或自訂 Prompt。</li>
+          <li><strong>語氣</strong>：保留原語氣、正式、簡潔或專業。</li>
+          <li><strong>覆蓋取代</strong> <span class="kbd-inline">⌘⏎</span>、<strong>複製</strong> <span class="kbd-inline">⌥⌘C</span>、<strong>重試</strong> <span class="kbd-inline">⌥⌘⏎</span>。勾選<strong>「編輯」</strong>可以先修改結果再使用。</li>
+        </ul>
+        <figure>
+          <a class="shot en" href="assets/guide/en/panel.png" target="_blank" rel="noopener"><img src="assets/guide/en/panel.png" alt="The full panel: the original on the left, the result with changes marked on the right" width="872" height="600" loading="lazy"></a>
+          <a class="shot zh" href="assets/guide/zh/panel.png" target="_blank" rel="noopener"><img src="assets/guide/zh/panel.png" alt="全面板：左邊是原文，右邊是標出修改處的結果" width="872" height="600" loading="lazy"></a>
+          <figcaption><span class="en"><span class="kbd-inline">⌥⌘L</span>: the changes are marked in the result.</span><span class="zh"><span class="kbd-inline">⌥⌘L</span>：結果裡會標出修改處。</span></figcaption>
+        </figure>
+        <figure>
+          <a class="shot en" href="assets/guide/en/panel-translate.png" target="_blank" rel="noopener"><img src="assets/guide/en/panel-translate.png" alt="The full panel in Translate to Chinese mode" width="872" height="600" loading="lazy"></a>
+          <a class="shot zh" href="assets/guide/zh/panel-translate.png" target="_blank" rel="noopener"><img src="assets/guide/zh/panel-translate.png" alt="全面板的「翻譯成中文」模式" width="872" height="600" loading="lazy"></a>
+          <figcaption><span class="en">Translate to Chinese, to help you read English text.</span><span class="zh">翻譯成中文，幫你讀懂英文。</span></figcaption>
+        </figure>
+      </article>
+
+      <article class="step">
+        <div class="step-head"><span class="step-num">9</span><h3><span class="en">The menu bar menu</span><span class="zh">選單列選單</span></h3></div>
+        <p class="en">Click the pencil icon for <strong>Improve Selected Text</strong>, the <strong>Mode</strong> and <strong>Tone</strong>, whether Accessibility is on, <strong>Settings…</strong> and <strong>Quit Lint</strong>.</p>
+        <p class="zh">點選單列的鉛筆圖示，可以使用<strong>「改善選取文字」</strong>、切換<strong>「模式」</strong>與<strong>「語氣」</strong>、查看輔助功能是否已開啟，以及<strong>「設定…」</strong>與<strong>「結束 Lint」</strong>。</p>
+        <figure>
+          <a class="shot en" href="assets/guide/en/menu.png" target="_blank" rel="noopener"><img src="assets/guide/en/menu.png" alt="The Lint menu in the menu bar" width="294" height="246" loading="lazy"></a>
+          <a class="shot zh" href="assets/guide/zh/menu.png" target="_blank" rel="noopener"><img src="assets/guide/zh/menu.png" alt="選單列中的 Lint 選單" width="249" height="246" loading="lazy"></a>
+          <figcaption><span class="en">The menu under the pencil icon.</span><span class="zh">鉛筆圖示下的選單。</span></figcaption>
+        </figure>
+      </article>
+    </section>
+
+    <!-- ============================================================ -->
+    <section class="part" id="settings">
+      <h2><span class="en">Settings</span><span class="zh">設定</span></h2>
+      <p class="part-lead en">Open <strong>Settings…</strong> from the menu bar menu.</p>
+      <p class="part-lead zh">從選單列選單打開<strong>「設定…」</strong>。</p>
+
+      <article class="step">
+        <div class="step-head"><span class="step-num">10</span><h3><span class="en">General</span><span class="zh">一般</span></h3></div>
+        <p class="en">Accessibility status, <strong>Check Behavior</strong> (the Check button, watching while you type, the “Ready” chip), <strong>Shortcuts</strong> (change <span class="kbd-inline">⌥⌘L</span> and <span class="kbd-inline">⌥⌘K</span>) and the <strong>Interface language</strong> (English or 繁體中文, after a restart).</p>
+        <p class="zh">輔助功能狀態、<strong>「檢查行為」</strong>（「檢查」按鈕、打字時即時監看、「已就緒」浮標）、<strong>「快捷鍵」</strong>（可更改 <span class="kbd-inline">⌥⌘L</span> 與 <span class="kbd-inline">⌥⌘K</span>）與<strong>「介面語言」</strong>（English 或繁體中文，重新啟動後套用）。</p>
+        <figure>
+          <a class="shot en" href="assets/guide/en/settings-general.png" target="_blank" rel="noopener"><img src="assets/guide/en/settings-general.png" alt="Settings, General pane" width="872" height="700" loading="lazy"></a>
+          <a class="shot zh" href="assets/guide/zh/settings-general.png" target="_blank" rel="noopener"><img src="assets/guide/zh/settings-general.png" alt="設定的「一般」頁" width="872" height="700" loading="lazy"></a>
+          <figcaption><span class="en">General.</span><span class="zh">一般。</span></figcaption>
+        </figure>
+      </article>
+
+      <article class="step">
+        <div class="step-head"><span class="step-num">11</span><h3><span class="en">Model</span><span class="zh">模型</span></h3></div>
+        <p class="en">Under <strong>Model Source</strong>, pick where suggestions come from: Automatic, Apple Intelligence, Local llama.cpp (managed by Lint), an OpenAI-compatible endpoint (Ollama, LM Studio), or OpenAI, Anthropic or Google Gemini with your own API key, which is kept in the Keychain. For the local AI you can pick the model (Gemma 4 E4B is recommended; Qwen3 4B and Gemma 4 12B are optional), start or stop the server, and remove a model.</p>
+        <p class="zh">在<strong>「模型來源」</strong>選擇建議的來源：自動、Apple Intelligence、本機 llama.cpp（由 Lint 管理）、OpenAI 相容端點（Ollama、LM Studio），或用你自己的 API Key 連 OpenAI、Anthropic、Google Gemini（Key 存在鑰匙圈）。使用本機 AI 時，可以選模型（建議 Gemma 4 E4B，也可以改用 Qwen3 4B 或 Gemma 4 12B）、啟動或停止服務，以及移除模型。</p>
+        <figure>
+          <a class="shot en" href="assets/guide/en/settings-model.png" target="_blank" rel="noopener"><img src="assets/guide/en/settings-model.png" alt="Settings, Model pane" width="872" height="700" loading="lazy"></a>
+          <a class="shot zh" href="assets/guide/zh/settings-model.png" target="_blank" rel="noopener"><img src="assets/guide/zh/settings-model.png" alt="設定的「模型」頁" width="872" height="700" loading="lazy"></a>
+          <figcaption><span class="en">Model.</span><span class="zh">模型。</span></figcaption>
+        </figure>
+        <div class="note en"><p><strong>Memory:</strong> Gemma 4 12B needs much more memory. On a 16 GB Mac it can make the system very slow.</p></div>
+        <div class="note zh"><p><strong>記憶體：</strong>Gemma 4 12B 需要多很多記憶體，在 16 GB 的 Mac 上可能讓系統變得非常慢。</p></div>
+      </article>
+
+      <article class="step">
+        <div class="step-head"><span class="step-num">12</span><h3><span class="en">Prompts and Learning</span><span class="zh">提示詞與學習</span></h3></div>
+        <p class="en"><strong>Prompts</strong>: change the instructions for each mode and tone, or go back to the built-in ones.</p>
+        <p class="zh"><strong>提示詞</strong>：可以分別修改每個模式與語氣的指示，也能恢復內建預設。</p>
+        <figure>
+          <a class="shot en" href="assets/guide/en/settings-prompts.png" target="_blank" rel="noopener"><img src="assets/guide/en/settings-prompts.png" alt="Settings, Prompts pane" width="872" height="700" loading="lazy"></a>
+          <a class="shot zh" href="assets/guide/zh/settings-prompts.png" target="_blank" rel="noopener"><img src="assets/guide/zh/settings-prompts.png" alt="設定的「提示詞」頁" width="872" height="700" loading="lazy"></a>
+          <figcaption><span class="en">Prompts.</span><span class="zh">提示詞。</span></figcaption>
+        </figure>
+        <p class="en"><strong>Learning</strong> (optional, off by default): Lint remembers writing habits you keep correcting, as short rules kept only on your Mac. You can read, pin, disable or delete every memory under <strong>Manage Memories…</strong>.</p>
+        <p class="zh"><strong>學習</strong>（選用，預設關閉）：Lint 會把你反覆修正的寫作習慣記成簡短規則，只存在你的 Mac 上。每一條記憶都可以在<strong>「管理記憶…」</strong>查看、釘選、停用或刪除。</p>
+      </article>
+    </section>
+
+    <!-- ============================================================ -->
+    <section class="part" id="trouble">
+      <h2><span class="en">Troubleshooting</span><span class="zh">疑難排解</span></h2>
+      <div class="trouble">
+        <article>
+          <h3><span class="en">Lint cannot read or replace text</span><span class="zh">Lint 讀不到或取代不了文字</span></h3>
+          <p class="en">Check Settings → General → Accessibility. After an update macOS may treat Lint as a new app: in System Settings → Privacy &amp; Security → Accessibility, remove the old Lint entries, click + and add /Applications/Lint.app again.</p>
+          <p class="zh">檢查「設定 → 一般 → 輔助功能」。更新後 macOS 可能把 Lint 當成新的 App：到「系統設定 → 隱私權與安全性 → 輔助功能」刪除舊的 Lint 項目，按 ＋ 重新加入 /Applications/Lint.app。</p>
+        </article>
+        <article>
+          <h3><span class="en">macOS asks to let Lint control “System Events”</span><span class="zh">macOS 詢問是否允許 Lint 控制「系統事件」</span></h3>
+          <p class="en">Allow it. Lint only uses it to bring your previous app back to the front before it replaces text, which makes Replace reliable in browsers and Electron apps.</p>
+          <p class="zh">請允許。Lint 只用它在取代文字前，把你原本使用的 App 帶回最前面，這樣在瀏覽器與 Electron App 裡取代才穩定。</p>
+        </article>
+        <article>
+          <h3><span class="en">The first suggestion takes a while</span><span class="zh">第一個建議要等一下</span></h3>
+          <p class="en">The model is loading. On a Mac that is short of memory this can take minutes; Lint waits up to 10 minutes. After 5 minutes without a suggestion the model leaves memory, and the next request loads it again in a few seconds.</p>
+          <p class="zh">模型正在載入。在記憶體吃緊的 Mac 上可能要幾分鐘，Lint 最多等 10 分鐘。5 分鐘沒有要求建議時，模型會先釋放記憶體，下次要求時幾秒內重新載入。</p>
+        </article>
+        <article>
+          <h3><span class="en">The download stopped</span><span class="zh">下載中斷了</span></h3>
+          <p class="en">Choose <strong>Set Up Local AI…</strong> in the menu bar menu and download again: it continues where it stopped. A file that fails its check is deleted and never used.</p>
+          <p class="zh">在選單列選單點<strong>「設定本機 AI…」</strong>再下載一次，會從中斷處繼續。驗證失敗的檔案會被刪除，絕不會使用。</p>
+        </article>
+        <article>
+          <h3><span class="en">The pencil icon is not in the menu bar</span><span class="zh">選單列上找不到鉛筆圖示</span></h3>
+          <p class="en">When the menu bar is full, macOS hides some icons. Close a few menu bar apps, check System Settings → Menu Bar on newer macOS, or look in your menu bar manager (such as Bartender or Ice). Lint's shortcuts work either way.</p>
+          <p class="zh">選單列太滿時，macOS 會隱藏部分圖示。可以關掉幾個選單列 App；在較新的 macOS 上檢查「系統設定 → 選單列」；或到你的選單列管理工具（例如 Bartender、Ice）裡找。不管圖示有沒有顯示，Lint 的快捷鍵都能用。</p>
+        </article>
+        <article>
+          <h3><span class="en">Not enough disk space</span><span class="zh">磁碟空間不足</span></h3>
+          <p class="en">Before downloading, Lint checks for about 1.2 times what is still missing and tells you how much it needs and how much your Mac has.</p>
+          <p class="zh">下載前，Lint 會檢查是否有「還缺的部分 ×1.2」的空間，並告訴你需要多少、這台 Mac 有多少。</p>
+        </article>
+      </div>
+    </section>
+
+  </div>
+</main>
+
+<footer class="site-footer">
+  <div class="wrap footer-inner">
+    <p>MIT License · © 2026 Davis Lin</p>
+    <nav class="footer-nav">
+      <a href="index.html">Lint</a>
+      <a href="https://github.com/davislinyd/Lint" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://github.com/davislinyd/Lint/releases" target="_blank" rel="noopener noreferrer">Releases</a>
+      <a href="https://github.com/davislinyd/Lint/issues" target="_blank" rel="noopener noreferrer">Issues</a>
+    </nav>
+  </div>
+</footer>
+
+</body>
+</html>

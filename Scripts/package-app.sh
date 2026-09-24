@@ -49,9 +49,11 @@ fi
 # for a package's resource bundle only next to Lint.app and in this machine's .build folder, never in
 # Contents/Resources, so the app crashes on any other Mac as soon as a package reads its resources (the
 # shortcut recorder in Settings). Swift Build also looks in Contents/Resources: use it where it exists.
+# Its release builds are universal unless told otherwise (Swift 6.3 on CI), and the bundled llama.cpp
+# runtime is per-architecture, so it builds this Mac's architecture only.
 BUILD_SYSTEM=
 if swift build --help 2>/dev/null | grep -q swiftbuild; then
-  BUILD_SYSTEM="--build-system swiftbuild"
+  BUILD_SYSTEM="--build-system swiftbuild --arch $(uname -m)"
 fi
 if [ "$CONFIG" = "release" ]; then
   swift build -c release --product Lint $BUILD_SYSTEM >&2

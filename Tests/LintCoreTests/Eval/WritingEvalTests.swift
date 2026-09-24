@@ -8,7 +8,7 @@ import XCTest
 final class WritingEvalFixtureTests: XCTestCase {
     func testTheFixturesCoverLintsWorkloadAndAreWellFormed() throws {
         let fixtures = try WritingEvalFixtures.load()
-        XCTAssertEqual(fixtures.version, 5)
+        XCTAssertEqual(fixtures.version, 6)
         XCTAssertGreaterThanOrEqual(fixtures.cases.count, 60, "the set is meant to be about 60-140 cases")
         XCTAssertLessThanOrEqual(fixtures.cases.count, 140)
         XCTAssertEqual(Set(fixtures.cases.map(\.id)).count, fixtures.cases.count, "ids are unique")
@@ -21,7 +21,7 @@ final class WritingEvalFixtureTests: XCTestCase {
             "short-email", "business-writing", "already-correct", "preservation",
             "fragment", "clean-technical", "clean-business", "clean-casual", "casual-preserve",
             "ip-address", "shell-command", "code-identifier", "currency", "file-path", "product-names",
-            "english-natural", "english-holdout",
+            "english-natural", "english-holdout", "mixed-english",
         ] {
             XCTAssertTrue(categories.contains(wanted), "no fixture for \(wanted)")
         }
@@ -43,12 +43,13 @@ final class WritingEvalFixtureTests: XCTestCase {
             XCTAssertFalse(testCase.systemPrompt(profile: .english(.localModel)).isEmpty)
         }
         // English edits, and English-to-Chinese translation only for reference: no Chinese
-        // proofreading and no Chinese-to-English translation.
+        // proofreading and no Chinese-to-English translation. Mixed text has its English edited only.
         for testCase in fixtures.cases {
             if testCase.writingMode == .translate {
                 XCTAssertEqual(testCase.outputLanguage, .zhHant, "\(testCase.id): translation only goes into Chinese")
             } else {
-                XCTAssertEqual(testCase.outputLanguage, .en, "\(testCase.id): only English text is proofread")
+                let expected: WritingEvalCase.Language = testCase.category == "mixed-english" ? .mixed : .en
+                XCTAssertEqual(testCase.outputLanguage, expected, "\(testCase.id): only English is proofread")
             }
         }
         XCTAssertGreaterThanOrEqual(

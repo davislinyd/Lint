@@ -48,13 +48,16 @@ do is unchanged and not covered by this statement.
   `permissiveContentTransformations` (the user's own text can quote anything). A custom prompt, the
   connection test and anything else keep the default guardrails. Responses are plain `String`; no
   `@Generable`.
-- **Prompts:** `WritingPromptProfile.english` (`EnglishWritingPrompts`, version `english-9`, see the
-  third round below; the same prompts go to Lint's local model, with their own layout rule): English
-  instructions with the same product meaning as the standard prompts. Preserve-tone proofreading asks
-  for every error an English teacher would mark (grammar, wrong or word-for-word-translated words,
-  spelling, punctuation) while keeping every correct word, with three examples whose error types the
-  fixtures do not contain. Every proofread piece also gets one line naming the language of the text.
-  A user's own prompt override is used as is.
+- **Prompts:** `WritingPromptProfile.english` (`EnglishWritingPrompts`, version `english-11`, see the
+  third and fourth rounds below; the same prompts go to Lint's local model, with their own layout
+  rule): English instructions with the same product meaning as the standard prompts. Preserve-tone
+  proofreading asks for every error an English teacher would mark (grammar, wrong or
+  word-for-word-translated words, spelling, punctuation) while keeping every correct word, with four
+  examples whose error types the fixtures do not contain. Lint edits English only: nothing asks for
+  Chinese to be corrected, and every proofread piece gets one line naming the language of the text,
+  which for Chinese-English text says to change only the English. A proofread of text with no English
+  letter in it (URLs and paths aside) is not sent to any engine. A user's own prompt override is used
+  as is.
 - **Checks** (`WritingOutputGuard`, `WritingPipeline`, on-device path only; the Gemma path is
   unchanged): protected literals (URLs, email addresses, code spans, paths, identifiers, numbers,
   IPv4, and in a preserve proofread all-capital acronyms such as PR or CI) must survive; straight
@@ -235,6 +238,36 @@ an answer at four times the text's length plus 128 tokens (at least 256), never 
 Gemma remains the default and is now also the most careful engine for English. Apple stays the
 choice for no download and low memory; its professional tone is the weakest part (it invents content,
 which the guard now stops, leaving the text unchanged).
+
+## Fourth round (2026-09-24): English only
+
+Lint edits English; English-to-Chinese translation stays as a reading aid. The English prompts lost
+their rule and example for correcting Chinese (的/得/地, 在/再, mainland terms), the standard
+(Chinese-language) prompts lost their Chinese section and their mixed example (which changed the
+Chinese and translated "clear"), and a Chinese-English text is now told to have its English changed
+and its Chinese left exactly as written. Five mixed fixtures were added (v6, 107 cases): each has one
+English error and a Chinese slip that must survive.
+
+| Run | English errors left (of 92) | Correct English texts changed (of 17) | Mixed cases right (of 5) |
+|---|---|---|---|
+| Apple english-9 (before) | 12 | 0 | 0 (the guard kept the source; first answers corrected the Chinese) |
+| Apple english-10 (Chinese rule and example removed) | 22 | 2 | 1 |
+| **Apple english-11** (the unchanged example first, a mixed example last) | **19** | **0** | 1 |
+| Gemma E4B english-9 (before), 2 runs | 3, 2 | 3, 2 | 1, 1 (the English translated into Chinese, 軟件 → 軟體) |
+| Gemma E4B english-10, 2 runs | 2, 3 | 3, 3 | 1, 0 |
+| **Gemma E4B english-11, 2 runs** | **3, 3** | **2, 1** | 1, 2 |
+| Gemma E4B, standard prompts without the Chinese section (stands in for cloud), 1 run | 2 | 7 | 0 |
+
+- Removing the fourth example cost Apple's model corrections: with the "leave it unchanged" example
+  last it left more errors and changed two correct texts. english-11 recovers the correct texts, not
+  all of the corrections: 4 cases are worse than english-9, one of them (4 pieces) an answer that
+  began with `- "` and was caught by the guard. Accepted: Apple is optional, and its prompt no longer
+  touches Chinese.
+- Gemma is unchanged or better on English with english-11, so it stays the default.
+- **Mixed text is not solved by the prompt.** Gemma still translates the Chinese tail of a sentence
+  into English in some cases ("新的設置流程" → "with the new setup process"); the Gemma path has no
+  output check. Apple's guard catches a translation and keeps the source, so it rarely fixes mixed
+  text either.
 
 ## Re-running after a macOS or Foundation Models update
 

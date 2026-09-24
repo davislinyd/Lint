@@ -64,6 +64,7 @@
 "複製" = "Copy";
 "沒有選取文字。可直接在左側輸入，再按「產生」。" = "No text selected. Type on the left, then click “Generate”.";
 "沒有原文可送出。" = "No original text to send.";
+"Lint 只校對英文，這段文字裡沒有英文。" = "Lint edits English only, and this text has no English in it.";
 "未授權輔助功能，已改用剪貼簿擷取。" = "Accessibility isn’t authorized; captured the text through the clipboard instead.";
 "此應用程式無法用輔助功能讀取選取，已改用剪貼簿。" = "This app doesn’t expose its selection to Accessibility; used the clipboard instead.";
 "連線成功但沒有收到正文（可能全是 reasoning）。" = "Connected, but no answer text was received (it may all be reasoning).";

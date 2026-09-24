@@ -392,6 +392,15 @@ final class FloatingPanelViewModel {
         learning.setInteractiveActivity(isStreaming || isPrefetching || isTranslating)
     }
 
+    /// Lint edits English only: a proofread of text without any English is not sent to a model, so
+    /// the local one is not even woken for it.
+    private static func hasNoEnglish(_ text: String, mode: WritingMode) -> Bool {
+        mode == .proofread && !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && !TextScript.hasEnglish(text)
+    }
+
+    private static var noEnglishMessage: String { String(localized: "Lint 只校對英文，這段文字裡沒有英文。") }
+
     /// The prompt with the user's learned habits added; untouched, and without a moment's delay,
     /// while learning is off. The lookup runs off the main actor and is cut short rather than let
     /// it hold a suggestion back.
@@ -488,6 +497,14 @@ final class FloatingPanelViewModel {
         for result: TextCaptureService.CaptureResult, key: WritingRequestKey,
         prompts: PrefetchPrompts
     ) async {
+        if Self.hasNoEnglish(result.text, mode: key.mode) {
+            prefetchFinished = true
+            isPrefetching = false
+            isPrefetchReady = false
+            prefetchError = Self.noEnglishMessage
+            onPrefetchStateChange?()
+            return
+        }
         let route: WritingEngineRoute
         do {
             route = try await prepareEngine()
@@ -792,6 +809,11 @@ final class FloatingPanelViewModel {
     }
 
     private func runStream(forceLowReasoning: Bool = false) async {
+        if Self.hasNoEnglish(originalText, mode: mode) {
+            errorMessage = Self.noEnglishMessage
+            isStreaming = false
+            return
+        }
         let route: WritingEngineRoute
         do {
             route = try await prepareEngine()

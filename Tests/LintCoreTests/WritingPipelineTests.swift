@@ -172,10 +172,10 @@ final class WritingPipelineTests: XCTestCase {
     }
 
     func testOnlyAProofreadIsToldWhichLanguageTheTextIsIn() async throws {
-        for (mode, expected) in [(WritingMode.proofread, "P\nThe text is in Traditional Chinese: answer in Traditional Chinese, do not translate it."), (.translate, "P")] {
+        for (mode, expected) in [(WritingMode.proofread, "P\nThe text mixes Chinese and English: change only the English; leave the Chinese exactly as written, and do not translate either part."), (.translate, "P")] {
             let model = FakeModel { _, piece in piece }
             _ = try await WritingPipeline.run(
-                source: "報告已經寄給客戶，對方確認收到了。", mode: mode, tone: .preserve, systemPrompt: "P", budget: nil
+                source: "報告已經寄給客戶，對方說 the file are missing。", mode: mode, tone: .preserve, systemPrompt: "P", budget: nil
             ) { try model.generate($0, $1) }
             XCTAssertEqual(model.calls.first?.prompt, expected, "\(mode)")
         }

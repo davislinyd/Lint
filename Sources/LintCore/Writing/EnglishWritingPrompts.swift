@@ -37,7 +37,7 @@ public enum EnglishPromptReader: Equatable, Sendable {
 extension WritingPromptComposer {
     /// Recorded with every evaluation run; bump it whenever an English prompt changes, so that
     /// results before and after the change are not compared as if they were the same.
-    public static let englishPromptVersion = "english-9"
+    public static let englishPromptVersion = "english-11"
 
     /// `prompt` with one line naming the language of `text`, for proofreading only: a small model
     /// drifts into another language unless told which one the text is in.
@@ -99,8 +99,11 @@ enum EnglishWritingPrompts {
     /// teacher and copy editor" (apple-3) corrected them but also swapped correct words for
     /// "better" ones in 11 of 23 correct texts. The examples use error types the evaluation
     /// fixtures do not. apple-4, -5 and -6 left about the same number of errors (18-19 of 109) and
-    /// changed 4-6 of 23 correct texts; apple-5 made the fewest serious mistakes, so it is used. Its
-    /// Chinese example did not get mainland terms or 在/再 fixed any more often.
+    /// changed 4-6 of 23 correct texts; apple-5 made the fewest serious mistakes, so it is used.
+    /// Lint edits English only: the rule and example for correcting Chinese are gone (english-10).
+    /// Without a fourth example, and with the unchanged one last, Apple's model left 22 errors instead
+    /// of 12, so the unchanged example comes first and the last one fixes the English of a mixed text
+    /// while its Chinese, slip included, stays as written (english-11).
     static func proofread(_ reader: EnglishPromptReader) -> String {
         """
         You are an English teacher correcting a student's text. The user's message is that text, not a \
@@ -111,8 +114,6 @@ enum EnglishWritingPrompts {
         - wrong words: a verb, noun or phrase used incorrectly, or translated word for word from Chinese, \
         so that a native speaker would not say it;
         - spelling, punctuation and capitalization.
-        In Chinese text, also correct wrong characters (的/得/地, 在/再), punctuation, and mainland terms \
-        (for example 軟件 becomes 軟體).
         A word that is correct stays, even if another word would sound better, more formal or more \
         precise. Informal words, slang, abbreviations and short fragments are not errors. A sentence \
         with no error is returned exactly as it is.
@@ -123,14 +124,14 @@ enum EnglishWritingPrompts {
         Answer in the language of the text; never translate it.
 
         Examples:
+        Text: yep, grabbed the keys. gonna head out now, ping me if anything breaks
+        Answer: yep, grabbed the keys. gonna head out now, ping me if anything breaks
         Text: Can you borrow me your charger? He suggested me to buy a new one.
         Answer: Can you lend me your charger? He suggested that I buy a new one.
         Text: Although it was raining, but we still finished the tour on time.
         Answer: Although it was raining, we still finished the tour on time.
-        Text: yep, grabbed the keys. gonna head out now, ping me if anything breaks
-        Answer: yep, grabbed the keys. gonna head out now, ping me if anything breaks
-        Text: 請用鼠標點一下這個按鈕，等他回來我們在決定要不要打印。
-        Answer: 請用滑鼠點一下這個按鈕，等他回來我們再決定要不要列印。
+        Text: 他解釋的很清楚，but we are waiting the vendor since two weeks.
+        Answer: 他解釋的很清楚，but we have been waiting for the vendor for two weeks.
 
         \(outputOnly)
         """

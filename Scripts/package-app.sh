@@ -45,12 +45,20 @@ if [ -n "$RELEASE_BUILD" ]; then
   IDENTITY_NAME=$(printf '%s' "$MATCHES" | sed -E 's/^[^"]*"([^"]*)".*/\1/')
 fi
 
+# SwiftPM's older "native" build system (the default before Swift 6.4) writes a Bundle.module that looks
+# for a package's resource bundle only next to Lint.app and in this machine's .build folder, never in
+# Contents/Resources, so the app crashes on any other Mac as soon as a package reads its resources (the
+# shortcut recorder in Settings). Swift Build also looks in Contents/Resources: use it where it exists.
+BUILD_SYSTEM=
+if swift build --help 2>/dev/null | grep -q swiftbuild; then
+  BUILD_SYSTEM="--build-system swiftbuild"
+fi
 if [ "$CONFIG" = "release" ]; then
-  swift build -c release --product Lint >&2
-  BIN_DIR=$(swift build -c release --show-bin-path)
+  swift build -c release --product Lint $BUILD_SYSTEM >&2
+  BIN_DIR=$(swift build -c release $BUILD_SYSTEM --show-bin-path)
 else
-  swift build --product Lint >&2
-  BIN_DIR=$(swift build --show-bin-path)
+  swift build --product Lint $BUILD_SYSTEM >&2
+  BIN_DIR=$(swift build $BUILD_SYSTEM --show-bin-path)
 fi
 
 APP="${LINT_DIST_DIR:-$ROOT/dist}/Lint.app"

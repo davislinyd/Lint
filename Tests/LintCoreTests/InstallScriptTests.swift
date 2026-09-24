@@ -94,6 +94,8 @@ final class InstallScriptTests: XCTestCase {
             "fetch-llama-runtime.sh", "sign-llama-runtime.sh", "LlamaRuntime",
             // FoundationModels must stay weak-linked, or Lint stops launching before macOS 26.
             "LC_LOAD_WEAK_DYLIB",
+            // SwiftPM's native build system cannot find Contents/Resources/*.bundle on another Mac.
+            "--build-system swiftbuild",
         ] {
             XCTAssertTrue(text.contains(needle), "package-app.sh lost: \(needle)")
         }
@@ -129,6 +131,8 @@ final class InstallScriptTests: XCTestCase {
             "codesign --verify --deep --strict", "shasum -a 256", "LINT_PREVIEW_BUILD",
             // and the new runtime checks
             "verify_llama_runtime", "verify_app_resources", "LlamaRuntimeManifest.json",
+            // an app built by SwiftPM's native build system crashes on other Macs in Settings
+            "could not load resource bundle: from",
         ] {
             XCTAssertTrue(text.contains(needle), "release.sh lost: \(needle)")
         }

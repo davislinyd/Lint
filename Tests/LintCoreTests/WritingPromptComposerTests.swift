@@ -3,9 +3,9 @@ import XCTest
 
 final class WritingPromptComposerTests: XCTestCase {
     private func compose(
-        _ mode: WritingMode, _ tone: WritingTone = .preserve, custom: String = "", target: String = "日文"
+        _ mode: WritingMode, _ tone: WritingTone = .preserve, custom: String = ""
     ) -> String {
-        WritingPromptComposer.compose(mode: mode, tone: tone, customPrompt: custom, translateTarget: target)
+        WritingPromptComposer.compose(mode: mode, tone: tone, customPrompt: custom)
     }
 
     /// Wording that only the proofreading task may carry: it says to stay in the source language.
@@ -38,6 +38,17 @@ final class WritingPromptComposerTests: XCTestCase {
             for phrase in keepsSourceLanguage {
                 XCTAssertTrue(prompt.contains(phrase), "proofread \(tone) lacks \(phrase)")
             }
+        }
+    }
+
+    func testProofreadEditsTheEnglishOnly() {
+        for tone in WritingTone.allCases {
+            let prompt = compose(.proofread, tone)
+            XCTAssertTrue(prompt.contains("中英夾雜時只修改英文部分，中文一字不改"), "\(tone)")
+            for chinesePolish in ["的／地／得", "精通繁體中文", "中文："] {
+                XCTAssertFalse(prompt.contains(chinesePolish), "\(tone): \(chinesePolish)")
+            }
+            XCTAssertFalse(prompt.hasSuffix("\n"), "\(tone)")
         }
     }
 
@@ -81,15 +92,12 @@ final class WritingPromptComposerTests: XCTestCase {
 
     // MARK: translate
 
-    func testTranslateWritesInTheTargetLanguage() {
+    func testTranslationAlwaysGoesIntoTraditionalChinese() {
         for tone in WritingTone.allCases {
-            let prompt = compose(.translate, tone, target: "日文")
-            XCTAssertTrue(prompt.contains("翻譯成日文"), "\(tone)")
+            let prompt = compose(.translate, tone)
+            XCTAssertTrue(prompt.contains("翻譯成繁體中文"), "\(tone)")
+            XCTAssertTrue(prompt.contains("使用台灣用語與標點習慣"), "\(tone)")
         }
-    }
-
-    func testTranslateFallsBackToTraditionalChinese() {
-        XCTAssertTrue(compose(.translate, target: "  ").contains("翻譯成繁體中文"))
     }
 
     func testTranslateNeverTellsTheModelToKeepTheLanguageItIsTranslatingAwayFrom() {
@@ -136,9 +144,9 @@ final class WritingPromptComposerTests: XCTestCase {
     }
 
     func testAnEmptyCustomPromptIsProofreadingWithThePreservedTone() {
-        let expected = compose(.proofread, .preserve, target: "日文")
-        XCTAssertEqual(compose(.custom, custom: "", target: "日文"), expected)
-        XCTAssertEqual(compose(.custom, .formal, custom: " \n ", target: "日文"), expected)
+        let expected = compose(.proofread, .preserve)
+        XCTAssertEqual(compose(.custom, custom: ""), expected)
+        XCTAssertEqual(compose(.custom, .formal, custom: " \n "), expected)
         XCTAssertEqual(compose(.custom, custom: ""), compose(.custom, custom: ""), "deterministic")
     }
 

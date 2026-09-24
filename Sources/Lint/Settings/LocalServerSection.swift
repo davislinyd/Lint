@@ -23,6 +23,7 @@ struct LocalServerSection: View {
             runtimeSection
             modelSection
             serverSection
+            memorySection
             advancedSection
             maintenanceSection
         }
@@ -90,6 +91,13 @@ struct LocalServerSection: View {
     private var modelSection: some View {
         Section {
             if coordinator.configuration.modelSource == .managed {
+                modelPicker
+                if coordinator.configuration.managedModel.memoryClass == .large {
+                    Label(Self.largeModelWarning, systemImage: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
+                        .font(.callout)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
                 managedModelRows
             } else {
                 LabeledContent("模型") {
@@ -105,6 +113,34 @@ struct LocalServerSection: View {
         } header: {
             Text("模型")
         }
+    }
+
+    static let largeModelWarning = String(localized: "這個模型很大，執行時會佔用大量記憶體；在 16 GB 的 Mac 上可能讓系統變得非常緩慢，甚至當機。記憶體吃緊時請改用 Gemma 4 E4B 或 Apple Intelligence。")
+
+    /// The models Lint can manage, recommended first. Switching is only a choice here: nothing is
+    /// downloaded or deleted until the buttons below are used.
+    @ViewBuilder
+    private var modelPicker: some View {
+        Picker("模型", selection: Bindable(app.settings).localManagedModelID) {
+            ForEach(ModelCatalog.all) { model in
+                Text(pickerLabel(for: model)).tag(model.id)
+            }
+        }
+        .onChange(of: app.settings.localManagedModelID) { _, _ in
+            Task { await coordinator.managedModelChanged() }
+        }
+    }
+
+    private func pickerLabel(for model: ModelDescriptor) -> String {
+        var notes: [String] = []
+        if model.recommended { notes.append(String(localized: "建議")) }
+        if model.memoryClass == .large { notes.append(String(localized: "記憶體用量很高，可能當機")) }
+        if coordinator.installedModelIDs.contains(model.id) {
+            notes.append(String(localized: "已安裝"))
+        } else if let size = model.totalBytes {
+            notes.append(String(localized: "需下載 \(ModelInstallError.formatBytes(size))"))
+        }
+        return "\(model.displayName)（\(notes.joined(separator: "・"))）"
     }
 
     @ViewBuilder
@@ -299,6 +335,36 @@ struct LocalServerSection: View {
         coordinator.runtimeReady && coordinator.modelReady
     }
 
+    // MARK: - Memory
+
+    @ViewBuilder
+    private var memorySection: some View {
+        Section {
+            Picker("閒置後釋放", selection: Bindable(app.settings).localServerIdleSleep) {
+                ForEach(IdleSleepOption.allCases) { option in
+                    Text(idleSleepTitle(option)).tag(option)
+                }
+            }
+            Text("閒置一段時間沒有使用本機 AI 時，Lint 會請 llama-server 釋放模型佔用的記憶體；服務本身仍在執行。下一次的建議會多花幾秒重新載入模型。")
+                .sectionNote()
+        } header: {
+            Text("記憶體")
+        }
+        .onChange(of: app.settings.localServerIdleSleep) { _, _ in
+            serverMessage = String(localized: "按「重新啟動」後新的閒置設定才會生效。")
+        }
+    }
+
+    private func idleSleepTitle(_ option: IdleSleepOption) -> String {
+        switch option {
+        case .never: return String(localized: "永不釋放")
+        case .oneMinute: return String(localized: "1 分鐘")
+        case .fiveMinutes: return String(localized: "5 分鐘")
+        case .tenMinutes: return String(localized: "10 分鐘")
+        case .thirtyMinutes: return String(localized: "30 分鐘")
+        }
+    }
+
     // MARK: - Advanced
 
     @ViewBuilder
@@ -327,7 +393,7 @@ struct LocalServerSection: View {
                 Text("額外參數")
                 CodeEditor(text: Bindable(app.settings).localServerExtraArgs)
                     .frame(minHeight: 56, maxHeight: 96)
-                Text("建議（Apple Silicon 校對）：--jinja --no-skip-chat-parsing -ngl 99 -fa on -c 4096 -np 1 -t 6 --reasoning off。長文可把 -c 改 8192。--reasoning off 會關閉 Gemma 4 的思考，否則每段要等數十秒。服務一律只綁定 127.0.0.1，額外參數裡的 --host 會被忽略。")
+                Text("留空即可：Lint 會依所選模型套用自己的參數（目前為 \(tuningSummary)）。這裡填的參數會覆蓋同一個選項，例如長文可填 -c 8192。服務一律只綁定 127.0.0.1，額外參數裡的 --host 會被忽略。")
                     .sectionNote()
             }
         } header: {
@@ -359,6 +425,17 @@ struct LocalServerSection: View {
                 }
             }
         }
+    }
+
+    /// What Lint would pass llama-server right now, so the override field can be understood
+    /// without guessing. Built from the same code that launches the server.
+    private var tuningSummary: String {
+        let configuration = coordinator.configuration
+        return LlamaServerLaunchPlan.tuningArguments(
+            profile: configuration.runtimeProfile,
+            idleSleepSeconds: configuration.idleSleepSeconds,
+            overriddenBy: []
+        ).joined(separator: " ")
     }
 
     // MARK: - Actions

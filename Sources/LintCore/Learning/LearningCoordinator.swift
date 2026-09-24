@@ -101,14 +101,14 @@ public actor LearningCoordinator {
 
     /// `prompt` with the memories relevant to `text` added at its end, and the memories used.
     /// It comes back untouched while learning is off or nothing is relevant, and also when this
-    /// takes longer than `timeout`: a suggestion must never wait on the learning.
-    /// `translateTarget` only matters in translation, where it says which language is written.
+    /// takes longer than `timeout`: a suggestion must never wait on the learning. An `english`
+    /// prompt gets them worded in English.
     public nonisolated func personalize(
         prompt: String,
         for text: String,
         mode: WritingMode,
         tone: WritingTone = .preserve,
-        translateTarget: String = "",
+        english: Bool = false,
         config: LearningConfig,
         timeout: Duration = .milliseconds(150)
     ) async -> PersonalizedPrompt {
@@ -119,10 +119,11 @@ public actor LearningCoordinator {
                 for: text,
                 mode: mode,
                 tone: tone,
-                outputLanguage: mode == .translate ? TextProfile.languageTag(forTarget: translateTarget) : nil,
+                // Translation only ever writes Traditional Chinese.
+                outputLanguage: mode == .translate ? "zh-Hant" : nil,
                 config: config
             )
-            return PromptComposer.compose(base: prompt, memories: memories)
+            return PromptComposer.compose(base: prompt, memories: memories, english: english)
         }
     }
 

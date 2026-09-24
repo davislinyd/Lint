@@ -24,7 +24,6 @@ final class SettingsStore {
         static let provider = "app.lint.providerKind"
         static let appLanguage = "app.lint.appLanguage"
         static let customPrompt = "app.lint.customPrompt"
-        static let translateTarget = "app.lint.translateTarget"
         static let lastMode = "app.lint.lastMode"
         static let proofreadTone = "app.lint.lastTone.proofread"
         static let translateTone = "app.lint.lastTone.translate"
@@ -43,12 +42,16 @@ final class SettingsStore {
         static let migratedManagedModel = "app.lint.localServer.migratedManagedModel"
         static let migratedOffRetiredDefault = "app.lint.localServer.migratedOffRetiredDefault"
         static let migratedWritingTone = "app.lint.migratedWritingTone"
+        static let migratedWritingEngine = "app.lint.migratedWritingEngine"
         static let localAISetupDeferred = "app.lint.localAI.setupDeferred"
         /// Legacy: the `-hf` spec now lives in `model(.localLlama)`; only read by the migration.
         static let localServerHFModel = "app.lint.localServer.hfModel"
         static let migratedLocalLlama = "app.lint.migratedLocalLlama"
         static let localServerPort = "app.lint.localServer.port"
         static let localServerExtraArgs = "app.lint.localServer.extraArgs"
+        static let localServerIdleSleep = "app.lint.localServer.idleSleepSeconds"
+        static let migratedManagedTuning = "app.lint.localServer.migratedManagedTuning"
+        static let migratedUninstalledDefault = "app.lint.localServer.migratedUninstalledDefault"
         static let systemPromptOverrides = "app.lint.systemPromptOverrides"
         static func url(_ kind: ProviderKind) -> String { "app.lint.url.\(kind.rawValue)" }
         static func model(_ kind: ProviderKind) -> String { "app.lint.model.\(kind.rawValue)" }
@@ -87,9 +90,6 @@ final class SettingsStore {
     /// Empty / missing → built-in default.
     var systemPromptOverrides: [String: String] {
         didSet { defaults.set(systemPromptOverrides, forKey: Keys.systemPromptOverrides) }
-    }
-    var translateTarget: String {
-        didSet { defaults.set(translateTarget, forKey: Keys.translateTarget) }
     }
     var lastMode: WritingMode {
         didSet { defaults.set(lastMode.rawValue, forKey: Keys.lastMode) }
@@ -147,27 +147,29 @@ final class SettingsStore {
     var localServerPort: Int {
         didSet { defaults.set(localServerPort, forKey: Keys.localServerPort) }
     }
+    /// Only what the user typed. Lint's own tuning is not in here any more (see
+    /// `LlamaServerLaunchPlan`); whatever is set here overrides it.
     var localServerExtraArgs: String {
         didSet { defaults.set(localServerExtraArgs, forKey: Keys.localServerExtraArgs) }
     }
+    /// After this long with no suggestion, llama-server releases the model's memory. The process
+    /// stays up; the next suggestion loads the model again.
+    var localServerIdleSleep: IdleSleepOption {
+        didSet { defaults.set(localServerIdleSleep.seconds, forKey: Keys.localServerIdleSleep) }
+    }
 
     static let defaultLocalHFModel = ModelCatalog.recommended.huggingFaceSpec
-    static let defaultLocalServerExtraArgs =
-        // M1/M2 writing assistant: full GPU offload + flash-attn; 4k ctx is enough for
-        // proofreading and keeps KV cache lean (use 8192 if you often edit long docs).
-        // Gemma 4 thinks for tens of seconds before it answers, so thinking is off.
-        "--jinja --no-skip-chat-parsing -ngl 99 -fa on -c 4096 -np 1 -t 6 --reasoning off"
-    /// Earlier defaults. A stored copy of one was never a choice, so it moves to the current default.
-    static let previousDefaultLocalServerExtraArgs = [
-        "--jinja --no-skip-chat-parsing -ngl 99 -fa on -c 8192 -np 1 -t 4",
-        "--jinja --no-skip-chat-parsing -ngl 99 -fa on -c 4096 -np 1 -t 6",
-    ]
     var apiKeyDraft: String = ""
     var hasStoredKey: Bool = false
 
     init(keychain: KeychainStore, defaults: UserDefaults = .standard) {
         self.keychain = keychain
         self.defaults = defaults
+        // First, before any other migration writes a setting: afterwards every install looks old.
+        if !defaults.bool(forKey: Keys.migratedWritingEngine) {
+            Self.migrateToWritingEngine(defaults)
+            defaults.set(true, forKey: Keys.migratedWritingEngine)
+        }
         if !defaults.bool(forKey: Keys.migratedLocalLlama) {
             Self.migrateToLocalLlama(defaults)
             defaults.set(true, forKey: Keys.migratedLocalLlama)
@@ -184,6 +186,14 @@ final class SettingsStore {
             Self.migrateOffRetiredDefault(defaults)
             defaults.set(true, forKey: Keys.migratedOffRetiredDefault)
         }
+        if !defaults.bool(forKey: Keys.migratedUninstalledDefault) {
+            Self.migrateUninstalledPreviousDefault(defaults)
+            defaults.set(true, forKey: Keys.migratedUninstalledDefault)
+        }
+        if !defaults.bool(forKey: Keys.migratedManagedTuning) {
+            Self.migrateToManagedTuning(defaults)
+            defaults.set(true, forKey: Keys.migratedManagedTuning)
+        }
         if !defaults.bool(forKey: Keys.migratedWritingTone) {
             Self.migrateToWritingTone(defaults)
             defaults.set(true, forKey: Keys.migratedWritingTone)
@@ -199,7 +209,6 @@ final class SettingsStore {
         customPrompt = defaults.string(forKey: Keys.customPrompt) ?? ""
         systemPromptOverrides =
             defaults.dictionary(forKey: Keys.systemPromptOverrides) as? [String: String] ?? [:]
-        translateTarget = defaults.string(forKey: Keys.translateTarget) ?? "繁體中文"
         lastMode = LegacyWritingMode.resolve(defaults.string(forKey: Keys.lastMode) ?? "")?.mode ?? .proofread
         tones = WritingToneMemory(
             proofread: WritingTone(rawValue: defaults.string(forKey: Keys.proofreadTone) ?? "") ?? .preserve,
@@ -238,24 +247,34 @@ final class SettingsStore {
         localServerBinaryPath = defaults.string(forKey: Keys.localServerBinaryPath) ?? ""
         localAISetupDeferred = defaults.bool(forKey: Keys.localAISetupDeferred)
         localModelSource = LocalModelSource(rawValue: defaults.string(forKey: Keys.localModelSource) ?? "") ?? .managed
-        localManagedModelID = defaults.string(forKey: Keys.localManagedModelID) ?? ModelCatalog.recommended.id
+        localManagedModelID = ModelCatalog.resolveManagedModelID(defaults.string(forKey: Keys.localManagedModelID))
         if defaults.object(forKey: Keys.localServerPort) == nil {
             localServerPort = 8000
         } else {
             localServerPort = defaults.integer(forKey: Keys.localServerPort)
         }
-        var loadedExtraArgs =
-            defaults.string(forKey: Keys.localServerExtraArgs) ?? Self.defaultLocalServerExtraArgs
-        if Self.previousDefaultLocalServerExtraArgs.contains(loadedExtraArgs) {
-            loadedExtraArgs = Self.defaultLocalServerExtraArgs
-        }
-        localServerExtraArgs = loadedExtraArgs
+        localServerExtraArgs = defaults.string(forKey: Keys.localServerExtraArgs) ?? ""
+        localServerIdleSleep = IdleSleepOption.resolve(
+            defaults.object(forKey: Keys.localServerIdleSleep) == nil
+                ? nil : defaults.integer(forKey: Keys.localServerIdleSleep)
+        )
         baseURLString = defaults.string(forKey: Keys.url(kind)) ?? kind.defaultBaseURL.absoluteString
         model = defaults.string(forKey: Keys.model(kind)) ?? kind.defaultModel
         if kind == .chatgptAccount, model == "auto" || model.isEmpty {
             model = ProviderKind.chatgptAccount.defaultModel
         }
         hasStoredKey = false
+    }
+
+    /// Apple Intelligence and Automatic arrived with this version. Whoever already had a setting keeps
+    /// it; only a new install gets `WritingEngineMigration.newInstallDefault`.
+    private static func migrateToWritingEngine(_ defaults: UserDefaults) {
+        let isNewInstall = !defaults.dictionaryRepresentation().keys.contains { $0.hasPrefix("app.lint.") }
+        if let kind = WritingEngineMigration.migrate(
+            storedProvider: defaults.string(forKey: Keys.provider), isNewInstall: isNewInstall
+        ) {
+            defaults.set(kind.rawValue, forKey: Keys.provider)
+        }
     }
 
     /// Before `.localLlama` existed, "local" meant OpenAI-compatible pointing at our own llama-server port.
@@ -302,6 +321,29 @@ final class SettingsStore {
         defaults.set(LocalModelSource.managed.rawValue, forKey: Keys.localModelSource)
         defaults.set(ModelCatalog.recommended.id, forKey: Keys.localManagedModelID)
         defaults.removeObject(forKey: Keys.model(.localLlama))
+    }
+
+    /// Gemma 4 E4B replaced Gemma 4 12B as the default. An install that never downloaded 12B only had
+    /// it stored as the old default, so it moves to the new one; one that has 12B on disk keeps it
+    /// (see `LocalModelMigration.migrateUninstalledPreviousDefault`). Nothing is downloaded.
+    private static func migrateUninstalledPreviousDefault(_ defaults: UserDefaults) {
+        let source = LocalModelSource(rawValue: defaults.string(forKey: Keys.localModelSource) ?? "") ?? .managed
+        let models = LocalModelManager()
+        if let id = LocalModelMigration.migrateUninstalledPreviousDefault(
+            storedID: defaults.string(forKey: Keys.localManagedModelID),
+            source: source,
+            hasLocalCopy: { models.hasLocalCopy(of: $0) }
+        ) {
+            defaults.set(id, forKey: Keys.localManagedModelID)
+        }
+    }
+
+    /// Lint's tuning used to live in the one "extra arguments" string, which every install has a
+    /// copy of. It now comes from the model's runtime profile, so a stored copy of an old built-in
+    /// default is cleared and a string the user typed is left alone.
+    private static func migrateToManagedTuning(_ defaults: UserDefaults) {
+        let migrated = LocalServerArgumentsMigration.migrate(stored: defaults.string(forKey: Keys.localServerExtraArgs))
+        defaults.set(migrated, forKey: Keys.localServerExtraArgs)
     }
 
     /// Tone used to be three modes of its own. What was stored as one becomes proofreading in that tone,
@@ -360,18 +402,29 @@ final class SettingsStore {
         tones.set(tone, for: mode)
     }
 
-    func defaultSystemPrompt(for mode: WritingMode, tone: WritingTone) -> String {
+    func defaultSystemPrompt(
+        for mode: WritingMode, tone: WritingTone, profile: WritingPromptProfile = .standard
+    ) -> String {
         WritingPromptComposer.compose(
-            mode: mode, tone: tone, customPrompt: customPrompt, translateTarget: translateTarget
+            mode: mode, tone: tone, customPrompt: customPrompt, profile: profile
         )
     }
 
-    func effectiveSystemPrompt(for mode: WritingMode, tone: WritingTone) -> String {
+    /// The prompts the chosen engine gets (see `WritingPromptProfile.for(provider:)`): what the
+    /// prompt settings show and compare an edit against.
+    var promptProfile: WritingPromptProfile {
+        WritingPromptProfile.for(provider: providerKind)
+    }
+
+    /// The user's own override wins whatever the engine: it is their wording of the task.
+    func effectiveSystemPrompt(
+        for mode: WritingMode, tone: WritingTone, profile: WritingPromptProfile = .standard
+    ) -> String {
         if let override = systemPromptOverrides[WritingPromptComposer.overrideKey(mode: mode, tone: tone)] {
             let trimmed = override.trimmingCharacters(in: .whitespacesAndNewlines)
             if !trimmed.isEmpty { return override }
         }
-        return defaultSystemPrompt(for: mode, tone: tone)
+        return defaultSystemPrompt(for: mode, tone: tone, profile: profile)
     }
 
     func isSystemPromptOverridden(for mode: WritingMode, tone: WritingTone) -> Bool {
@@ -384,7 +437,7 @@ final class SettingsStore {
         var copy = systemPromptOverrides
         let key = WritingPromptComposer.overrideKey(mode: mode, tone: tone)
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        let builtIn = defaultSystemPrompt(for: mode, tone: tone)
+        let builtIn = defaultSystemPrompt(for: mode, tone: tone, profile: promptProfile)
         if trimmed.isEmpty || text == builtIn {
             copy.removeValue(forKey: key)
         } else {
@@ -403,9 +456,10 @@ final class SettingsStore {
         LearningConfig(enabled: learningEnabled)
     }
 
-    /// Local llama.cpp provider — Lint launches and talks to its own llama-server.
-    var wantsManagedLocalServer: Bool {
-        providerKind == .localLlama && localServerAutoStart
+    /// Lint launches and talks to its own llama-server for a request that goes to the local llama.cpp
+    /// provider (chosen, or picked by Automatic because Apple Intelligence is unavailable).
+    func wantsManagedLocalServer(for route: WritingEngineRoute) -> Bool {
+        route == .provider(.localLlama) && localServerAutoStart
     }
 
     /// The local server's settings as plain values. The `-hf` spec is the `.localLlama` provider's model field.
@@ -417,9 +471,30 @@ final class SettingsStore {
             managedModel: ModelCatalog.descriptor(id: localManagedModelID) ?? ModelCatalog.recommended,
             huggingFaceSpec: defaults.string(forKey: Keys.model(.localLlama)) ?? Self.defaultLocalHFModel,
             port: localServerPort,
+            idleSleepSeconds: localServerIdleSleep.seconds,
             extraArguments: localServerExtraArgs,
             autoStart: localServerAutoStart
         )
+    }
+
+    /// The configuration for the provider a request was routed to (see `WritingEngineRouter`).
+    func runtimeConfig(for kind: ProviderKind) throws -> LLMRuntimeConfig {
+        switch kind {
+        case .appleIntelligence:
+            // No endpoint, no key, no model name to choose: the system model on this Mac.
+            return LLMRuntimeConfig(kind: kind, baseURL: kind.defaultBaseURL, model: kind.defaultModel, apiKey: "")
+        case providerKind:
+            return try runtimeConfig()
+        case .localLlama:
+            // Automatic, with Apple Intelligence unavailable: Lint's own local AI as it is set up.
+            let model = defaults.string(forKey: Keys.model(.localLlama)) ?? ProviderKind.localLlama.defaultModel
+            return LLMRuntimeConfig(
+                kind: .localLlama, baseURL: URL(string: "http://127.0.0.1:\(localServerPort)/v1")!,
+                model: model, apiKey: ""
+            )
+        default:
+            throw LLMError.unresolvedProvider
+        }
     }
 
     func runtimeConfig() throws -> LLMRuntimeConfig {

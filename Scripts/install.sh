@@ -192,7 +192,7 @@ fi
 cat <<EOF
 
 Done. Lint's first-run screen guides the rest: it asks before downloading the AI model
-(about 7 GB, stored under ~/Library/Application Support/Lint/Models) and then the
+(about 5.2 GB for the default Gemma 4 E4B, stored under ~/Library/Application Support/Lint/Models) and then the
 Accessibility permission.
 
 This is a source build, not the notarized release. If macOS asks for Accessibility again

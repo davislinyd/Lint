@@ -384,22 +384,24 @@ final class ModelInstallTests: XCTestCase {
         XCTAssertEqual(LocalAIPaths.standard(environment: ["LINT_APP_SUPPORT_DIR": "relative"]).root, standard.root, "a relative override is ignored")
     }
 
-    func testTheCatalogEntryIsCompleteAndPinned() throws {
-        let model = ModelCatalog.recommended
+    /// The Gemma 12B entry has to stay exactly as it was: an install that already has the 7 GB file
+    /// on disk keeps using it, so its id, file name, size and hash may never drift. (The properties
+    /// every catalog entry must have are in `ModelCatalogTests`.)
+    func testTheGemma12BEntryIsUnchangedSoExistingInstallsKeepWorking() throws {
+        let model = ModelCatalog.gemma4_12bQATQ4_0
+        XCTAssertEqual(model.id, "gemma-4-12b-it-qat-q4_0")
         XCTAssertEqual(model.files.count, 1, "Gemma 4 12B QAT Q4_0 is a single GGUF")
         XCTAssertEqual(model.totalBytes, 6_975_879_296)
-        for file in model.files {
-            XCTAssertTrue(file.hasSafeFileName)
-            XCTAssertNotNil(file.sha256?.range(of: "^[0-9a-f]{64}$", options: .regularExpression))
-            XCTAssertTrue(file.url.absoluteString.hasPrefix("https://huggingface.co/\(model.repository)/resolve/\(model.revision)/"),
-                          "URLs are pinned to the revision the hashes come from")
-        }
         XCTAssertEqual(model.primaryFile.fileName, "gemma-4-12b-it-qat-q4_0.gguf")
+        XCTAssertEqual(model.primaryFile.sha256, "93567e57a8fe10b23569b9d9ec38cd005deedf71e29477c421a4b83f418a538b")
+        XCTAssertEqual(model.revision, "29d097773436b69ff9feafd636ab4cf873786537")
         XCTAssertEqual(ModelCatalog.descriptor(id: model.id), model)
         XCTAssertEqual(ModelCatalog.descriptor(matchingHuggingFaceSpec: " Google/Gemma-4-12B-IT-QAT-Q4_0-GGUF\n"), model)
-        XCTAssertNil(ModelCatalog.descriptor(id: "qwen2.5-7b-instruct-q4_k_m"), "the Qwen entry is retired")
-        XCTAssertNil(ModelCatalog.descriptor(matchingHuggingFaceSpec: "someone/else:q4"))
-        XCTAssertEqual(ProviderKind.localLlama.defaultModel, model.huggingFaceSpec, "the old default setting maps onto the catalog entry")
+        XCTAssertNil(ModelCatalog.descriptor(id: "qwen2.5-7b-instruct-q4_k_m"), "the Qwen 2.5 entry is retired")
+        XCTAssertEqual(
+            ProviderKind.localLlama.defaultModel, ModelCatalog.recommended.huggingFaceSpec,
+            "the model field a fresh install sends names the recommended model"
+        )
     }
 
     func testAnExistingHuggingFaceCacheIsRecognised() throws {

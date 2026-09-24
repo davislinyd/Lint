@@ -18,15 +18,22 @@ public struct OpenAICompatibleProvider: LLMProvider {
         self.session = session
     }
 
+    /// A local llama-server may have released the model's memory while idle, and loads it again
+    /// before the first token arrives — seconds for a small model, longer for a large one on a busy
+    /// Mac. That silence must not be read as a dead connection, so the loopback provider waits.
+    public static let localRequestTimeout: TimeInterval = 300
+
     public static func makeURLRequest(
         baseURL: URL,
         apiKey: String,
-        request: ChatRequest
+        request: ChatRequest,
+        timeout: TimeInterval? = nil
     ) throws -> URLRequest {
         guard let url = joiningPath(baseURL, "/chat/completions") else {
             throw LLMError.invalidURL
         }
         var urlRequest = URLRequest(url: url)
+        if let timeout { urlRequest.timeoutInterval = timeout }
         urlRequest.httpMethod = "POST"
         urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
         if !apiKey.isEmpty {
@@ -59,7 +66,8 @@ public struct OpenAICompatibleProvider: LLMProvider {
                     let urlRequest = try Self.makeURLRequest(
                         baseURL: baseURL,
                         apiKey: apiKey,
-                        request: request
+                        request: request,
+                        timeout: id == .localLlama ? Self.localRequestTimeout : nil
                     )
                     for try await payload in HTTPStream.ssePayloads(session: session, request: urlRequest) {
                         if let event = OpenAIStreamDelta.event(fromPayload: payload) {

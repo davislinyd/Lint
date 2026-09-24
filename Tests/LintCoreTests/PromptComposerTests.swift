@@ -29,6 +29,20 @@ final class PromptComposerTests: XCTestCase {
         XCTAssertEqual(result.systemPrompt.components(separatedBy: PromptComposer.header).count, 2, "one header")
     }
 
+    func testAnEnglishPromptGetsTheMemoriesInEnglish() {
+        let learned = memory(MemoryWording.misspelling(wrong: "recieve", right: "receive").chinese)
+        let own = memory("寫信給客戶時用 Hi 開頭。")
+        let result = PromptComposer.compose(base: "BASE", memories: [learned, own], english: true)
+        XCTAssertEqual(result.systemPrompt, [
+            "BASE", "", PromptComposer.englishHeader,
+            "1. " + MemoryWording.misspelling(wrong: "recieve", right: "receive").english,
+            "2. 寫信給客戶時用 Hi 開頭。",
+        ].joined(separator: "\n"), "Lint's own wording is translated; the user's own text is used as written")
+        XCTAssertFalse(PromptComposer.englishHeader.unicodeScalars.contains(where: TextScript.isHan))
+        XCTAssertEqual(result.usedMemoryIDs, [learned.id, own.id])
+        XCTAssertEqual(PromptComposer.compose(base: "BASE", memories: [], english: true).systemPrompt, "BASE")
+    }
+
     func testAtMostFiveMemoriesGoIn() {
         let memories = (0..<8).map { memory("rule \($0)") }
         let result = PromptComposer.compose(base: base, memories: memories)

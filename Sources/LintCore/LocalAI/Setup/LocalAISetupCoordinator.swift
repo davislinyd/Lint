@@ -49,6 +49,9 @@ public final class LocalAISetupCoordinator {
     /// Bytes of an unfinished download that a retry would continue from.
     public private(set) var partialBytes: Int64 = 0
     public private(set) var downloadState: ModelDownloadState = .idle
+    /// Every catalog model that is completely installed, so the picker can say which of the others
+    /// would need a download. Switching back to one of these never downloads anything again.
+    public private(set) var installedModelIDs: Set<String> = []
     public private(set) var serverStatus: LocalServerStatus = .stopped
     public private(set) var serverLogTail = ""
     public private(set) var accessibilityTrusted: Bool
@@ -129,6 +132,15 @@ public final class LocalAISetupCoordinator {
         }.value
         model = models.status(of: configuration.managedModel)
         partialBytes = models.partialDownloadBytes(of: configuration.managedModel)
+        var candidates = ModelCatalog.all
+        if !candidates.contains(where: { $0.id == configuration.managedModel.id }) {
+            candidates.append(configuration.managedModel)
+        }
+        installedModelIDs = Set(candidates.filter {
+            if $0.id == configuration.managedModel.id, case .installed = model { return true }
+            if case .installed = models.status(of: $0) { return true }
+            return false
+        }.map(\.id))
         await server.refreshStatus(port: configuration.port)
         serverStatus = server.status
         serverLogTail = server.logTail
@@ -170,6 +182,22 @@ public final class LocalAISetupCoordinator {
         downloadState = final
         await refresh()
         if case .installed = final, configuration.autoStart, state == .serverStopped {
+            try? await startServer() // a failure is reflected in `state`
+        }
+    }
+
+    /// Called after the selected managed model changed. The running server is loaded with the old
+    /// model, so it is stopped; nothing is deleted and a model that is already installed is never
+    /// downloaded again. The new model starts when it is ready and auto-start is on.
+    public func managedModelChanged() async {
+        cancelInstall()
+        await installTask?.value
+        if downloadState.isActive || downloadState == .cancelled || downloadState == .installed {
+            downloadState = .idle
+        }
+        server.stopIfStartedByUs()
+        await refresh()
+        if configuration.autoStart, state == .serverStopped {
             try? await startServer() // a failure is reflected in `state`
         }
     }
@@ -227,6 +255,18 @@ public final class LocalAISetupCoordinator {
         try? await Task.sleep(for: settleDelay)
         await refresh()
         return message
+    }
+
+    /// Apple Intelligence is taking the requests, so a llama-server Lint started only holds memory the
+    /// system model may need. Seen once on a 16 GB Mac under memory pressure: while Lint's llama-server
+    /// held Gemma 4 E4B, Apple's model reported a context size of 0 and failed every request, and it
+    /// recovered about a minute after llama-server released the model. A second attempt with the
+    /// model resident did not fail, so that is not proven to be the cause; the memory is freed either
+    /// way. A server Lint did not start is left alone.
+    public func releaseForAppleIntelligence() {
+        guard case .running(_, managedByLint: true) = serverStatus else { return }
+        server.stopIfStartedByUs()
+        serverStatus = server.status
     }
 
     /// Called when the app quits.

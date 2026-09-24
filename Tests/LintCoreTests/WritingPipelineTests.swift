@@ -191,8 +191,8 @@ final class WritingPipelineTests: XCTestCase {
         XCTAssertEqual(result.text, "")
     }
 
-    /// Cancels the task running it while the first piece is written. A function of its own: Swift 6.3's
-    /// region checker cannot check `run`'s `#isolation` default inside a `Task` closure.
+    /// Cancels the task running it while the first piece is written. Called by its type's name from a
+    /// `Task`: Swift 6.3's region checker rejects a `Task` closure of this test that uses `Self`.
     private static func runCancellingDuringTheFirstPiece(_ text: String, _ model: FakeModel) async throws -> WritingPipelineResult {
         try await WritingPipeline.run(
             source: text, mode: .proofread, tone: .preserve, systemPrompt: "P", budget: smallBudget
@@ -205,7 +205,7 @@ final class WritingPipelineTests: XCTestCase {
     func testCancellationStopsBeforeTheNextPiece() async throws {
         let text = ["first", "second", "third"].map(Self.paragraph).joined(separator: "\n\n")
         let model = FakeModel { _, piece in piece }
-        let task = Task { try await Self.runCancellingDuringTheFirstPiece(text, model) }
+        let task = Task { try await WritingPipelineTests.runCancellingDuringTheFirstPiece(text, model) }
         do {
             _ = try await task.value
             XCTFail("expected cancellation")

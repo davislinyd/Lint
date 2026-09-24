@@ -46,10 +46,14 @@ enum AppleOnDeviceModel {
             let session = LanguageModelSession(model: model, instructions: request.systemPrompt)
             // Greedy: the same text gets the same suggestion, and proofreading has no use for variety.
             // A cap only when the caller asked for less than the whole context.
-            let options = GenerationOptions(
-                samplingMode: .greedy,
-                maximumResponseTokens: request.maxTokens < model.contextSize ? request.maxTokens : nil
-            )
+            let cap = request.maxTokens < model.contextSize ? request.maxTokens : nil
+            // The macOS 27 SDK renamed `sampling:` to `samplingMode:` (and deprecated the old name);
+            // the macOS 26 SDK, which CI builds with, has only `sampling:`. Same call either way.
+            #if compiler(>=6.4)
+            let options = GenerationOptions(samplingMode: .greedy, maximumResponseTokens: cap)
+            #else
+            let options = GenerationOptions(sampling: .greedy, maximumResponseTokens: cap)
+            #endif
             let response = try await session.respond(to: request.userText, options: options)
             return (response.content, usage(of: response))
         }

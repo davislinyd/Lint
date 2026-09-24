@@ -64,9 +64,22 @@ final class MemoryRetrieverTests: XCTestCase {
     }
 
     func testAChineseTriggerMatchesAsASubstring() {
+        // A translation's (a proofread is never reminded of Chinese).
         let memories = [memory("軟件", kind: .terminology, language: "zh-Hant", triggers: ["軟件"])]
-        XCTAssertEqual(keys(memories, "這個軟件需要更新"), ["軟件"])
-        XCTAssertEqual(keys(memories, "這個軟體需要更新"), [])
+        XCTAssertEqual(keys(memories, "這個軟件需要更新", mode: .translate), ["軟件"])
+        XCTAssertEqual(keys(memories, "這個軟體需要更新", mode: .translate), [])
+    }
+
+    func testAProofreadIsNeverRemindedOfChinese() {
+        // Lint edits English only; a Chinese term still serves a translation, which writes Chinese.
+        let memories = [
+            memory("軟件", kind: .terminology, language: "zh-Hant", triggers: ["軟件"]),
+            memory("recieve", kind: .spelling, triggers: ["recieve"]),
+        ]
+        let mixed = "請先 recieve 這個軟件再說"
+        XCTAssertEqual(keys(memories, mixed), ["recieve"])
+        XCTAssertEqual(keys(memories, mixed, tone: .formal), ["recieve"])
+        XCTAssertEqual(keys(memories, "Install the 軟件 first.", mode: .translate, outputLanguage: "zh-Hant"), ["軟件"])
     }
 
     func testAnApostropheMatchesWhicheverWayItIsWritten() {
@@ -82,7 +95,7 @@ final class MemoryRetrieverTests: XCTestCase {
         let memories = [memory("prospective", kind: .spelling, triggers: ["prospective"])]
         XCTAssertEqual(keys(memories, "prospective"), ["prospective"])
         let chinese = [memory("軟件", language: "zh-Hant", triggers: ["軟件"])]
-        XCTAssertEqual(keys(chinese, "the word 軟件 in an English sentence"), ["軟件"])
+        XCTAssertEqual(keys(chinese, "the word 軟件 in an English sentence", mode: .translate), ["軟件"])
         XCTAssertEqual(keys([memory("x", language: "zh-Hant", triggers: ["abc"])], "abc abc abc"), [])
     }
 

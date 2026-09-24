@@ -405,13 +405,13 @@ final class FloatingPanelViewModel {
     /// while learning is off. The lookup runs off the main actor and is cut short rather than let
     /// it hold a suggestion back.
     private func personalize(
-        _ prompt: String, for text: String, mode: WritingMode, tone: WritingTone
+        _ prompt: String, for text: String, mode: WritingMode, tone: WritingTone, english: Bool
     ) async -> PersonalizedPrompt {
         guard settings.learningEnabled else {
             return PersonalizedPrompt(systemPrompt: prompt, usedMemoryIDs: [])
         }
         return await learning.personalize(
-            prompt: prompt, for: text, mode: mode, tone: tone, config: settings.learningConfig
+            prompt: prompt, for: text, mode: mode, tone: tone, english: english, config: settings.learningConfig
         )
     }
 
@@ -529,7 +529,9 @@ final class FloatingPanelViewModel {
             let onDevice = route == .appleIntelligence
             let profile = WritingPromptProfile.for(provider: kind)
             let basePrompt = prompts.prompt(for: profile)
-            let personalized = await personalize(basePrompt, for: result.text, mode: key.mode, tone: key.tone)
+            let personalized = await personalize(
+                basePrompt, for: result.text, mode: key.mode, tone: key.tone, english: profile.isEnglish
+            )
             // More typing cancels this prefetch; do not send the model a request for stale text.
             if Task.isCancelled { return }
             prefetchUsedMemoryIDs = personalized.usedMemoryIDs
@@ -858,7 +860,9 @@ final class FloatingPanelViewModel {
             } else {
                 systemPrompt = settings.effectiveSystemPrompt(for: generationMode, tone: generationTone)
             }
-            let personalized = await personalize(systemPrompt, for: generationSource, mode: generationMode, tone: generationTone)
+            let personalized = await personalize(
+                systemPrompt, for: generationSource, mode: generationMode, tone: generationTone, english: profile.isEnglish
+            )
             if Task.isCancelled { return }
             usedMemoryIDs = personalized.usedMemoryIDs
             if onDevice {

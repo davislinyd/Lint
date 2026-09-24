@@ -86,7 +86,21 @@ struct WritingEvalRun: Codable {
 /// check and single retry, one fresh session per request and greedy sampling; llama gets the English
 /// prompts with the language line, temperature 0.3 and no guard. `LINT_EVAL_GUARD=0|1` overrides the
 /// guard, `LINT_EVAL_TEMPERATURE` the temperature, `LINT_EVAL_PROFILE=standard` the prompts.
+/// `LINT_EVAL_REMINDERS=zh|en` adds what a user with two learned habits gets (articles, prepositions
+/// after verbs), picked by the app's retriever and worded in Chinese or in English.
 final class WritingEvalRunTests: XCTestCase {
+    /// Two habits as Lint words them when it learns them: general, so they go with every English text.
+    static let learnedHabits: [WritingMemory] = [
+        ("grammar:en:articles", MemoryWording.articles),
+        ("grammar:en:family:redundant-preposition", MemoryWording.redundantPrepositions),
+    ].map { key, wording in
+        WritingMemory(
+            id: UUID(), dedupKey: key, kind: .grammar, language: "en", modeScope: nil, triggers: [],
+            instruction: wording.chinese, evidenceScore: 2, occurrenceCount: 5, state: .active, userEdited: false,
+            createdAt: Date(), lastConfirmedAt: Date()
+        )
+    }
+
     func testRunEveryFixtureThroughOneEngine() async throws {
         let environment = ProcessInfo.processInfo.environment
         try XCTSkipUnless(environment["LINT_EVAL"] == "1", "set LINT_EVAL=1 (see the class comment)")
@@ -97,6 +111,7 @@ final class WritingEvalRunTests: XCTestCase {
         let only = environment["LINT_EVAL_ONLY"].map { Set($0.split(separator: ",").map(String.init)) }
         // The app sends llama-server 0.3; LINT_EVAL_TEMPERATURE tries another (0 = greedy).
         let temperature = environment["LINT_EVAL_TEMPERATURE"].flatMap(Double.init) ?? 0.3
+        let reminders = environment["LINT_EVAL_REMINDERS"]
 
         let provider: any LLMProvider
         let model: String
@@ -147,7 +162,13 @@ final class WritingEvalRunTests: XCTestCase {
                 return output
             }
 
-            let systemPrompt = testCase.systemPrompt(profile: profile)
+            var systemPrompt = testCase.systemPrompt(profile: profile)
+            if let reminders {
+                let habits = MemoryRetriever(memories: Self.learnedHabits).select(for: MemoryRetriever.Query(
+                    text: testCase.input, mode: mode, tone: tone, outputLanguage: mode == .translate ? "zh-Hant" : nil
+                ))
+                systemPrompt = PromptComposer.compose(base: systemPrompt, memories: habits, english: reminders == "en").systemPrompt
+            }
             let started = Date()
             var output = ""
             var first: String?
@@ -195,12 +216,14 @@ final class WritingEvalRunTests: XCTestCase {
             print("[eval] \(testCase.id) \(String(format: "%.2f", Date().timeIntervalSince(started)))s \(outcome) \(failures.map(\.check))")
         }
 
+        let promptVersion = [profile.isEnglish ? metadata.promptVersion : nil, reminders.map { "reminders-\($0)" }]
+            .compactMap { $0 }.joined(separator: "+")
         let run = WritingEvalRun(
             label: label, startedAt: Date(),
             environment: WritingEvalEnvironment(
                 engine: engine, model: model, osVersion: metadata.osVersion, appVersion: Self.appVersion,
                 promptProfile: profile.isEnglish ? "english (\(onDevice ? "apple" : "local"))" : "standard",
-                promptVersion: profile.isEnglish ? metadata.promptVersion : nil,
+                promptVersion: promptVersion.isEmpty ? nil : promptVersion,
                 appleVariant: onDevice ? metadata.variant : nil,
                 contextSize: onDevice ? metadata.contextSize : nil,
                 guarded: guarded, temperature: onDevice ? nil : temperature, hardware: Self.hardware

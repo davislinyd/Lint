@@ -48,6 +48,24 @@ final class EnglishPromptTests: XCTestCase {
         }
     }
 
+    func testNoEditingPromptAsksForChineseCorrections() {
+        // Lint edits English only: no rule about correcting Chinese, and an example never changes the
+        // Chinese of its text. Translation keeps its Taiwan wording examples; it writes Chinese.
+        func han(_ line: Substring) -> String { String(line.unicodeScalars.filter(TextScript.isHan).map(Character.init)) }
+        for reader in [EnglishPromptReader.appleOnDevice, .localModel] {
+            for tone in WritingTone.allCases {
+                let prompt = compose(.proofread, tone, profile: .english(reader))
+                XCTAssertFalse(prompt.contains("In Chinese text"), "\(reader) \(tone)")
+                XCTAssertFalse(prompt.contains("mainland"), "\(reader) \(tone)")
+                let lines = prompt.split(separator: "\n")
+                for (index, line) in lines.enumerated() where line.hasPrefix("Text: ") {
+                    XCTAssertEqual(han(line), han(lines[index + 1]), "\(reader) \(tone): \(line)")
+                }
+            }
+        }
+        XCTAssertTrue(compose(.proofread, .preserve).contains("他解釋的很清楚"), "one example is mixed text")
+    }
+
     func testPreserveProofreadingIsAMinimalCorrection() {
         let prompt = compose(.proofread, .preserve)
         for phrase in [
@@ -59,7 +77,7 @@ final class EnglishPromptTests: XCTestCase {
         ] {
             XCTAssertTrue(prompt.replacingOccurrences(of: "\n", with: " ").contains(phrase.replacingOccurrences(of: "\n", with: " ")), phrase)
         }
-        XCTAssertEqual(WritingPromptComposer.englishPromptVersion, "english-9")
+        XCTAssertEqual(WritingPromptComposer.englishPromptVersion, "english-11")
     }
 
     func testToneStaysAModifierOfProofreading() {
@@ -123,6 +141,10 @@ final class EnglishPromptTests: XCTestCase {
         XCTAssertEqual(
             WritingPromptComposer.withLanguageLine("P", for: "Thanks for the update.", mode: .proofread),
             "P\nThe text is in English: answer in English, do not translate it."
+        )
+        XCTAssertEqual(
+            WritingPromptComposer.withLanguageLine("P", for: "這個 PR 我 review 過了，有幾個 edge case 還沒 handle", mode: .proofread),
+            "P\nThe text mixes Chinese and English: change only the English; leave the Chinese exactly as written, and do not translate either part."
         )
         XCTAssertEqual(WritingPromptComposer.withLanguageLine("P", for: "Thanks for the update.", mode: .translate), "P")
         XCTAssertEqual(WritingPromptComposer.withLanguageLine("P", for: "Thanks for the update.", mode: .custom), "P")

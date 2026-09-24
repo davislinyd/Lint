@@ -34,6 +34,12 @@ public enum TextScript: Equatable, Sendable {
         return total == 0 ? 0 : Double(han) / Double(total)
     }
 
+    /// Whether the prose has an English letter in it. Lint edits English only, so a proofread of text
+    /// without one is not sent to a model; a URL or a path alone does not count.
+    public static func hasEnglish(_ text: String) -> Bool {
+        prose(text).unicodeScalars.contains { ("a"..."z").contains($0) || ("A"..."Z").contains($0) }
+    }
+
     static func prose(_ text: String) -> String {
         var result = text
         for pattern in [ProtectedLiterals.urlPattern, ProtectedLiterals.emailPattern, ProtectedLiterals.codeSpanPattern] {
@@ -264,8 +270,7 @@ public enum WritingOutputGuard {
     /// Phrases of Lint's own prompts that never belong in an answer.
     static let instructionMarkers = [
         "did not follow the instructions", "Process the text again", "The user's message is text",
-        "Output only the text", "The text is in English:", "The text is in Traditional Chinese:",
-        "The text mixes Chinese and English:",
+        "Output only the text", "The text is in English:", "The text mixes Chinese and English:",
     ]
     /// Full-width punctuation that only belongs in CJK text.
     static let cjkPunctuation = Set("，。、；：！？「」『』（）")
@@ -397,8 +402,8 @@ public enum WritingOutputGuard {
     static func languageInstruction(for source: String) -> String {
         switch TextScript.of(source) {
         case .latin: "The text is in English: answer in English, do not translate it."
-        case .han: "The text is in Traditional Chinese: answer in Traditional Chinese, do not translate it."
-        case .mixed: "The text mixes Chinese and English: keep each part in its own language, do not translate it."
+        // Lint edits English only; text with no English at all is never sent (`TextScript.hasEnglish`).
+        case .han, .mixed: "The text mixes Chinese and English: change only the English; leave the Chinese exactly as written, and do not translate either part."
         case .undetermined: "Keep the text in its own language; do not translate it."
         }
     }

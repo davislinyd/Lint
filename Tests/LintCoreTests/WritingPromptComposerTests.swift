@@ -41,6 +41,17 @@ final class WritingPromptComposerTests: XCTestCase {
         }
     }
 
+    func testProofreadEditsTheEnglishOnly() {
+        for tone in WritingTone.allCases {
+            let prompt = compose(.proofread, tone)
+            XCTAssertTrue(prompt.contains("中英夾雜時只修改英文部分，中文一字不改"), "\(tone)")
+            for chinesePolish in ["的／地／得", "精通繁體中文", "中文："] {
+                XCTAssertFalse(prompt.contains(chinesePolish), "\(tone): \(chinesePolish)")
+            }
+            XCTAssertFalse(prompt.hasSuffix("\n"), "\(tone)")
+        }
+    }
+
     func testProofreadPreserveKeepsTheOriginalTone() {
         let prompt = compose(.proofread, .preserve)
         XCTAssertTrue(prompt.contains("保留原語氣"))

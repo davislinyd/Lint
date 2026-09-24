@@ -1,6 +1,6 @@
 {
-  "version": 5,
-  "about": "Lint's own writing fixtures: English proofreading and tone rewrites, and English-to-Traditional-Chinese translation for reference. Every sentence was written for this repository; nothing is taken from a benchmark corpus. They exist to compare engines on Lint's actual workload, not to score a model in general.",
+  "version": 6,
+  "about": "Lint's own writing fixtures: English proofreading and tone rewrites (also the English inside mixed Chinese-English text, whose Chinese is left alone), and English-to-Traditional-Chinese translation for reference. Every sentence was written for this repository; nothing is taken from a benchmark corpus. They exist to compare engines on Lint's actual workload, not to score a model in general.",
   "cases": [
     {
       "id": "en-grammar-01",
@@ -1306,6 +1306,77 @@
         "used to work late"
       ],
       "note": "\"is used to working late\". Held out: never used to tune a prompt."
+    },
+    {
+      "id": "mix-01",
+      "category": "mixed-english",
+      "mode": "proofread",
+      "tone": "preserve",
+      "input": "這個 bug 會讓 app crashed，我明天在 fix 它。",
+      "outputLanguage": "mixed",
+      "mustFix": [
+        "app crashed"
+      ],
+      "mustPreserve": [
+        "我明天在 fix"
+      ],
+      "note": "\"會讓 app crash\". The Chinese is left exactly as written, its slip included: Lint edits English only."
+    },
+    {
+      "id": "mix-02",
+      "category": "mixed-english",
+      "mode": "proofread",
+      "tone": "preserve",
+      "input": "客戶說 the report are missing 兩頁，請把軟件更新後再寄一次。",
+      "outputLanguage": "mixed",
+      "mustFix": [
+        "report are"
+      ],
+      "mustPreserve": [
+        "兩頁",
+        "請把軟件更新後再寄一次"
+      ],
+      "note": "\"the report is missing\". The Chinese is left exactly as written, its slip included: Lint edits English only."
+    },
+    {
+      "id": "mix-03",
+      "category": "mixed-english",
+      "mode": "proofread",
+      "tone": "preserve",
+      "input": "我已經 sended the invoice 給財務，請他們確認一下數據。",
+      "outputLanguage": "mixed",
+      "mustFix": [
+        "sended"
+      ],
+      "mustPreserve": [
+        "給財務，請他們確認一下數據"
+      ],
+      "note": "\"sent the invoice\". The Chinese is left exactly as written, its slip included: Lint edits English only."
+    },
+    {
+      "id": "mix-04",
+      "category": "mixed-english",
+      "mode": "proofread",
+      "tone": "preserve",
+      "input": "明天的 meeting 他說 he don't agree 新的設置流程。",
+      "outputLanguage": "mixed",
+      "mustFix": [
+        "he don't"
+      ],
+      "mustPreserve": [
+        "新的設置流程"
+      ],
+      "note": "\"he doesn't agree\". The Chinese is left exactly as written, its slip included: Lint edits English only."
+    },
+    {
+      "id": "mix-05",
+      "category": "mixed-english",
+      "mode": "proofread",
+      "tone": "preserve",
+      "input": "這個 PR 我 review 過了，有幾個 edge case 還沒 handle。",
+      "outputLanguage": "mixed",
+      "expectUnchanged": true,
+      "note": "Already correct: casual code-switching, nothing in English to fix and the Chinese is left alone."
     }
   ]
 }

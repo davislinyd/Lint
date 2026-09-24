@@ -73,6 +73,14 @@ final class WritingOutputGuardTests: XCTestCase {
         XCTAssertEqual(TextScript.of("ok"), .undetermined)
     }
 
+    func testOnlyEnglishInTheProseCountsAsEnglish() {
+        XCTAssertTrue(TextScript.hasEnglish("Thanks for the update."))
+        XCTAssertTrue(TextScript.hasEnglish("這個 bug 很怪"))
+        XCTAssertFalse(TextScript.hasEnglish("報告已經寄給客戶，對方確認收到了。"))
+        XCTAssertFalse(TextScript.hasEnglish("請看 https://example.com/ops 和 /etc/lint/config.yaml"), "a URL or a path is not English")
+        XCTAssertFalse(TextScript.hasEnglish("12:30"))
+    }
+
     func testTheEditRatioCountsWordsHanCharactersAndPunctuation() {
         XCTAssertEqual(EditRatio.tokens("I'm fine, 謝謝!"), ["I'm", "fine", ",", "謝", "謝", "!"])
         XCTAssertEqual(EditRatio.between("same text", "same text"), 0)

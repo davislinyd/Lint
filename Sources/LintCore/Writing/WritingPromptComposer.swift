@@ -13,10 +13,13 @@ public enum WritingPromptComposer {
         mode: WritingMode,
         tone: WritingTone,
         customPrompt: String,
-        profile: WritingPromptProfile = .standard
+        profile: WritingPromptProfile = .standard,
+        translationLanguage: TranslationLanguage = .traditionalChinese
     ) -> String {
         if case .english(let reader) = profile {
-            return EnglishWritingPrompts.compose(mode: mode, tone: tone, customPrompt: customPrompt, reader: reader)
+            return EnglishWritingPrompts.compose(
+                mode: mode, tone: tone, customPrompt: customPrompt, reader: reader, translationLanguage: translationLanguage
+            )
         }
         switch mode {
         case .proofread:
@@ -28,7 +31,7 @@ public enum WritingPromptComposer {
             ].joined(separator: "\n\n")
         case .translate:
             return [
-                translateTask,
+                translateTask(into: translationLanguage),
                 priority,
                 toneInstruction(tone, for: .translate),
                 numbered(commonRules),
@@ -131,10 +134,10 @@ public enum WritingPromptComposer {
         return lines.joined(separator: "\n")
     }
 
-    /// Translation only ever goes into Traditional Chinese: it is there to help read English, and
-    /// Lint does not translate into English.
-    private static var translateTask: String {
-        let language = "繁體中文"
+    /// Translation only ever goes from English into `TranslationLanguage`: it is there to help read
+    /// English, and Lint does not translate into English.
+    private static func translateTask(into translationLanguage: TranslationLanguage) -> String {
+        let language = translationLanguage.chineseName
         return """
             你是專業翻譯。把使用者文字翻譯成\(language)。
 

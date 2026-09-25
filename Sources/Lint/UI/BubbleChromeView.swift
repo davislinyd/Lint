@@ -1,4 +1,5 @@
 import AppKit
+import LintCore
 import SwiftUI
 
 /// AppKit chrome for the compact suggestion bubble.
@@ -222,7 +223,7 @@ final class BubbleChromeView: NSView {
             translationLabel.stringValue = String(localized: "翻譯中…")
         } else if !viewModel.translationText.isEmpty {
             translationLabel.isHidden = false
-            translationLabel.stringValue = String(localized: "中文：") + viewModel.translationText
+            translationLabel.stringValue = viewModel.translationLanguage.glossLabel + viewModel.translationText
         } else {
             translationLabel.isHidden = true
             translationLabel.stringValue = ""
@@ -269,7 +270,7 @@ final class BubbleChromeView: NSView {
         let translation: String = {
             if viewModel.isTranslating && viewModel.translationText.isEmpty { return String(localized: "翻譯中…") }
             if viewModel.translationText.isEmpty { return "" }
-            return String(localized: "中文：") + viewModel.translationText
+            return viewModel.translationLanguage.glossLabel + viewModel.translationText
         }()
 
         let bodyFont = NSFont.systemFont(ofSize: 14)
@@ -361,4 +362,20 @@ final class BubbleChromeView: NSView {
     }
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+}
+
+private extension TranslationLanguage {
+    /// Put before the reading aid under a suggestion.
+    var glossLabel: String {
+        switch self {
+        case .indonesian: String(localized: "印尼文：")
+        case .japanese: String(localized: "日文：")
+        case .korean: String(localized: "韓文：")
+        case .portuguese: String(localized: "葡萄牙文：")
+        case .simplifiedChinese: String(localized: "簡體中文：")
+        case .thai: String(localized: "泰文：")
+        case .traditionalChinese: String(localized: "中文：")
+        case .vietnamese: String(localized: "越南文：")
+        }
+    }
 }

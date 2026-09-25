@@ -1,0 +1,3 @@
+/* Thai Info.plist strings. Keys are Info.plist keys; the base values in Info.plist are zh-Hant. */
+
+"NSAppleEventsUsageDescription" = "Lint ใช้ System Events เพื่อนำแอปที่คุณใช้อยู่ก่อนหน้ากลับมาไว้ด้านหน้าก่อนแทนที่ข้อความ";

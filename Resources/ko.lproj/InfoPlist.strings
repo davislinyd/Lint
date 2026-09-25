@@ -1,0 +1,3 @@
+/* Korean Info.plist strings. Keys are Info.plist keys; the base values in Info.plist are zh-Hant. */
+
+"NSAppleEventsUsageDescription" = "Lint는 텍스트를 대치하기 전에 이전 앱을 다시 맨 앞으로 가져오기 위해 System Events를 사용합니다.";

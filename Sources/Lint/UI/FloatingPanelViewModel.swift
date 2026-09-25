@@ -8,8 +8,10 @@ import Observation
 final class FloatingPanelViewModel {
     var originalText = ""
     var resultText = ""
-    /// Traditional Chinese gloss of `resultText` (bubble helper).
+    /// Gloss of `resultText` in `translationLanguage` (bubble helper).
     var translationText = ""
+    /// The language `translationText` is in.
+    private(set) var translationLanguage: TranslationLanguage = .traditionalChinese
     var isTranslating = false { didSet { reportInteractiveActivity() } }
     var isStreaming = false { didSet { reportInteractiveActivity() } }
     var errorMessage: String? {
@@ -67,6 +69,8 @@ final class FloatingPanelViewModel {
         let usedMemoryIDs: [UUID]
         /// The engine that wrote it (Automatic resolved), as recorded with feedback.
         let provider: ProviderKind
+        /// What a translation was written in; nil for the other tasks.
+        let translationLanguage: TranslationLanguage?
     }
     private var generated: GeneratedSuggestion?
 
@@ -84,9 +88,9 @@ final class FloatingPanelViewModel {
     private var prefetchNote: String?
     private var prefetchIsSuggestion = true
     private var prefetchAttachedToUI = false
-    /// zh-TW gloss of the finished prefetch, fetched in the background so the bubble opens complete.
+    /// Gloss of the finished prefetch, fetched in the background so the bubble opens complete.
     private var prefetchTranslationTask: Task<Void, Never>?
-    private var prefetchTranslation: String?
+    private var prefetchTranslation: (language: TranslationLanguage, text: String)?
     private(set) var isPrefetching = false { didSet { reportInteractiveActivity() } }
     private(set) var isPrefetchReady = false
     /// Called when prefetch state flips (chip label can refresh).
@@ -167,7 +171,8 @@ final class FloatingPanelViewModel {
     private func currentRequestKey(for source: String) -> WritingRequestKey {
         let mode = settings.lastMode
         return WritingRequestKey(
-            source: source, mode: mode, tone: settings.tone(for: mode), customPrompt: settings.customPrompt
+            source: source, mode: mode, tone: settings.tone(for: mode), customPrompt: settings.customPrompt,
+            translationLanguage: settings.translationLanguage
         )
     }
 
@@ -261,11 +266,12 @@ final class FloatingPanelViewModel {
                 if prefetchError == nil, !resultText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     generated = prefetchIsSuggestion ? GeneratedSuggestion(
                         source: text, text: resultText, mode: mode, tone: tone, usedMemoryIDs: prefetchUsedMemoryIDs,
-                        provider: prefetchProvider
+                        provider: prefetchProvider, translationLanguage: prefetchKey?.translationLanguage
                     ) : nil
-                    if let gloss = prefetchTranslation {
+                    if let gloss = prefetchTranslation, gloss.language == settings.translationLanguage {
                         cancelTranslation()
-                        translationText = gloss
+                        translationLanguage = gloss.language
+                        translationText = gloss.text
                     } else {
                         prefetchTranslationTask?.cancel()
                         scheduleTranslationOfResult()
@@ -405,13 +411,15 @@ final class FloatingPanelViewModel {
     /// while learning is off. The lookup runs off the main actor and is cut short rather than let
     /// it hold a suggestion back.
     private func personalize(
-        _ prompt: String, for text: String, mode: WritingMode, tone: WritingTone, english: Bool
+        _ prompt: String, for text: String, mode: WritingMode, tone: WritingTone, english: Bool,
+        translationLanguage: TranslationLanguage?
     ) async -> PersonalizedPrompt {
         guard settings.learningEnabled else {
             return PersonalizedPrompt(systemPrompt: prompt, usedMemoryIDs: [])
         }
         return await learning.personalize(
-            prompt: prompt, for: text, mode: mode, tone: tone, english: english, config: settings.learningConfig
+            prompt: prompt, for: text, mode: mode, tone: tone, english: english,
+            translationLanguage: translationLanguage ?? .traditionalChinese, config: settings.learningConfig
         )
     }
 
@@ -419,6 +427,8 @@ final class FloatingPanelViewModel {
     /// forget; a suggestion that never finished streaming is passed as nil and ignored there.
     private func recordFeedback(_ gesture: UserGesture) {
         guard settings.learningEnabled else { return }
+        // A translation into another language is only there to be read: nothing is learned from it.
+        if let language = generated?.translationLanguage, language != .traditionalChinese { return }
         let feedback = LearningFeedback(
             gesture: gesture,
             mode: generated?.mode ?? mode,
@@ -532,7 +542,8 @@ final class FloatingPanelViewModel {
             let profile = WritingPromptProfile.for(provider: kind)
             let basePrompt = prompts.prompt(for: profile)
             let personalized = await personalize(
-                basePrompt, for: result.text, mode: key.mode, tone: key.tone, english: profile.isEnglish
+                basePrompt, for: result.text, mode: key.mode, tone: key.tone, english: profile.isEnglish,
+                translationLanguage: key.translationLanguage
             )
             // More typing cancels this prefetch; do not send the model a request for stale text.
             if Task.isCancelled { return }
@@ -589,7 +600,8 @@ final class FloatingPanelViewModel {
                 if errorMessage == nil {
                     generated = prefetchIsSuggestion ? GeneratedSuggestion(
                         source: result.text, text: prefetchBuffer, mode: key.mode, tone: key.tone,
-                        usedMemoryIDs: personalized.usedMemoryIDs, provider: kind
+                        usedMemoryIDs: personalized.usedMemoryIDs, provider: kind,
+                        translationLanguage: key.translationLanguage
                     ) : nil
                     scheduleTranslationOfResult()
                 }
@@ -721,7 +733,7 @@ final class FloatingPanelViewModel {
         translationText = ""
     }
 
-    /// After a suggestion is ready, fetch a short zh-TW gloss for the bubble.
+    /// After a suggestion is ready, fetch a short gloss in the translation language for the bubble.
     private func scheduleTranslationOfResult() {
         cancelTranslation()
         let source = resultText.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -729,37 +741,44 @@ final class FloatingPanelViewModel {
             translationText = ""
             return
         }
-        translationTask = Task { await self.translateResult(source) }
+        let language = settings.translationLanguage
+        translationTask = Task { await self.translateResult(source, into: language) }
     }
 
-    /// The Chinese reading aid under a suggestion: the English translation prompt where the engine
-    /// takes the English prompts, the original short one elsewhere.
-    private static func glossPrompt(for kind: ProviderKind) -> String {
+    /// The reading aid under a suggestion: the English translation prompt where the engine takes the
+    /// English prompts, the original short one elsewhere.
+    private static func glossPrompt(for kind: ProviderKind, into language: TranslationLanguage) -> String {
         let profile = WritingPromptProfile.for(provider: kind)
         return profile.isEnglish
-            ? WritingPromptComposer.compose(mode: .translate, tone: .preserve, customPrompt: "", profile: profile)
-            : translationSystemPrompt
+            ? WritingPromptComposer.compose(
+                mode: .translate, tone: .preserve, customPrompt: "", profile: profile, translationLanguage: language
+            )
+            : translationSystemPrompt(into: language)
     }
 
-    private static let translationSystemPrompt = """
-        你是翻譯。把使用者文字譯成流暢的台灣繁體中文。
-        只輸出譯文，不要引號、標籤或說明。
-        若原文已是繁體中文，原樣輸出即可。
-        保留專有名詞、產品名、程式碼與 URL。
-        """
+    private static func translationSystemPrompt(into language: TranslationLanguage) -> String {
+        let name = language.chineseName
+        return """
+            你是翻譯。把使用者文字譯成流暢的\(language == .traditionalChinese ? "台灣繁體中文" : name)。
+            只輸出譯文，不要引號、標籤或說明。
+            若原文已是\(name)，原樣輸出即可。
+            保留專有名詞、產品名、程式碼與 URL。
+            """
+    }
 
     /// Lint's local model only — a cloud provider would pay for a second request per typing pause,
     /// and Apple Intelligence gets no request for a suggestion the user may never open.
     private func startPrefetchTranslation(route: WritingEngineRoute) {
         guard settings.wantsManagedLocalServer(for: route) else { return }
         let source = prefetchBuffer.trimmingCharacters(in: .whitespacesAndNewlines)
+        let language = settings.translationLanguage
         prefetchTranslationTask = Task { [weak self] in
             guard let self else { return }
             do {
                 let config = try self.settings.runtimeConfig(for: .localLlama)
                 let request = ChatRequest(
                     model: config.model,
-                    systemPrompt: Self.glossPrompt(for: .localLlama),
+                    systemPrompt: Self.glossPrompt(for: .localLlama, into: language),
                     userText: source,
                     maxTokens: 512,
                     reasoningEffort: .low,
@@ -770,14 +789,15 @@ final class FloatingPanelViewModel {
                     if case .text(let token) = event { out += token }
                 }
                 if !Task.isCancelled {
-                    self.prefetchTranslation = out.trimmingCharacters(in: .whitespacesAndNewlines)
+                    self.prefetchTranslation = (language, out.trimmingCharacters(in: .whitespacesAndNewlines))
                 }
             } catch {}
         }
     }
 
-    private func translateResult(_ source: String) async {
+    private func translateResult(_ source: String, into language: TranslationLanguage) async {
         isTranslating = true
+        translationLanguage = language
         translationText = ""
         defer { isTranslating = false }
         do {
@@ -787,7 +807,7 @@ final class FloatingPanelViewModel {
             let onDevice = route == .appleIntelligence
             let request = ChatRequest(
                 model: config.model,
-                systemPrompt: Self.glossPrompt(for: kind),
+                systemPrompt: Self.glossPrompt(for: kind, into: language),
                 userText: source,
                 maxTokens: 512,
                 reasoningEffort: .low,
@@ -841,6 +861,7 @@ final class FloatingPanelViewModel {
         let generationSource = originalText
         let generationMode = mode
         let generationTone = tone
+        let generationLanguage: TranslationLanguage? = mode == .translate ? settings.translationLanguage : nil
         let ticket = tickets.issue()
         errorMessage = nil
         resultText = ""
@@ -869,7 +890,8 @@ final class FloatingPanelViewModel {
                 systemPrompt = settings.effectiveSystemPrompt(for: generationMode, tone: generationTone)
             }
             let personalized = await personalize(
-                systemPrompt, for: generationSource, mode: generationMode, tone: generationTone, english: profile.isEnglish
+                systemPrompt, for: generationSource, mode: generationMode, tone: generationTone, english: profile.isEnglish,
+                translationLanguage: generationLanguage
             )
             if Task.isCancelled { return }
             usedMemoryIDs = personalized.usedMemoryIDs
@@ -919,7 +941,7 @@ final class FloatingPanelViewModel {
             if isSuggestion {
                 generated = GeneratedSuggestion(
                     source: generationSource, text: resultText, mode: generationMode, tone: generationTone,
-                    usedMemoryIDs: usedMemoryIDs, provider: kind
+                    usedMemoryIDs: usedMemoryIDs, provider: kind, translationLanguage: generationLanguage
                 )
             }
             scheduleTranslationOfResult()

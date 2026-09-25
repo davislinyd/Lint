@@ -8,6 +8,13 @@
 	<array>
 		<string>zh-Hant</string>
 		<string>en</string>
+		<string>id</string>
+		<string>ja</string>
+		<string>ko</string>
+		<string>pt-BR</string>
+		<string>zh-Hans</string>
+		<string>th</string>
+		<string>vi</string>
 	</array>
 	<key>CFBundleDisplayName</key>
 	<string>Lint</string>
@@ -24,7 +31,7 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>0.3.4</string>
+	<string>0.4.1</string>
 	<key>CFBundleVersion</key>
 	<string>1</string>
 	<key>LSMinimumSystemVersion</key>

@@ -14,7 +14,7 @@ struct LearningSettingsPane: View {
             Section {
                 SettingsToggle(
                     title: "啟用個人化學習",
-                    detail: "記住你反覆修正的寫作習慣，之後在相關時提醒模型。資料只存在這台 Mac，只記抽象的規則，不記原文。Lint 認不出中文人名或全小寫的英文名，被你修正過的名字仍可能被記下；可在「管理記憶」查看並刪除。",
+                    detail: "記住你修正過的寫作習慣，下一次建議就開始提醒模型；沒有再出現的會自動忘記。資料只存在這台 Mac，只記抽象的規則，不記原文。Lint 認不出中文人名或全小寫的英文名，被你修正過的名字仍可能被記下；可在「管理記憶」查看並刪除。",
                     isOn: Bindable(app.settings).learningEnabled
                 )
             } footer: {
@@ -23,10 +23,10 @@ struct LearningSettingsPane: View {
             }
 
             Section("學習資料") {
-                LabeledContent("啟用中的記憶") {
+                LabeledContent("長期記憶") {
                     Text("\(stats.count(.active) + stats.count(.pinned))")
                 }
-                LabeledContent("候選記憶") {
+                LabeledContent("短期記憶") {
                     Text("\(stats.count(.candidate))")
                 }
                 Button("管理記憶…") {
@@ -75,7 +75,7 @@ struct LearningSettingsPane: View {
             } header: {
                 Text("記憶整理")
             } footer: {
-                Text("把相近的具體記憶歸納成較少的一般規則。原本的記憶都會保留，隨時可還原；整理只在這台 Mac 上進行，不會連線。")
+                Text("新學到的記憶會立刻使用；7 天內再出現或幫上忙的會留成長期記憶，沒有的就忘記，痕跡淡掉後再刪除。整理時也會把相近的具體記憶歸納成一般規則。整理只在這台 Mac 上進行，不會連線。")
                     .sectionNote()
             }
         }
@@ -118,10 +118,16 @@ struct LearningSettingsPane: View {
     @ViewBuilder
     private func organizeMessage(_ outcome: MemoryOrganizationOutcome) -> some View {
         switch outcome {
-        case .finished(let rules, let covered) where rules == 0 && covered == 0:
+        case .finished(let remembered, let forgotten, let erased, let rules, let covered)
+            where remembered + forgotten + erased + rules + covered == 0:
             Text("沒有需要整理的記憶。")
-        case .finished(let rules, let covered):
-            Text("已整理：新增 \(rules) 條一般記憶，涵蓋 \(covered) 條具體記憶。")
+        case .finished(let remembered, let forgotten, let erased, let rules, let covered):
+            VStack(alignment: .leading, spacing: 2) {
+                Text("已整理：記住 \(remembered) 條、忘記 \(forgotten) 條、刪除 \(erased) 條。")
+                if rules > 0 || covered > 0 {
+                    Text("新增 \(rules) 條一般記憶，涵蓋 \(covered) 條具體記憶。")
+                }
+            }
         case .alreadyRunning:
             Text("整理正在進行中。")
         case .failed:

@@ -975,4 +975,82 @@ final class LearningStoreTests: XCTestCase {
         XCTAssertEqual(all.first?.instruction, "joined")
         XCTAssertEqual(try relationRows(url), 4)
     }
+
+    // MARK: forgetting
+
+    func testAV4DatabaseUpgradesAndEarlierPassesCountFromZero() async throws {
+        let url = try makeTempDirectory().appendingPathComponent("LintLearning.sqlite")
+        let id = UUID()
+        do {
+            let queue = try DatabaseQueue(path: url.path)
+            try SQLiteLearningStore.migrator.migrate(queue, upTo: "v4_writing_tone")
+            try await queue.write { db in
+                try db.execute(
+                    sql: """
+                    INSERT INTO dream_run (id, started_at, finished_at, algorithm_version, input_memory_count,
+                        cluster_count, generated_count, superseded_count, status)
+                    VALUES (?, 1800000000, 1800000005, 1, 12, 1, 1, 3, 'completed')
+                    """,
+                    arguments: [id.uuidString]
+                )
+            }
+        }
+
+        let store = try SQLiteLearningStore(url: url)
+
+        let run = try await store.lastCompletedDreamRun()
+        XCTAssertEqual(run?.id, id)
+        XCTAssertEqual(run?.generatedCount, 1)
+        XCTAssertEqual(run?.supersededCount, 3)
+        XCTAssertEqual([run?.rememberedCount, run?.forgottenCount, run?.erasedCount], [0, 0, 0])
+    }
+
+    func testADreamRunKeepsWhatItRememberedForgotAndErased() async throws {
+        let store = try SQLiteLearningStore(url: nil)
+        var run = dreamRun()
+        run.rememberedCount = 4
+        run.forgottenCount = 7
+        run.erasedCount = 2
+        try await store.recordDreamRun(run)
+        let loaded = try await store.lastCompletedDreamRun()
+        XCTAssertEqual(loaded, run)
+    }
+
+    func testErasingRemovesOnlyForgottenSpecificMemoriesTheUserDidNotWrite() async throws {
+        let (store, url) = try makeFileStore()
+        let trace = memory(key: "spelling:en:a>b", state: .archived)
+        let inUse = memory(key: "spelling:en:c>d", state: .active)
+        var rewritten = memory(key: "spelling:en:e>f", state: .archived)
+        rewritten.userEdited = true
+        var derived = memory(key: "dream:test:derived", state: .archived)
+        derived.level = .generalized
+        let disabled = memory(key: "spelling:en:g>h", state: .disabled)
+        for memory in [trace, inUse, rewritten, derived, disabled] { try await store.saveMemory(memory) }
+
+        let erased = try await store.eraseMemories(
+            ids: [trace, inUse, rewritten, derived, disabled].map(\.id) + [UUID()]
+        )
+
+        XCTAssertEqual(erased, 1)
+        let left = try await store.memories()
+        XCTAssertEqual(Set(left.map(\.id)), Set([inUse, rewritten, derived, disabled].map(\.id)))
+        XCTAssertEqual(try count("dream_veto", in: url), 0, "nobody asked for it")
+        let none = try await store.eraseMemories(ids: [])
+        XCTAssertEqual(none, 0)
+    }
+
+    func testErasingAForgottenSourceTakesOnlyItsRelationAlong() async throws {
+        let (store, url) = try makeFileStore()
+        let family = try await makeFamily(in: store, url: url, count: 3)
+        try await store.updateMemory(id: family.children[0].id) { $0.state = .archived }
+
+        let erased = try await store.eraseMemories(ids: [family.children[0].id])
+
+        XCTAssertEqual(erased, 1)
+        XCTAssertEqual(try count("memory_relation", in: url), 2)
+        let parent = try await store.memory(id: family.parent.id)
+        XCTAssertEqual(parent?.state, family.parent.state, "the rule itself is left to organizing")
+        let vetoed = try await store.isVetoed(dedupKey: family.parent.dedupKey)
+        XCTAssertFalse(vetoed)
+    }
 }

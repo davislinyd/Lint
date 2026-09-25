@@ -225,6 +225,25 @@ struct MemoryExtractor: Sendable {
         return editDistance(a, b) <= limit
     }
 
+    /// The same word in another form: "ticket" and "tickets", "use" and "used", "company" and
+    /// "companies", "control" and "controlled". Which form is right depends on the sentence (number,
+    /// tense, agreement), so one such change says little about a habit. Both words are keys.
+    static func isInflection(_ lhs: String, _ rhs: String) -> Bool {
+        let (short, long) = lhs.count <= rhs.count ? (lhs, rhs) : (rhs, lhs)
+        guard short.count < long.count, let last = short.last else { return false }
+        let stem = String(short.dropLast())
+        for ending in inflectionEndings {
+            if long == short + ending { return true }
+            // make → making, study → studied, stop → stopped
+            if last == "e", long == stem + ending { return true }
+            if last == "y", long == stem + "i" + ending { return true }
+            if long == short + String(last) + ending { return true }
+        }
+        return false
+    }
+
+    private static let inflectionEndings = ["s", "d", "es", "ed", "ing", "er", "est", "ly", "'s"]
+
     /// Levenshtein distance where swapping two neighbouring letters counts as one edit.
     private static func editDistance(_ a: [Character], _ b: [Character]) -> Int {
         var d = Array(repeating: Array(repeating: 0, count: b.count + 1), count: a.count + 1)

@@ -1,8 +1,11 @@
 import Foundation
 
-/// Organizes memories in the background: many specific memories of one family become one
-/// generalized memory, the specific ones stay behind it, and a generalized memory that keeps proving
-/// itself becomes core. Nothing here is fine-tuning, and nothing leaves the Mac.
+/// Organizes memories in the background, the way sleep sorts what was learned during the day. What
+/// has proved itself is written down as long-term and what has not as forgotten (the rules are in
+/// `MemoryLifecycle.settled`), forgotten memories whose trace has faded are erased, many specific
+/// memories of one family become one generalized memory (the specific ones stay behind it), and a
+/// generalized memory that keeps proving itself becomes core. Nothing here is fine-tuning, and
+/// nothing leaves the Mac.
 ///
 /// It is maintenance, so it must never get in the way of writing: it keeps to itself (an actor of
 /// its own, so a suggestion never waits for it), reads once, computes in memory, writes a short
@@ -32,8 +35,8 @@ actor MemoryDreamCoordinator {
     }
 
     /// One pass over the memories. Nil if another pass is still running. Cancelling the task ends the
-    /// pass at the next cluster, and so does the user waiting on a suggestion when a `gate` is given;
-    /// what was written by then stays, since each cluster is all or nothing.
+    /// pass at the next memory or cluster, and so does the user waiting on a suggestion when a `gate`
+    /// is given; what was written by then stays, since each step is all or nothing.
     @discardableResult
     func run(yieldingTo gate: InteractiveGate? = nil) async -> DreamRun? {
         guard !isRunning else { return nil }
@@ -60,7 +63,8 @@ actor MemoryDreamCoordinator {
         return record
     }
 
-    /// The places where a pass may stop: between clusters, never in the middle of one.
+    /// The places where a pass may stop: between memories and between clusters, never in the middle
+    /// of one.
     private static func checkpoint(_ gate: InteractiveGate?) throws {
         try Task.checkCancellation()
         if gate?.isBusy == true { throw CancellationError() }
@@ -69,8 +73,10 @@ actor MemoryDreamCoordinator {
     private func organize(_ record: inout DreamRun, gate: InteractiveGate?) async throws {
         try Self.checkpoint(gate)
         let now = clock()
+        record.inputMemoryCount = try await store.memories().count
+        try await settle(&record, at: now, gate: gate)
+        try await erase(&record, at: now, gate: gate)
         let memories = try await store.memories()
-        record.inputMemoryCount = memories.count
 
         // Judged as they stand today, whether or not they have been settled in the store yet.
         let settled = memories.map { MemoryLifecycle.settled($0, at: now) }
@@ -116,6 +122,36 @@ actor MemoryDreamCoordinator {
             }
         }
         try await maintainParents(at: now, gate: gate)
+    }
+
+    /// Writes down what the rules say about each memory now: proved short-term memories become
+    /// long-term, and the ones that did not prove themselves, or faded, are forgotten. Each memory is
+    /// written in a transaction of its own and judged again inside it, in case it changed meanwhile.
+    private func settle(_ record: inout DreamRun, at now: Date, gate: InteractiveGate?) async throws {
+        for memory in try await store.memories() {
+            let settled = MemoryLifecycle.settled(memory, at: now)
+            guard settled != memory else { continue }
+            try Self.checkpoint(gate)
+            try await store.updateMemory(id: memory.id) { current in
+                current = MemoryLifecycle.settled(current, at: now)
+            }
+            if settled.state != memory.state {
+                if settled.state == .active { record.rememberedCount += 1 }
+                if settled.state == .archived { record.forgottenCount += 1 }
+            }
+        }
+    }
+
+    /// Erases the forgotten memories whose trace has faded away: their pattern did not come back
+    /// while it could still be recognised. Which of them may go at all (specific ones the user did
+    /// not rewrite; never a pinned, disabled, generalized or core one) the store decides, inside the
+    /// transaction that erases them.
+    private func erase(_ record: inout DreamRun, at now: Date, gate: InteractiveGate?) async throws {
+        try Self.checkpoint(gate)
+        let faded = try await store.memories().filter { memory in
+            memory.state == .archived && memory.evidence(at: now) < LearningPolicy.archiveThreshold
+        }
+        record.erasedCount = try await store.eraseMemories(ids: faded.map(\.id))
     }
 
     /// A generalized memory with too few sources left is put away (its sources are free again), and

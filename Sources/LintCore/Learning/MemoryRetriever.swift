@@ -44,14 +44,15 @@ struct MemoryRetriever: Sendable {
     private let longestLatinTrigger: Int
     private let now: Date
 
-    /// Evidence fades, so every memory is judged as it stands at `now`: only active and pinned ones
-    /// can be retrieved, and of two that ask for opposite things (`a>b` and `b>a`) only the
+    /// Evidence fades and short-term memories run out, so every memory is judged as it stands at
+    /// `now`: short-term, long-term and pinned ones can be retrieved (a memory is used as soon as it
+    /// is learned), and of two that ask for opposite things (`a>b` and `b>a`) only the
     /// better-evidenced one: a prompt must not tell the model both.
     init(memories: [WritingMemory], now: Date = Date()) {
         self.now = now
         let usable = memories
             .map { MemoryLifecycle.settled($0, at: now) }
-            .filter { $0.state == .active || $0.state == .pinned }
+            .filter(MemoryLifecycle.isUsed)
         let byKey = Dictionary(usable.map { ($0.dedupKey, $0) }, uniquingKeysWith: { first, _ in first })
         let rulesInUse = Set(usable.filter { $0.level != .specific }.map(\.id))
         entries = usable

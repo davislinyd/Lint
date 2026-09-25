@@ -336,8 +336,8 @@
         </article>
         <article>
           <h3><span class="en">Learns your habits (optional)</span><span class="zh">學會你的寫作習慣（選用）</span></h3>
-          <p class="en">Turn on Learning and Lint remembers the mistakes you keep correcting as short rules, stored only on your Mac, and reminds the model when they fit. You can read and delete every memory. <a href="#learning">How learning works</a></p>
-          <p class="zh">開啟學習後，Lint 會把你反覆修正的錯誤記成簡短規則，只存在你的 Mac，並在相關時提醒模型。每一條記憶都能查看與刪除。<a href="#learning">學習功能怎麼運作</a></p>
+          <p class="en">Turn on Learning and Lint remembers the mistakes you correct as short rules, stored only on your Mac, reminds the model of them from the next suggestion on, and forgets the ones that don’t come back. You can read and delete every memory. <a href="#learning">How learning works</a></p>
+          <p class="zh">開啟學習後，Lint 會把你修正過的錯誤記成簡短規則，只存在你的 Mac，下一次建議就開始提醒模型，沒有再出現的會自動忘記。每一條記憶都能查看與刪除。<a href="#learning">學習功能怎麼運作</a></p>
         </article>
         <article>
           <h3><span class="en">Made to fit you</span><span class="zh">依你的習慣調整</span></h3>
@@ -616,12 +616,12 @@
           <h3><span class="en">How Lint learns</span><span class="zh">Lint 怎麼學</span></h3>
           <ul class="en">
             <li>It learns from what you do with a suggestion. Editing the result before you replace your text counts the most, because those are your own words; replacing counts less, copying a little, and asking for a rewrite teaches nothing.</li>
-            <li>A correction starts as a candidate and becomes an active memory only after it keeps showing up. Undoing what a memory asks for counts twice as much against it.</li>
+            <li>A new memory is used from the next suggestion on: it is short-term. If its pattern comes back within 7 days, or the model applies it and you accept that, it becomes long-term; if not, it is forgotten. A change the model made that depends on its sentence, such as “tickets” for “ticket”, is used only once it comes back. Undoing what a memory asks for counts twice as much against it, and forgets it at once unless it is well established.</li>
             <li>When you write, Lint adds the few memories that fit your text, at most five short lines, to the end of the prompt. With Lint's local AI or Apple Intelligence they never leave your Mac; with a cloud provider they are sent along with your text.</li>
           </ul>
           <ul class="zh">
             <li>Lint 從你怎麼處理建議來學。在取代前先修改結果最有份量，因為那是你自己的用字；直接取代次之，複製只算一點，要求重寫則不會學到任何東西。</li>
-            <li>一個修正會先成為「候選記憶」，要反覆出現才會成為「啟用中的記憶」。你若推翻某條記憶要求的改法，扣分是加分的兩倍。</li>
+            <li>新學到的記憶從下一次建議就開始使用，這是短期記憶。7 天內同樣的樣式又出現，或模型照提醒改了而你接受，它就轉成長期記憶；沒有的話就忘記。模型改的、要看句子而定的修正（例如「tickets」改成「ticket」）要再出現一次才會使用。你若推翻某條記憶要求的改法，扣分是加分的兩倍，而且除非它已經很穩固，否則會立刻忘記。</li>
             <li>你寫作時，Lint 只把符合這段文字的少數記憶（最多五行短句）加在 prompt 結尾。使用 Lint 本機 AI 或 Apple Intelligence 時，它們不會離開你的 Mac；使用雲端服務時，會隨你的文字一起送出。</li>
           </ul>
         </article>
@@ -641,21 +641,21 @@
           </ul>
         </article>
         <article>
-          <h3><span class="en">Memories fade</span><span class="zh">記憶會淡出</span></h3>
-          <p class="en">A memory whose pattern stops showing up fades: after a month without it, its evidence halves every three months (every six months for a general rule, every year for a core memory). It first drops out of the prompt and is eventually archived, never deleted. Pinned and disabled memories don't fade, and <strong>Enable</strong> brings an archived one back.</p>
-          <p class="zh">不再出現的記憶會淡出：超過一個月沒出現後，證據每三個月減半（一般規則每六個月、核心記憶每一年）。它會先退出 prompt，最後被封存，但不會被刪除。已釘選與已停用的記憶不會淡出，按<strong>「啟用」</strong>可以把封存的記憶找回來。</p>
+          <h3><span class="en">Forgetting</span><span class="zh">遺忘</span></h3>
+          <p class="en">A forgotten memory is no longer used. Only a trace is kept, so that Lint recognizes the pattern, and keeps it at once, if it comes back. A long-term memory that stops showing up fades: after a month without it, its evidence halves every three months (every six months for a general rule, every year for a core memory), and below half of where it started it is forgotten. A trace that has faded away is erased for good, roughly three to eleven months after the pattern was last seen. Pinned and disabled memories don't fade, neither they nor memories you reworded are ever erased, and <strong>Enable</strong> brings a forgotten memory back.</p>
+          <p class="zh">忘記的記憶不再使用，只留下痕跡，讓 Lint 在同樣的樣式又出現時認出來並直接留下。長期記憶不再出現就會淡出：超過一個月沒出現後，證據每三個月減半（一般規則每六個月、核心記憶每一年），低於起始的一半就忘記。淡掉的痕跡會被永久刪除，大約是最後一次出現後三到十一個月。已釘選與已停用的記憶不會淡出，它們和你改寫過的記憶都不會被刪除；按<strong>「啟用」</strong>可以把忘記的記憶找回來。</p>
         </article>
         <article>
           <h3><span class="en">Memory Organization</span><span class="zh">記憶整理</span></h3>
-          <p class="en">When several memories of one kind pile up, Lint can sum them up in one general rule. For now it handles one kind: a preposition you keep deleting after different verbs, such as “discuss about” and “mention about”. The rule is worded from a fixed template, so it never contains a word you wrote. The memories behind it are kept and come back if the rule fades, is disabled or is deleted; pinned, disabled and hand-edited memories are never combined, and a rule you delete is not made again. A rule that keeps proving itself for weeks becomes a core memory.</p>
-          <p class="en">Organizing runs only on your Mac, when you are not waiting for a suggestion: a minute after Lint starts (once a day), after enough new learning, or when you click <strong>Organize Memories Now</strong>.</p>
-          <p class="zh">同一類的記憶累積多條時，Lint 可以把它們歸納成一條一般規則。目前只處理一類：你在不同動詞後反覆刪掉的介系詞，例如「discuss about」與「mention about」。規則由固定模板寫成，不會含有任何你寫過的字。被歸納的記憶都會保留，規則淡出、停用或被刪除後就會恢復；已釘選、已停用與你手動改寫過的記憶不會被歸納，你刪掉的規則也不會再被產生。持續數週都證明有用的規則會升為核心記憶。</p>
-          <p class="zh">整理只在你的 Mac 上進行，並等到你不在等建議時才開始：Lint 啟動一分鐘後（每天一次）、累積足夠的新學習之後，或按下<strong>「立即整理記憶」</strong>。</p>
+          <p class="en">Organizing is how Lint dreams: it writes down which memories proved themselves and which are forgotten, erases traces that have faded, and, when several memories of one kind pile up, sums them up in one general rule. For now it handles one kind: a preposition you keep deleting after different verbs, such as “discuss about” and “mention about”. The rule is worded from a fixed template, so it never contains a word you wrote. The memories behind it are kept and come back if the rule fades, is disabled or is deleted; pinned, disabled and hand-edited memories are never combined, and a rule you delete is not made again. A rule that keeps proving itself for weeks becomes a core memory.</p>
+          <p class="en">Organizing runs only on your Mac, when you are not waiting for a suggestion: at least once a day while you use Lint (a minute after it starts, or after your first feedback of the day), after enough new learning, or when you click <strong>Organize Memories Now</strong>, which then shows how many memories it remembered, forgot and erased.</p>
+          <p class="zh">整理就像 Lint 在作夢：它會記下哪些記憶證明有用、哪些要忘記，刪除已經淡掉的痕跡；同一類的記憶累積多條時，也會把它們歸納成一條一般規則。目前只處理一類：你在不同動詞後反覆刪掉的介系詞，例如「discuss about」與「mention about」。規則由固定模板寫成，不會含有任何你寫過的字。被歸納的記憶都會保留，規則淡出、停用或被刪除後就會恢復；已釘選、已停用與你手動改寫過的記憶不會被歸納，你刪掉的規則也不會再被產生。持續數週都證明有用的規則會升為核心記憶。</p>
+          <p class="zh">整理只在你的 Mac 上進行，並等到你不在等建議時才開始：使用 Lint 期間至少每天一次（啟動一分鐘後，或當天第一次回饋後）、累積足夠的新學習之後，或按下<strong>「立即整理記憶」</strong>，完成後會顯示記住、忘記與刪除了幾條。</p>
         </article>
         <article>
           <h3><span class="en">Manage your memories</span><span class="zh">管理記憶</span></h3>
-          <p class="en"><strong>Manage Memories…</strong> lists everything Lint has learned. You can edit, pin, disable, enable or delete each memory, and see whether it is specific, general or core and which memories a rule came from. <strong>Clear All Memories…</strong> deletes every memory but keeps the feedback log; <strong>Reset Learning Database…</strong> deletes the memories and the log, and cannot be undone.</p>
-          <p class="zh"><strong>「管理記憶…」</strong>會列出 Lint 學到的所有記憶。每一條都可以編輯、釘選、停用、啟用或刪除，也能看到它是具體、一般還是核心記憶，以及一般規則由哪些記憶歸納而來。<strong>「清除所有記憶…」</strong>會刪除所有記憶但保留回饋紀錄；<strong>「重設學習資料庫…」</strong>會刪除記憶與回饋紀錄，無法復原。</p>
+          <p class="en"><strong>Manage Memories…</strong> lists everything Lint has learned. You can edit, pin, disable, enable or delete each memory, and see whether it is short-term, long-term or forgotten (forgotten ones are listed when you turn on <strong>Show forgotten memories</strong>), whether it is specific, general or core, and which memories a rule came from. <strong>Clear All Memories…</strong> deletes every memory but keeps the feedback log; <strong>Reset Learning Database…</strong> deletes the memories and the log, and cannot be undone.</p>
+          <p class="zh"><strong>「管理記憶…」</strong>會列出 Lint 學到的所有記憶。每一條都可以編輯、釘選、停用、啟用或刪除，也能看到它是短期、長期還是已忘記（打開<strong>「顯示已忘記的記憶」</strong>才會列出已忘記的）、是具體、一般還是核心記憶，以及一般規則由哪些記憶歸納而來。<strong>「清除所有記憶…」</strong>會刪除所有記憶但保留回饋紀錄；<strong>「重設學習資料庫…」</strong>會刪除記憶與回饋紀錄，無法復原。</p>
         </article>
       </div>
     </section>

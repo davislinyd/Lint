@@ -15,7 +15,6 @@ public actor LearningCoordinator {
     private var retrieverBuiltAt = Date.distantPast
     /// Bumped by every change to the memories, so a read that raced with a change is not cached.
     private var memoryVersion = 0
-    private var lastSettled: Date?
     /// Whether the user is waiting on a suggestion (see `setInteractiveActivity`). Held outside the
     /// actor, so that reporting it never waits for anything the coordinator is busy with.
     private let gate = InteractiveGate()
@@ -52,8 +51,8 @@ public actor LearningCoordinator {
         self.organizingSleep = organizingSleep
     }
 
-    /// Creates and migrates the database when learning is on, trims old events and archives
-    /// memories that have faded. Does nothing otherwise.
+    /// Creates and migrates the database when learning is on, trims old events and asks for the
+    /// memories to be organized when that is due. Does nothing otherwise.
     public func prepare(config: LearningConfig) async {
         organizingAllowed = config.enabled
         guard config.enabled else {
@@ -67,7 +66,6 @@ public actor LearningCoordinator {
         } catch {
             NSLog("Lint learning: prune failed: \(error.localizedDescription)")
         }
-        await settleIfDue(store: store)
         let lastPass = (try? await store.lastCompletedDreamRun())?.finishedAt
         await scheduler?.noteStartup(lastCompletedPass: lastPass)
         await noteMemoryPressure(store: store)
@@ -86,6 +84,7 @@ public actor LearningCoordinator {
             let inserted = try await store.insertEvent(
                 event, unlessDuplicateWithin: LearningPolicy.eventDedupeWindow
             )
+            await scheduler?.noteActivity()
             // A repeat of the same feedback is not new evidence.
             if inserted {
                 let changes = await learn(from: feedback, action: event.action, at: event.createdAt, store: store)
@@ -127,8 +126,9 @@ public actor LearningCoordinator {
         }
     }
 
-    /// The few memories worth reminding the model about for this text: active or pinned ones whose
-    /// trigger is in it, plus general habits that fit its language. Empty while learning is off.
+    /// The few memories worth reminding the model about for this text: short-term, long-term or
+    /// pinned ones whose trigger is in it, plus general habits that fit its language. Empty while
+    /// learning is off.
     /// `outputLanguage` is the language written when it differs from the text's (translation).
     public func relevantMemories(
         for text: String,
@@ -140,8 +140,9 @@ public actor LearningCoordinator {
         guard config.enabled, let store = openStore(create: false) else { return [] }
         let query = MemoryRetriever.Query(text: text, mode: mode, tone: tone, outputLanguage: outputLanguage)
         let now = clock()
-        // Evidence keeps fading, so a day-old retriever is rebuilt even if nothing changed.
-        if let retriever, now.timeIntervalSince(retrieverBuiltAt) < LearningPolicy.settleInterval {
+        // Evidence keeps fading and short-term memories run out, so an old retriever is rebuilt
+        // even if nothing changed.
+        if let retriever, now.timeIntervalSince(retrieverBuiltAt) < LearningPolicy.retrieverMaxAge {
             return retriever.select(for: query)
         }
         let versionBeforeReading = memoryVersion
@@ -158,11 +159,13 @@ public actor LearningCoordinator {
         }
     }
 
+    /// Every memory as it stands now (see `MemoryLifecycle.settled`), which can be ahead of what was
+    /// last written: organizing the memories is what writes it down.
     public func memories() async -> [WritingMemory] {
         guard let store = openStore(create: false) else { return [] }
-        await settleIfDue(store: store)
         do {
-            return try await store.memories()
+            let now = clock()
+            return try await store.memories().map { MemoryLifecycle.settled($0, at: now) }
         } catch {
             NSLog("Lint learning: could not read memories: \(error.localizedDescription)")
             return []
@@ -184,7 +187,10 @@ public actor LearningCoordinator {
         guard let run else { return .alreadyRunning }
         guard run.status == .completed else { return .failed }
         await scheduler?.didRun()
-        return .finished(newRules: run.generatedCount, coveredMemories: run.supersededCount)
+        return .finished(
+            remembered: run.rememberedCount, forgotten: run.forgottenCount, erased: run.erasedCount,
+            newRules: run.generatedCount, coveredMemories: run.supersededCount
+        )
     }
 
     /// How many memories each generalized or core memory was derived from.
@@ -263,12 +269,19 @@ public actor LearningCoordinator {
         }
     }
 
-    /// Reads whatever is on disk, also while learning is off, so the data stays visible.
+    /// Reads whatever is on disk, also while learning is off, so the data stays visible. The memories
+    /// are counted as they stand now, like `memories()`.
     public func stats() async -> LearningStats {
         guard let store = openStore(create: false) else { return .empty }
-        await settleIfDue(store: store)
         do {
-            return try await store.stats()
+            var stats = try await store.stats()
+            let now = clock()
+            let current = try await store.memories().map { MemoryLifecycle.settled($0, at: now) }
+            stats.memoriesByState = Dictionary(grouping: current, by: \.state).mapValues(\.count)
+            stats.memoriesByLevel = Dictionary(grouping: current, by: \.level).mapValues(\.count)
+            let rulesInUse = Set(current.filter { $0.level != .specific && MemoryLifecycle.isUsed($0) }.map(\.id))
+            stats.supersededCount = current.filter { $0.supersededBy.map(rulesInUse.contains) ?? false }.count
+            return stats
         } catch {
             NSLog("Lint learning: stats failed: \(error.localizedDescription)")
             return .empty
@@ -305,7 +318,10 @@ public actor LearningCoordinator {
         for candidate in extraction.candidates {
             do {
                 try await store.mergeMemory(dedupKey: candidate.dedupKey) { existing in
-                    MemoryLifecycle.merging(candidate, weight: weight, at: now, into: existing)
+                    MemoryLifecycle.merging(
+                        candidate, weight: weight, at: now,
+                        into: existing.map { MemoryLifecycle.settled($0, at: now) }
+                    )
                 }
                 changed = true
                 changes += 1
@@ -332,7 +348,7 @@ public actor LearningCoordinator {
         for key in extraction.reminded {
             do {
                 try await store.updateMemory(dedupKey: key) { memory in
-                    memory = MemoryLifecycle.refreshed(memory, at: now)
+                    memory = MemoryLifecycle.refreshed(MemoryLifecycle.settled(memory, at: now), at: now)
                 }
                 changed = true
             } catch {
@@ -391,14 +407,15 @@ public actor LearningCoordinator {
     }
 
     /// A specific memory was seen again: so was the pattern of the generalized or core memory that
-    /// stands in for it, as long as that one is not put away or switched off. False if nothing
-    /// was written.
+    /// stands in for it, as long as that one is in use (not forgotten or switched off). False if
+    /// nothing was written.
     private func support(parentOf dedupKey: String, weight: Double, at now: Date, store: any LearningStore) async -> Bool {
         guard let parentID = (try? await store.memory(dedupKey: dedupKey))?.supersededBy else { return false }
         do {
             try await store.updateMemory(id: parentID) { memory in
-                guard memory.state == .candidate || memory.state == .active || memory.state == .pinned else { return }
-                memory = MemoryLifecycle.supported(memory, weight: weight, at: now)
+                let current = MemoryLifecycle.settled(memory, at: now)
+                guard MemoryLifecycle.isUsed(current) else { return }
+                memory = MemoryLifecycle.supported(current, weight: weight, at: now)
             }
             return true
         } catch {
@@ -413,38 +430,17 @@ public actor LearningCoordinator {
         do {
             let parentID = try await store.memory(dedupKey: dedupKey)?.supersededBy
             try await store.updateMemory(dedupKey: dedupKey) { memory in
-                memory = MemoryLifecycle.weakened(memory, by: amount, at: now)
+                memory = MemoryLifecycle.weakened(MemoryLifecycle.settled(memory, at: now), by: amount, at: now)
             }
             if let parentID {
                 try await store.updateMemory(id: parentID) { memory in
-                    memory = MemoryLifecycle.weakened(memory, by: amount, at: now)
+                    memory = MemoryLifecycle.weakened(MemoryLifecycle.settled(memory, at: now), by: amount, at: now)
                 }
             }
             return true
         } catch {
             NSLog("Lint learning: could not weaken a memory: \(error.localizedDescription)")
             return false
-        }
-    }
-
-    /// Archives the memories that have faded away and turns faded active ones back into candidates,
-    /// at most once a day. (Retrieval judges fading by itself, so this only keeps what is stored,
-    /// and shown, up to date.)
-    private func settleIfDue(store: any LearningStore) async {
-        let now = clock()
-        if let lastSettled, now.timeIntervalSince(lastSettled) < LearningPolicy.settleInterval { return }
-        lastSettled = now
-        do {
-            var changed = false
-            for memory in try await store.memories() where MemoryLifecycle.settled(memory, at: now) != memory {
-                try await store.updateMemory(id: memory.id) { memory in
-                    memory = MemoryLifecycle.settled(memory, at: now)
-                }
-                changed = true
-            }
-            if changed { invalidateMemories() }
-        } catch {
-            NSLog("Lint learning: settling memories failed: \(error.localizedDescription)")
         }
     }
 
@@ -469,10 +465,15 @@ public actor LearningCoordinator {
         memoryVersion += 1
     }
 
+    /// What the user acts on is the memory as it stands now, which is what Settings showed them.
     private func change(_ id: UUID, _ transform: @escaping @Sendable (inout WritingMemory) -> Void) async {
         guard let store = openStore(create: false) else { return }
+        let now = clock()
         do {
-            try await store.updateMemory(id: id, transform)
+            try await store.updateMemory(id: id) { memory in
+                memory = MemoryLifecycle.settled(memory, at: now)
+                transform(&memory)
+            }
             invalidateMemories()
         } catch {
             NSLog("Lint learning: could not change a memory: \(error.localizedDescription)")

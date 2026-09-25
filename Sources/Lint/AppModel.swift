@@ -8,6 +8,7 @@ import SwiftUI
 @Observable
 final class AppModel: NSObject, NSWindowDelegate {
     let settings: SettingsStore
+    let updates: UpdateCoordinator
     let capture = TextCaptureService()
     let llm = LLMService()
     let memory = MemoryCoordinator()
@@ -23,6 +24,7 @@ final class AppModel: NSObject, NSWindowDelegate {
         let keychain = KeychainStore()
         let settings = SettingsStore(keychain: keychain)
         self.settings = settings
+        updates = UpdateCoordinator(settings: settings)
         let localAI = LocalAISetupCoordinator(
             configuration: { settings.localAIConfiguration },
             server: LocalLlamaServerManager.shared,
@@ -53,6 +55,9 @@ final class AppModel: NSObject, NSWindowDelegate {
             }
         )
         self.selectionMonitor = monitor
+        settings.onUpdatePreferenceChanged = { [weak self] in
+            self?.updates.preferencesChanged()
+        }
         InteractionAnchor.start()
         if ProviderKind.chatgptAccount.isEnabled {
             ChatGPTBrowserBackendRegistry.shared.backend = ChatGPTWebBridge.shared
@@ -179,6 +184,7 @@ final class AppModel: NSObject, NSWindowDelegate {
             while let self {
                 self.accessibilityTrusted = AccessibilityPermission.isTrusted
                 self.localAI.setAccessibilityTrusted(self.accessibilityTrusted)
+                self.updates.installIfWaiting(panelVisible: self.panel.isVisible)
                 try? await Task.sleep(for: .seconds(1))
             }
         }

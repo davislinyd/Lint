@@ -162,6 +162,40 @@ final class EnglishPromptTests: XCTestCase {
         XCTAssertTrue(compose(.translate, .formal).contains("Use a formal tone in Traditional Chinese (Taiwan)"))
     }
 
+    func testTranslationGoesIntoTheChosenLanguage() {
+        let names: [TranslationLanguage: String] = [
+            .indonesian: "Indonesian", .japanese: "Japanese", .korean: "Korean", .portuguese: "Brazilian Portuguese",
+            .simplifiedChinese: "Simplified Chinese", .thai: "Thai", .traditionalChinese: "Traditional Chinese (Taiwan)",
+            .vietnamese: "Vietnamese",
+        ]
+        XCTAssertEqual(Set(names.keys), Set(TranslationLanguage.allCases))
+        for (language, name) in names {
+            for reader in [EnglishPromptReader.appleOnDevice, .localModel] {
+                for tone in WritingTone.allCases {
+                    let prompt = WritingPromptComposer.compose(
+                        mode: .translate, tone: tone, customPrompt: "", profile: .english(reader), translationLanguage: language
+                    )
+                    let context = "\(language) \(reader) \(tone)"
+                    XCTAssertTrue(prompt.contains("Translate the text into \(name). "), context)
+                    XCTAssertEqual(prompt.contains("as written in Taiwan"), language == .traditionalChinese, context)
+                    XCTAssertEqual(prompt.contains("as written in mainland China"), language == .simplifiedChinese, context)
+                    XCTAssertFalse(prompt.contains("into English"), "\(context): Lint never translates into English")
+                    if tone != .preserve {
+                        XCTAssertTrue(prompt.contains("tone in \(name)."), context)
+                    }
+                }
+            }
+        }
+        XCTAssertEqual(
+            compose(.translate, .concise),
+            WritingPromptComposer.compose(
+                mode: .translate, tone: .concise, customPrompt: "", profile: .english(.appleOnDevice),
+                translationLanguage: .traditionalChinese
+            ),
+            "Traditional Chinese is the default"
+        )
+    }
+
     func testACustomPromptIsTheUsersTaskWithOnlyTheOutputRuleAdded() {
         let prompt = compose(.custom, .formal, custom: "  Turn this into a haiku.  ")
         XCTAssertTrue(prompt.hasPrefix("Turn this into a haiku.\n\n"))

@@ -11,17 +11,21 @@ public struct WritingRequestKey: Equatable, Sendable {
     public let tone: WritingTone
     /// Only a custom prompt reads it.
     public let customPrompt: String?
+    /// Only a translation reads it.
+    public let translationLanguage: TranslationLanguage?
 
     public init(
         source: String,
         mode: WritingMode,
         tone: WritingTone,
-        customPrompt: String
+        customPrompt: String,
+        translationLanguage: TranslationLanguage = .traditionalChinese
     ) {
         self.source = source
         self.mode = mode
         self.tone = mode.supportsTone ? tone : .preserve
         self.customPrompt = mode == .custom
             ? customPrompt.trimmingCharacters(in: .whitespacesAndNewlines) : nil
+        self.translationLanguage = mode == .translate ? translationLanguage : nil
     }
 }

@@ -4,16 +4,40 @@ import Observation
 
 /// UI language. Bundles resolve their language from `AppleLanguages` once at launch,
 /// so a change only takes effect after a restart.
+/// Declared in the menu's order: the system first, then the English names alphabetically.
 enum AppLanguage: String, CaseIterable, Identifiable {
     case system
-    case zhHant = "zh-Hant"
     case en
+    case indonesian = "id"
+    case ja
+    case ko
+    case ptBR = "pt-BR"
+    case zhHans = "zh-Hans"
+    case th
+    case zhHant = "zh-Hant"
+    case vi
 
     var id: String { rawValue }
 
     /// nil → follow the system language.
     var languageCode: String? {
         self == .system ? nil : rawValue
+    }
+
+    /// What the menu calls it, in English whatever the interface language; nil for `system`.
+    var englishName: String? {
+        switch self {
+        case .system: nil
+        case .en: "English"
+        case .indonesian: "Indonesian"
+        case .ja: "Japanese"
+        case .ko: "Korean"
+        case .ptBR: "Portuguese (Brazil)"
+        case .zhHans: "Simplified Chinese"
+        case .th: "Thai"
+        case .zhHant: "Traditional Chinese"
+        case .vi: "Vietnamese"
+        }
     }
 }
 
@@ -23,6 +47,7 @@ final class SettingsStore {
     private enum Keys {
         static let provider = "app.lint.providerKind"
         static let appLanguage = "app.lint.appLanguage"
+        static let translationLanguage = "app.lint.translationLanguage"
         static let customPrompt = "app.lint.customPrompt"
         static let lastMode = "app.lint.lastMode"
         static let proofreadTone = "app.lint.lastTone.proofread"
@@ -86,6 +111,10 @@ final class SettingsStore {
     }
     /// The choice in effect for this run; differs from `appLanguage` once a restart is pending.
     let launchAppLanguage: AppLanguage
+    /// What a translation and the reading aid under a suggestion are written in.
+    var translationLanguage: TranslationLanguage {
+        didSet { defaults.set(translationLanguage.rawValue, forKey: Keys.translationLanguage) }
+    }
     /// Full system prompt overrides, one per mode and tone (`WritingPromptComposer.overrideKey`).
     /// Empty / missing → built-in default.
     var systemPromptOverrides: [String: String] {
@@ -206,6 +235,8 @@ final class SettingsStore {
         let language = AppLanguage(rawValue: defaults.string(forKey: Keys.appLanguage) ?? "") ?? .system
         appLanguage = language
         launchAppLanguage = language
+        translationLanguage = TranslationLanguage(rawValue: defaults.string(forKey: Keys.translationLanguage) ?? "")
+            ?? .traditionalChinese
         customPrompt = defaults.string(forKey: Keys.customPrompt) ?? ""
         systemPromptOverrides =
             defaults.dictionary(forKey: Keys.systemPromptOverrides) as? [String: String] ?? [:]
@@ -406,7 +437,8 @@ final class SettingsStore {
         for mode: WritingMode, tone: WritingTone, profile: WritingPromptProfile = .standard
     ) -> String {
         WritingPromptComposer.compose(
-            mode: mode, tone: tone, customPrompt: customPrompt, profile: profile
+            mode: mode, tone: tone, customPrompt: customPrompt, profile: profile,
+            translationLanguage: translationLanguage
         )
     }
 

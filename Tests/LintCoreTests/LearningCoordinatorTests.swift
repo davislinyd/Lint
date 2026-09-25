@@ -376,15 +376,18 @@ final class LearningCoordinatorTests: XCTestCase {
         XCTAssertEqual(memory.state, .active)
         XCTAssertEqual(memory.modeScope, .translate)
 
-        func used(mode: WritingMode = .translate) async -> [UUID] {
+        func used(mode: WritingMode = .translate, into language: TranslationLanguage = .traditionalChinese) async -> [UUID] {
             await coordinator.personalize(
-                prompt: basePrompt, for: "Where can I download the software?", mode: mode, config: on
+                prompt: basePrompt, for: "Where can I download the software?", mode: mode,
+                translationLanguage: language, config: on
             ).usedMemoryIDs
         }
         let translating = await used()
         XCTAssertEqual(translating, [memory.id], "translation writes Traditional Chinese, where the memory applies")
         let proofreading = await used(mode: .proofread)
         XCTAssertTrue(proofreading.isEmpty, "a translation memory stays out of proofreading")
+        let intoJapanese = await used(into: .japanese)
+        XCTAssertTrue(intoJapanese.isEmpty, "a Traditional Chinese memory stays out of a translation into Japanese")
     }
 
     // MARK: tone

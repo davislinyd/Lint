@@ -12,6 +12,13 @@
 "（尚無建議）" = "(No suggestion yet)";
 "翻譯中…" = "Translating…";
 "中文：" = "Chinese: ";
+"簡體中文：" = "Simplified Chinese: ";
+"日文：" = "Japanese: ";
+"韓文：" = "Korean: ";
+"越南文：" = "Vietnamese: ";
+"印尼文：" = "Indonesian: ";
+"泰文：" = "Thai: ";
+"葡萄牙文：" = "Portuguese: ";
 "取代 ⏎" = "Replace ⏎";
 "重寫 R" = "Rewrite R";
 "關閉 esc" = "Close esc";
@@ -95,6 +102,8 @@
 "立即重新啟動" = "Restart Now";
 "語言" = "Language";
 "重新啟動 Lint 後才會切換語言；若使用本機模型，重新啟動時模型服務會一併重載。" = "The language changes after Lint restarts. With a local model, its server is reloaded on restart too.";
+"翻譯語言" = "Translation language";
+"「翻譯」模式與建議下方的參考譯文都用翻譯語言，立即生效。Lint 只把英文翻成這個語言，不會翻成英文。" = "Translate mode and the reference translation under a suggestion use the translation language, starting right away. Lint only translates English into this language, never into English.";
 "本機 llama-server 未在埠 %lld 運行。可在設定開啟「自動啟動」，或先在終端機手動啟動。" = "The local llama-server isn’t running on port %lld. Turn on “Auto-start local model server” in Settings, or start it manually in Terminal.";
 "無法啟動 llama-server：%@" = "Couldn’t start llama-server: %@";
 "已停止 Lint 管理的 llama-server" = "Stopped the llama-server managed by Lint";
@@ -393,4 +402,4 @@
 "記憶體用量很高，可能當機" = "very high memory use, may freeze the Mac";
 "需下載 %@" = "%@ download";
 "這個模型很大，執行時會佔用大量記憶體；在 16 GB 的 Mac 上可能讓系統變得非常緩慢，甚至當機。記憶體吃緊時請改用 Gemma 4 E4B 或 Apple Intelligence。" = "This model is large and uses a lot of memory while it runs. On a 16 GB Mac it can make the system very slow or even unresponsive. If memory is tight, use Gemma 4 E4B or Apple Intelligence instead.";
-"翻譯成中文" = "Translate to Chinese";
+"翻譯" = "Translate";

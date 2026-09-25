@@ -1,0 +1,3 @@
+/* Portuguese (Brazil) Info.plist strings. Keys are Info.plist keys; the base values in Info.plist are zh-Hant. */
+
+"NSAppleEventsUsageDescription" = "O Lint usa o System Events para trazer de volta para a frente o app que você estava usando antes de substituir o texto.";

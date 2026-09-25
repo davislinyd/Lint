@@ -129,15 +129,33 @@ final class MemoryRetrieverTests: XCTestCase {
 
     // MARK: eligibility
 
-    func testOnlyActiveAndPinnedMemoriesAreRetrieved() {
+    func testShortTermLongTermAndPinnedMemoriesAreRetrieved() {
         let memories = [
-            memory("candidate", triggers: ["prospective"], state: .candidate),
+            memory("short-term", triggers: ["prospective"], state: .candidate, evidence: 0.15, count: 1),
             memory("disabled", triggers: ["prospective"], state: .disabled),
-            memory("archived", triggers: ["prospective"], state: .archived),
-            memory("active", triggers: ["prospective"], state: .active),
+            memory("forgotten", triggers: ["prospective"], state: .archived),
+            memory("long-term", triggers: ["prospective"], state: .active),
             memory("pinned", triggers: ["prospective"], state: .pinned),
         ]
-        XCTAssertEqual(Set(keys(memories, english)), ["active", "pinned"])
+        XCTAssertEqual(Set(keys(memories, english)), ["short-term", "long-term", "pinned"])
+    }
+
+    func testALongTermMemoryComesBeforeAShortTermOne() {
+        let shortTerm = memory("short-term", triggers: ["prospective"], state: .candidate, evidence: 0.35, count: 1)
+        let longTerm = memory("long-term", triggers: ["prospective"], state: .active)
+        XCTAssertEqual(keys([shortTerm, longTerm], english), ["long-term", "short-term"])
+        XCTAssertEqual(keys([longTerm, shortTerm], english), ["long-term", "short-term"])
+    }
+
+    func testAShortTermMemoryThatRanOutOrWaitsForItsPatternIsNotRetrieved() {
+        var ranOut = memory("ran-out", triggers: ["prospective"], state: .candidate, evidence: 0.35, count: 1)
+        ranOut.lastConfirmedAt = now.addingTimeInterval(-(LearningPolicy.shortTermDays + 1) * 86_400)
+        let waits = memory(
+            "vocabulary:en:prospective>perspective", kind: .vocabulary, triggers: ["prospective"],
+            state: .candidate, evidence: 0.15, count: 1,
+            instruction: MemoryWording.acceptedReplacement(from: "prospective", to: "perspective").chinese
+        )
+        XCTAssertTrue(keys([ranOut, waits], english).isEmpty)
     }
 
     func testPinnedMemoriesComeFirst() {
@@ -281,10 +299,19 @@ final class MemoryRetrieverTests: XCTestCase {
 
     func testAnOppositeThatCannotBeUsedDoesNotSuppressAnything() {
         var (forward, backward) = opposites(forward: 1.2, backward: 50)
-        for state in [MemoryState.candidate, .disabled, .archived] {
+        for state in [MemoryState.disabled, .archived] {
             backward.state = state
             XCTAssertEqual(keys([forward, backward], bothWords), ["vocabulary:en:big>large"], "\(state)")
         }
+    }
+
+    func testAShortTermOppositeIsInUseAndLosesToTheBetterEvidencedOne() {
+        var (forward, backward) = opposites(forward: 1.2, backward: 0.35)
+        backward.state = .candidate
+        backward.occurrenceCount = 1
+        XCTAssertEqual(keys([forward, backward], bothWords), ["vocabulary:en:big>large"])
+        forward.state = .archived
+        XCTAssertEqual(keys([forward, backward], bothWords), ["vocabulary:en:large>big"], "alone, it is used")
     }
 
     func testMemoriesWithoutADirectionNeverSuppressEachOther() {
@@ -442,7 +469,7 @@ final class MemoryRetrieverTests: XCTestCase {
     }
 
     func testARuleThatIsNotInUseHidesNothing() {
-        for state in [MemoryState.candidate, .archived, .disabled] {
+        for state in [MemoryState.archived, .disabled] {
             let rule = rule(state: state)
             let habit = covered("grammar:en:habit", by: rule)
             let bound = covered("grammar:en:discuss about", by: rule, triggers: ["discuss about"])

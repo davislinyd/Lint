@@ -34,7 +34,8 @@ final class MemoryLifecycleTests: XCTestCase {
         XCTAssertFalse(memory.userEdited)
     }
 
-    func testThreeEditsOrSevenAcceptsPromote() {
+    /// Merging decides by evidence alone; a memory that comes back is long-term sooner (see `settled`).
+    func testEnoughEvidenceMakesAMemoryLongTermAtOnce() {
         XCTAssertEqual(fold([0.35, 0.35]).state, .candidate)
         XCTAssertEqual(fold([0.35, 0.35, 0.35]).state, .active, "3 × 0.35 must not miss 1.0 by rounding")
         XCTAssertEqual(fold(Array(repeating: 0.15, count: 6)).state, .candidate)
@@ -62,10 +63,12 @@ final class MemoryLifecycleTests: XCTestCase {
         }
     }
 
-    func testFreshEvidenceWakesAnArchivedMemory() {
+    func testFreshEvidenceWakesAForgottenMemoryAndItsComingBackMakesItLongTerm() {
         var archived = fold([0.35])
         archived.state = .archived
-        XCTAssertEqual(fold([0.35], into: archived).state, .candidate)
+        let woken = fold([0.35], into: archived)
+        XCTAssertEqual(woken.state, .candidate)
+        XCTAssertEqual(MemoryLifecycle.settled(woken, at: day1).state, .active, "its pattern came back")
         XCTAssertEqual(fold([0.35, 0.35, 0.35], into: archived).state, .active, "enough of it, and it is in use again")
     }
 
@@ -97,28 +100,29 @@ final class MemoryLifecycleTests: XCTestCase {
         XCTAssertEqual(MemoryLifecycle.weakened(memory, by: 5, at: day1).evidenceScore, 0)
     }
 
-    func testAnActiveMemoryFallsBackToCandidateOnlyWellBelowTheBar() {
+    func testAnUndoneLongTermMemoryIsForgottenOnlyWellBelowTheBar() {
         let active = fold([0.35, 0.35, 0.35])
         XCTAssertEqual(active.state, .active)
-        XCTAssertEqual(MemoryLifecycle.weakened(active, by: 0.3, at: day1).state, .active, "0.75 is below the bar to become active, not to stay")
-        XCTAssertEqual(MemoryLifecycle.weakened(active, by: 0.7, at: day1).state, .candidate)
+        XCTAssertEqual(MemoryLifecycle.weakened(active, by: 0.3, at: day1).state, .active, "0.75 is below where it started, not below the bar")
+        XCTAssertEqual(MemoryLifecycle.weakened(active, by: 0.7, at: day1).state, .archived, "0.35 is: forgotten at once")
     }
 
-    func testAWeakenedMemoryNeedsFreshEvidenceToBecomeActiveAgain() {
+    func testAnUndoneMemoryThatComesBackIsShortTermUntilItHasTheEvidence() {
         let weakened = MemoryLifecycle.weakened(fold([0.35, 0.35, 0.35]), by: 0.7, at: day1)
-        XCTAssertEqual(weakened.state, .candidate)
+        XCTAssertEqual(weakened.state, .archived)
         let again = fold([0.35], into: weakened)
         XCTAssertEqual(again.state, .candidate, "0.7 is not enough")
+        XCTAssertEqual(MemoryLifecycle.settled(again, at: day1).state, .candidate, "undone once, so coming back proves nothing")
         XCTAssertEqual(fold([0.35, 0.35], into: weakened).state, .active)
     }
 
-    func testPinnedDisabledAndArchivedKeepTheirStateWhenWeakened() {
+    func testPinnedDisabledAndForgottenMemoriesKeepTheirStateWhenWeakened() {
         for state in [MemoryState.pinned, .disabled, .archived] {
             var memory = fold([0.35, 0.35, 0.35])
             memory.state = state
             XCTAssertEqual(MemoryLifecycle.weakened(memory, by: 5, at: day1).state, state)
         }
-        XCTAssertEqual(MemoryLifecycle.weakened(fold([0.35]), by: 5, at: day1).state, .candidate)
+        XCTAssertEqual(MemoryLifecycle.weakened(fold([0.35]), by: 5, at: day1).state, .archived, "a short-term memory undone is forgotten")
     }
 
     func testWeakeningIsNoConfirmation() {
@@ -208,15 +212,10 @@ final class MemoryLifecycleTests: XCTestCase {
         XCTAssertFalse(ancient.evidenceScore.isNaN)
     }
 
-    func testSettlingArchivesAFadedCandidateAndDemotesAFadedActiveMemory() {
-        let candidate = fold([0.35])
-        XCTAssertEqual(MemoryLifecycle.settled(candidate, at: later(grace + 150)).state, .candidate)
-        XCTAssertEqual(MemoryLifecycle.settled(candidate, at: later(grace + 170)).state, .archived)
-
+    func testAFadedLongTermMemoryIsForgottenNotDemoted() {
         let active = fold([0.35, 0.35, 0.35])
-        XCTAssertEqual(MemoryLifecycle.settled(active, at: later(grace + 90)).state, .active)
-        XCTAssertEqual(MemoryLifecycle.settled(active, at: later(grace + 100)).state, .candidate)
-        XCTAssertEqual(MemoryLifecycle.settled(active, at: later(grace + 320)).state, .archived)
+        XCTAssertEqual(MemoryLifecycle.settled(active, at: later(grace + 90)).state, .active, "0.525 left")
+        XCTAssertEqual(MemoryLifecycle.settled(active, at: later(grace + 100)).state, .archived, "0.49 left")
     }
 
     func testSettlingNeverMovesAMemoryTheUserHoldsOrOneAlreadyArchived() {
@@ -479,15 +478,15 @@ final class MemoryLifecycleTests: XCTestCase {
         }
     }
 
-    func testALongerHalfLifeKeepsAGeneralizedMemoryInUseWhereASpecificOneFadesToACandidate() {
+    func testALongerHalfLifeKeepsAGeneralizedMemoryInUseWhereASpecificOneIsForgotten() {
         let now = DreamFixtures.now
-        // 200 days: a specific memory is down to a third, a generalized one still above the bar.
-        XCTAssertEqual(MemoryLifecycle.settled(aged(.specific, evidence: 1.2, days: 200), at: now).state, .candidate)
+        // 200 days: a specific memory is down to a quarter, a generalized one still above the bar.
+        XCTAssertEqual(MemoryLifecycle.settled(aged(.specific, evidence: 1.2, days: 200), at: now).state, .archived)
         XCTAssertEqual(MemoryLifecycle.settled(aged(.generalized, evidence: 1.2, days: 200), at: now).state, .active)
         XCTAssertEqual(MemoryLifecycle.settled(aged(.core, evidence: 1.2, days: 200), at: now).state, .active)
-        // 300 days: the specific one has faded away altogether, the generalized one has not.
-        XCTAssertEqual(MemoryLifecycle.settled(aged(.specific, evidence: 0.3, days: 300), at: now).state, .archived)
-        XCTAssertEqual(MemoryLifecycle.settled(aged(.generalized, evidence: 0.3, days: 300), at: now).state, .candidate)
+        // 300 days: the generalized one has gone too, the core one has not.
+        XCTAssertEqual(MemoryLifecycle.settled(aged(.generalized, evidence: 1.2, days: 300), at: now).state, .archived)
+        XCTAssertEqual(MemoryLifecycle.settled(aged(.core, evidence: 1.2, days: 300), at: now).state, .active)
     }
 
     func testWeakeningKeepsTheAccountOfWhatWasLeftUnderTheLongerHalfLife() {
@@ -508,7 +507,7 @@ final class MemoryLifecycleTests: XCTestCase {
         memory = MemoryLifecycle.weakened(memory, by: 5, at: now)    // and one that takes everything
         XCTAssertEqual(memory.contradictionCount, 2)
         XCTAssertEqual(memory.evidenceScore, 0, accuracy: 1e-12)
-        XCTAssertEqual(memory.state, .candidate)
+        XCTAssertEqual(memory.state, .archived)
 
         var pinned = DreamFixtures.preposition("reply", state: .pinned)
         pinned = MemoryLifecycle.weakened(pinned, by: 0.1, at: now)
@@ -545,5 +544,128 @@ final class MemoryLifecycleTests: XCTestCase {
         XCTAssertEqual(supported.state, .pinned)
         XCTAssertEqual(supported.instruction, "my own wording")
         XCTAssertTrue(supported.userEdited)
+    }
+
+    // MARK: remembering and forgetting
+
+    private let shortTerm = LearningPolicy.shortTermDays
+
+    /// A memory as the extractor would write it, seen `count` times, last on `day1`.
+    private func learned(
+        _ wording: MemoryWording, key: String = "vocabulary:en:x>y", kind: MemoryKind = .vocabulary,
+        evidence: Double = 0.15, count: Int = 1
+    ) -> WritingMemory {
+        WritingMemory(
+            id: UUID(), dedupKey: key, kind: kind, language: "en", modeScope: nil, triggers: ["x"],
+            instruction: wording.chinese, evidenceScore: evidence, occurrenceCount: count, state: .candidate,
+            userEdited: false, createdAt: day1, lastConfirmedAt: day1
+        )
+    }
+
+    func testANewMemoryIsUsedAtOnce() {
+        let memory = MemoryLifecycle.merging(candidate(), weight: 0.15, at: day1, into: nil)
+        let now = MemoryLifecycle.settled(memory, at: day1)
+        XCTAssertEqual(now.state, .candidate)
+        XCTAssertTrue(MemoryLifecycle.isUsed(now))
+    }
+
+    func testAShortTermMemoryIsForgottenOnceItHasGoneSevenDaysWithoutProvingItself() {
+        XCTAssertEqual(LearningPolicy.shortTermDays, 7)
+        let memory = fold([0.35])
+        XCTAssertEqual(MemoryLifecycle.settled(memory, at: later(shortTerm)).state, .candidate, "the seventh day is still in")
+        let after = later(shortTerm).addingTimeInterval(1)
+        XCTAssertEqual(MemoryLifecycle.settled(memory, at: after).state, .archived)
+        XCTAssertEqual(MemoryLifecycle.settled(memory, at: after).evidenceScore, memory.evidenceScore, "only its state changes")
+    }
+
+    func testComingBackAWorkingReminderOrTheUsersOwnWordingProveAMemory() {
+        var cameBack = fold([0.15, 0.15])
+        XCTAssertTrue(MemoryLifecycle.isProven(cameBack))
+        var worked = fold([0.15])
+        worked.successfulUseCount = 1
+        var rewritten = fold([0.15])
+        rewritten.userEdited = true
+        XCTAssertFalse(MemoryLifecycle.isProven(fold([0.15])))
+
+        for memory in [cameBack, worked, rewritten] {
+            XCTAssertTrue(MemoryLifecycle.isProven(memory))
+            let longTerm = MemoryLifecycle.settled(memory, at: later(shortTerm + 10))
+            XCTAssertEqual(longTerm.state, .active, "proved, so it outlasts the short-term days")
+            XCTAssertEqual(longTerm.evidenceScore, LearningPolicy.activeThreshold, accuracy: 1e-12, "what a long-term memory starts from")
+        }
+
+        cameBack.evidenceScore = 2
+        XCTAssertEqual(MemoryLifecycle.settled(cameBack, at: day1).evidenceScore, 2, "more is kept")
+    }
+
+    func testAMemoryTheUserUndidIsNotProvedByComingBack() {
+        var memory = fold([0.35, 0.35, 0.15])
+        memory.state = .candidate
+        memory.evidenceScore = 0.3
+        memory.contradictionCount = 1
+        XCTAssertFalse(MemoryLifecycle.isProven(memory))
+        XCTAssertEqual(MemoryLifecycle.settled(memory, at: day1).state, .candidate)
+        XCTAssertEqual(MemoryLifecycle.settled(memory, at: later(shortTerm + 1)).state, .archived)
+        memory.userEdited = true
+        XCTAssertTrue(MemoryLifecycle.isProven(memory), "unless the user rewrote it")
+    }
+
+    func testAChangeThatDependsOnItsSentenceWaitsForItsPatternToComeBack() {
+        let waits: [MemoryWording] = [
+            .acceptedReplacement(from: "buy", to: "bought"),
+            .acceptedReplacement(from: "used", to: "able"),
+            .misspelling(wrong: "tickets", right: "ticket"),
+            .misspelling(wrong: "agent", right: "agents"),
+        ]
+        for wording in waits {
+            let memory = learned(wording)
+            XCTAssertTrue(MemoryLifecycle.waitsForRecurrence(memory), "\(wording)")
+            XCTAssertEqual(MemoryLifecycle.settled(memory, at: day1).state, .archived, "\(wording): only a trace")
+            let back = MemoryLifecycle.merging(
+                MemoryCandidate(
+                    dedupKey: memory.dedupKey, kind: memory.kind, language: "en", modeScope: nil,
+                    triggers: [], instruction: memory.instruction
+                ),
+                weight: 0.15, at: day1, into: MemoryLifecycle.settled(memory, at: day1)
+            )
+            XCTAssertEqual(MemoryLifecycle.settled(back, at: day1).state, .active, "\(wording): came back, long-term")
+        }
+
+        let usedAtOnce: [MemoryWording] = [
+            .misspelling(wrong: "recieve", right: "receive"),
+            .misspelling(wrong: "form", right: "from"),
+            .preferredSpelling(wrong: "agent", right: "agents"),
+            .preferredReplacement(from: "buy", to: "bought"),
+            .articles,
+            .extraPreposition(verb: "discuss", preposition: "about"),
+            .terminology(from: "伺服器", to: "服務器"),
+        ]
+        for wording in usedAtOnce {
+            let memory = learned(wording)
+            XCTAssertFalse(MemoryLifecycle.waitsForRecurrence(memory), "\(wording)")
+            XCTAssertEqual(MemoryLifecycle.settled(memory, at: day1).state, .candidate, "\(wording)")
+        }
+
+        var rewritten = learned(.acceptedReplacement(from: "buy", to: "bought"))
+        rewritten.instruction = "my own words"
+        XCTAssertFalse(MemoryLifecycle.waitsForRecurrence(rewritten), "a wording the user wrote is not one of Lint's")
+        var derived = learned(.acceptedReplacement(from: "buy", to: "bought"))
+        derived.level = .generalized
+        XCTAssertFalse(MemoryLifecycle.waitsForRecurrence(derived))
+    }
+
+    func testSettlingAgainChangesNothingMore() {
+        var undone = fold([0.35])
+        undone.contradictionCount = 1
+        let memories = [
+            fold([0.35]), fold([0.15, 0.15]), fold([0.35, 0.35, 0.35]), undone,
+            learned(.acceptedReplacement(from: "buy", to: "bought")),
+        ]
+        for memory in memories {
+            for days in [0.0, 3, 8, 40, 130, 400] {
+                let once = MemoryLifecycle.settled(memory, at: later(days))
+                XCTAssertEqual(MemoryLifecycle.settled(once, at: later(days)), once, "\(memory.dedupKey) at \(days) days")
+            }
+        }
     }
 }

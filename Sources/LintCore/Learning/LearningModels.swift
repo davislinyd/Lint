@@ -212,10 +212,15 @@ enum LearningPolicy {
     static let eventRetentionDays = 180
     /// The same source, action and final text within this window counts once.
     static let eventDedupeWindow: TimeInterval = 24 * 60 * 60
-    /// Evidence at which a candidate becomes active.
+    /// A memory is used as soon as it is learned (short-term, `candidate`). One that has not proved
+    /// itself (see `MemoryLifecycle.isProven`) within this many days of last showing up is forgotten.
+    static let shortTermDays = 7.0
+    /// The evidence a memory has at least once it has proved itself and is long-term (`active`); one
+    /// that gathers this much by evidence alone is long-term at once.
     static let activeThreshold = 1.0
-    /// An active memory whose evidence falls below this is a candidate again. Lower than the bar
-    /// for becoming active, so that a memory does not flip back and forth around it.
+    /// A long-term memory whose evidence has faded below this is forgotten, and so is any memory the
+    /// user's undoing takes below it. Lower than the evidence a long-term memory starts from, so that
+    /// it lasts a while without its pattern.
     static let demoteThreshold = 0.5
 
     /// Evidence starts to fade once a memory has gone this many days without its pattern showing up
@@ -234,10 +239,12 @@ enum LearningPolicy {
         case .core: coreEvidenceHalfLifeDays
         }
     }
-    /// A candidate or active memory whose evidence has faded below this is archived.
+    /// A forgotten memory is kept as a trace, so that its pattern is recognised if it comes back;
+    /// once the trace has faded below this, it is erased the next time memories are organized.
     static let archiveThreshold = 0.1
-    /// How often the memories are looked over for ones that have faded.
-    static let settleInterval: TimeInterval = 24 * 60 * 60
+    /// Memories keep fading, and short-term ones run out, so a retriever this old is built again
+    /// even if nothing has changed.
+    static let retrieverMaxAge: TimeInterval = 60 * 60
     static let maxInstructionLength = 200
 
     /// What a prompt may carry: a few short reminders, so a small local context window stays free

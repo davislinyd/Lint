@@ -149,6 +149,15 @@ struct SQLiteLearningStore: LearningStore {
             try Self.rewriteLegacyKeys(db, table: "writing_memory", keyColumn: "dedup_key")
             try Self.rewriteLegacyKeys(db, table: "dream_veto", keyColumn: "dedup_key")
         }
+        // Organizing also writes down what is remembered and forgotten, and erases faded traces; a
+        // pass counts those too. Numbers only, and 0 for the passes before.
+        migrator.registerMigration("v5_dream_forgetting") { db in
+            try db.alter(table: "dream_run") { t in
+                t.add(column: "remembered_count", .integer).notNull().defaults(to: 0)
+                t.add(column: "forgotten_count", .integer).notNull().defaults(to: 0)
+                t.add(column: "erased_count", .integer).notNull().defaults(to: 0)
+            }
+        }
         return migrator
     }
 
@@ -268,6 +277,25 @@ struct SQLiteLearningStore: LearningStore {
         try await dbQueue.write { db in
             try db.execute(sql: "DELETE FROM writing_memory")
             try db.execute(sql: "DELETE FROM dream_veto")
+        }
+    }
+
+    func eraseMemories(ids: [UUID]) async throws -> Int {
+        guard !ids.isEmpty else { return 0 }
+        return try await dbQueue.write { db in
+            var erased = 0
+            for id in ids {
+                // Checked again here: the memory may have come back since it was chosen.
+                guard let memory = try MemoryRecord.fetchOne(db, key: id.uuidString)?.memory,
+                      memory.state == .archived, memory.level == .specific, !memory.userEdited
+                else { continue }
+                try db.execute(
+                    sql: "UPDATE writing_memory SET superseded_by = NULL WHERE superseded_by = ?",
+                    arguments: [id.uuidString]
+                )
+                if try MemoryRecord.deleteOne(db, key: id.uuidString) { erased += 1 }
+            }
+            return erased
         }
     }
 
@@ -621,6 +649,9 @@ private struct DreamRunRecord: FetchableRecord, PersistableRecord {
             clusterCount: row["cluster_count"],
             generatedCount: row["generated_count"],
             supersededCount: row["superseded_count"],
+            rememberedCount: row["remembered_count"],
+            forgottenCount: row["forgotten_count"],
+            erasedCount: row["erased_count"],
             status: status
         )
     }
@@ -634,6 +665,9 @@ private struct DreamRunRecord: FetchableRecord, PersistableRecord {
         container["cluster_count"] = run.clusterCount
         container["generated_count"] = run.generatedCount
         container["superseded_count"] = run.supersededCount
+        container["remembered_count"] = run.rememberedCount
+        container["forgotten_count"] = run.forgottenCount
+        container["erased_count"] = run.erasedCount
         container["status"] = run.status.rawValue
     }
 }

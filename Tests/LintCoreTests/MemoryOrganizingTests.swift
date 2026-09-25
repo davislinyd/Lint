@@ -142,22 +142,72 @@ final class MemoryOrganizingTests: XCTestCase {
         XCTAssertEqual(try rowCount("dream_run", in: setup.url), 0)
     }
 
+    /// A pass finished `hoursAgo` hours before the setup's clock.
+    private func recordPass(_ setup: Setup, hoursAgo: Double) async throws {
+        try await openStore(setup).recordDreamRun(DreamRun(
+            id: UUID(), startedAt: setup.clock.now.addingTimeInterval(-hoursAgo * 3_600),
+            finishedAt: setup.clock.now.addingTimeInterval(-hoursAgo * 3_600 + 5), algorithmVersion: 1,
+            inputMemoryCount: 0, clusterCount: 0, generatedCount: 0, supersededCount: 0, status: .completed
+        ))
+    }
+
     func testARunOfFeedbackEndsInOnePass() async throws {
         let setup = try makeSetup()
+        try await recordPass(setup, hoursAgo: 1)
+        await setup.coordinator.prepare(config: on)
         for index in 0..<24 { await setup.coordinator.recordFeedback(edit(index), config: on) }
         await settle()
-        XCTAssertEqual(setup.sleeper.waitingCount, 0, "24 changes are not enough")
+        XCTAssertEqual(setup.sleeper.waitingCount, 0, "24 changes are not enough, and the last pass was an hour ago")
 
         for index in 24..<30 { await setup.coordinator.recordFeedback(edit(index), config: on) }
         let waiting = await eventually { setup.sleeper.waitingCount == 1 }
         XCTAssertTrue(waiting, "one wait, however much feedback there was")
 
         setup.sleeper.wake()
-        let ran = await eventually { (try? self.rowCount("dream_run", in: setup.url)) == 1 }
+        let ran = await eventually { (try? self.rowCount("dream_run", in: setup.url)) == 2 }
         XCTAssertTrue(ran)
         await settle()
-        XCTAssertEqual(try rowCount("dream_run", in: setup.url), 1)
+        XCTAssertEqual(try rowCount("dream_run", in: setup.url), 2)
         XCTAssertEqual(setup.sleeper.waitingCount, 0)
+    }
+
+    func testTheFirstFeedbackADayAfterTheLastPassSchedulesOne() async throws {
+        let setup = try makeSetup()
+        try await recordPass(setup, hoursAgo: 1)
+        await setup.coordinator.prepare(config: on)
+        await setup.coordinator.recordFeedback(edit(0), config: on)
+        await settle()
+        XCTAssertEqual(setup.sleeper.waitingCount, 0, "an hour after a pass")
+
+        setup.clock.advance(hours: 23)
+        await setup.coordinator.recordFeedback(edit(1), config: on)
+        await settle()
+        XCTAssertEqual(setup.sleeper.waitingCount, 0, "a day to the minute is not more than a day")
+
+        setup.clock.advance(hours: 1)
+        await setup.coordinator.recordFeedback(edit(2), config: on)
+        let waiting = await eventually { setup.sleeper.waitingCount == 1 }
+        XCTAssertTrue(waiting, "Lint is in use and the last pass is over a day old")
+    }
+
+    func testAnExplicitRequestReportsWhatWasRememberedForgottenAndErased() async throws {
+        let setup = try makeSetup()
+        let store = try openStore(setup)
+        for index in 0..<3 {
+            var cameBack = DreamFixtures.plain("style:en:came-back\(index)", evidence: 0.3, count: 2, state: .candidate)
+            cameBack.lastConfirmedAt = setup.clock.now
+            try await store.saveMemory(cameBack)
+        }
+        var ranOut = DreamFixtures.plain("style:en:ran-out", count: 1, state: .candidate)
+        ranOut.lastConfirmedAt = setup.clock.now.addingTimeInterval(-8 * 86_400)
+        try await store.saveMemory(ranOut)
+        for index in 0..<2 {
+            try await store.saveMemory(DreamFixtures.plain("style:en:trace\(index)", evidence: 0.05, state: .archived))
+        }
+
+        let outcome = await setup.coordinator.organizeMemories(config: on)
+
+        XCTAssertEqual(outcome, .finished(remembered: 3, forgotten: 1, erased: 2, newRules: 0, coveredMemories: 0))
     }
 
     func testAPassHoldsBackWhileTheUserIsWaitingOnASuggestion() async throws {
@@ -190,7 +240,7 @@ final class MemoryOrganizingTests: XCTestCase {
 
         let outcome = await setup.coordinator.organizeMemories(config: on)
 
-        XCTAssertEqual(outcome, .finished(newRules: 1, coveredMemories: 3))
+        XCTAssertEqual(outcome, .finished(remembered: 0, forgotten: 0, erased: 0, newRules: 1, coveredMemories: 3))
         let stats = await setup.coordinator.stats()
         XCTAssertEqual([stats.count(.specific), stats.count(.generalized), stats.count(.core)], [3, 1, 0])
         XCTAssertEqual(stats.supersededCount, 3)
@@ -202,7 +252,7 @@ final class MemoryOrganizingTests: XCTestCase {
         XCTAssertEqual(sources.count, 3)
 
         let again = await setup.coordinator.organizeMemories(config: on)
-        XCTAssertEqual(again, .finished(newRules: 0, coveredMemories: 0), "nothing more to do")
+        XCTAssertEqual(again, .finished(remembered: 0, forgotten: 0, erased: 0, newRules: 0, coveredMemories: 0), "nothing more to do")
     }
 
     func testAnExplicitRequestNeedsLearningOnAndSomethingOnDisk() async throws {
@@ -224,7 +274,7 @@ final class MemoryOrganizingTests: XCTestCase {
         XCTAssertTrue(waiting)
 
         let outcome = await setup.coordinator.organizeMemories(config: on)
-        XCTAssertEqual(outcome, .finished(newRules: 0, coveredMemories: 0))
+        XCTAssertEqual(outcome, .finished(remembered: 0, forgotten: 0, erased: 0, newRules: 0, coveredMemories: 0))
         let none = await eventually { setup.sleeper.waitingCount == 0 }
         XCTAssertTrue(none, "the one that was waiting is no longer needed")
     }

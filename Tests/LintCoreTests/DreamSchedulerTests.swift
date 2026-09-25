@@ -180,6 +180,31 @@ final class DreamSchedulerTests: XCTestCase {
         XCTAssertTrue(due)
     }
 
+    func testUseADayAfterTheLastPassSchedulesOne() async {
+        let setup = make()
+        await setup.scheduler.noteStartup(lastCompletedPass: setup.clock.now.addingTimeInterval(-3_600))
+        await setup.scheduler.noteActivity()
+        await settle()
+        XCTAssertEqual(setup.sleeper.waitingCount, 0, "an hour after a pass")
+
+        setup.clock.advance(hours: 23)
+        await setup.scheduler.noteActivity()
+        await settle()
+        XCTAssertEqual(setup.sleeper.waitingCount, 0, "exactly a day")
+
+        setup.clock.advance(hours: 1)
+        await setup.scheduler.noteActivity()
+        let due = await waiting(setup)
+        XCTAssertTrue(due)
+    }
+
+    func testUseWithNoPassYetSchedulesOne() async {
+        let setup = make()
+        await setup.scheduler.noteActivity()
+        let due = await waiting(setup)
+        XCTAssertTrue(due)
+    }
+
     func testEnoughNewLearningSchedulesAPassAndAPassStartsTheCountOver() async {
         let setup = make()
         await setup.scheduler.noteChanges(24)

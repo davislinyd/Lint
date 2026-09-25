@@ -19,6 +19,10 @@ protocol LearningStore: Sendable {
     /// the memories it was derived from stay, and are no longer pointed at as superseded.
     func deleteMemory(id: UUID) async throws
     func deleteAllMemories() async throws
+    /// Removes, in one transaction, those of `ids` that are forgotten specific memories the user has
+    /// not rewritten, and nothing else: no veto is written, since no user asked for it, and the
+    /// relations they are in go with them. Returns how many were removed.
+    func eraseMemories(ids: [UUID]) async throws -> Int
 
     /// The specific memories a generalized or core memory was derived from, oldest first.
     func sources(ofParent parentID: UUID) async throws -> [WritingMemory]

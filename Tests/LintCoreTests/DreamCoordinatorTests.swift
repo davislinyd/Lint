@@ -218,12 +218,12 @@ final class DreamCoordinatorTests: XCTestCase {
         let cases: [(String, (inout WritingMemory) -> Void)] = [
             ("pinned", { $0.state = .pinned }),
             ("disabled", { $0.state = .disabled }),
-            ("candidate", { $0.state = .candidate }),
+            ("short-term, seen once", { $0.state = .candidate; $0.occurrenceCount = 1 }),
             ("archived", { $0.state = .archived }),
             ("hand-edited", { $0.userEdited = true }),
             ("seen once", { $0.occurrenceCount = 1 }),
             ("younger than three days", { $0.createdAt = DreamFixtures.now.addingTimeInterval(-2 * 86_400) }),
-            ("faded away", { $0.confirmedLongAgo() }),
+            ("faded below the bar", { $0.fadedBelowTheBar() }),
         ]
         for (name, change) in cases {
             let store = try makeStore()
@@ -747,6 +747,119 @@ final class DreamCoordinatorTests: XCTestCase {
         XCTAssertFalse(ready { $0.level = .core }, "already core")
     }
 
+    // MARK: remembering, forgetting and erasing
+
+    private func stored(_ id: UUID, in store: SQLiteLearningStore) async throws -> WritingMemory? {
+        try await store.memory(id: id)
+    }
+
+    /// A short-term memory, seen `count` times and last `daysAgo` days ago.
+    private func shortTerm(
+        _ key: String, count: Int = 1, daysAgo: Double = 1, evidence: Double = 0.15,
+        instruction: String = "使用者偏好簡潔的用詞。"
+    ) -> WritingMemory {
+        var memory = DreamFixtures.plain(
+            key, instruction: instruction, evidence: evidence, count: count, state: .candidate
+        )
+        memory.lastConfirmedAt = now.addingTimeInterval(-daysAgo * 86_400)
+        return memory
+    }
+
+    func testAPassWritesDownWhatIsRememberedAndWhatIsForgotten() async throws {
+        let store = try makeStore()
+        let cameBack = shortTerm("style:en:came-back", count: 2, evidence: 0.3)
+        var worked = shortTerm("style:en:worked")
+        worked.successfulUseCount = 1
+        let ranOut = shortTerm("style:en:ran-out", daysAgo: 8)
+        let waits = shortTerm(
+            "vocabulary:en:buy>bought", instruction: MemoryWording.acceptedReplacement(from: "buy", to: "bought").chinese
+        )
+        var faded = DreamFixtures.plain("style:en:faded")
+        faded.fadedBelowTheBar()
+        let fresh = shortTerm("style:en:fresh")
+        let pinned = DreamFixtures.plain("style:en:pinned", evidence: 0.05, state: .pinned)
+        let disabled = DreamFixtures.plain("style:en:disabled", evidence: 0.3, state: .disabled)
+        try await save([cameBack, worked, ranOut, waits, faded, fresh, pinned, disabled], to: store)
+
+        let run = try unwrapped(await dreamer(store).run())
+
+        XCTAssertEqual(run.status, .completed)
+        XCTAssertEqual([run.rememberedCount, run.forgottenCount, run.erasedCount], [2, 3, 0])
+        for (memory, state) in [
+            (cameBack, MemoryState.active), (worked, .active), (ranOut, .archived), (waits, .archived),
+            (faded, .archived), (fresh, .candidate), (pinned, .pinned), (disabled, .disabled),
+        ] {
+            let now = try await stored(memory.id, in: store)
+            XCTAssertEqual(now?.state, state, memory.dedupKey)
+        }
+        let remembered = try await stored(cameBack.id, in: store)
+        XCTAssertEqual(remembered?.evidenceScore ?? 0, LearningPolicy.activeThreshold, accuracy: 1e-12, "written down too")
+        let recorded = try await store.lastCompletedDreamRun()
+        XCTAssertEqual(recorded, run, "and the counts are kept with the pass")
+
+        let memories = try await store.memories()
+        let again = try unwrapped(await dreamer(store).run())
+        XCTAssertEqual([again.rememberedCount, again.forgottenCount, again.erasedCount], [0, 0, 0])
+        let unchanged = try await store.memories()
+        XCTAssertEqual(unchanged, memories, "nothing more to do")
+    }
+
+    func testFadedTracesAreErasedAndNothingElse() async throws {
+        let store = try makeStore()
+        let trace = DreamFixtures.plain("style:en:trace", evidence: 0.05, state: .archived)
+        let stillThere = DreamFixtures.plain("style:en:still-there", evidence: 0.3, state: .archived)
+        var rewritten = DreamFixtures.plain("style:en:rewritten", evidence: 0.05, state: .archived)
+        rewritten.userEdited = true
+        var derived = DreamFixtures.plain("dream:test:derived", evidence: 0.05, state: .archived)
+        derived.level = .generalized
+        let disabled = DreamFixtures.plain("style:en:disabled", evidence: 0.05, state: .disabled)
+        let pinned = DreamFixtures.plain("style:en:pinned", evidence: 0.05, state: .pinned)
+        var gone = DreamFixtures.plain("style:en:gone")
+        gone.lastConfirmedAt = now.addingTimeInterval(-2_000 * 86_400)
+        try await save([trace, stillThere, rewritten, derived, disabled, pinned, gone], to: store)
+
+        let run = try unwrapped(await dreamer(store).run())
+
+        XCTAssertEqual(run.erasedCount, 2, "the faded trace, and a long-term memory forgotten and faded in the same pass")
+        XCTAssertEqual(run.forgottenCount, 1)
+        let left = try await store.memories()
+        XCTAssertEqual(
+            Set(left.map(\.id)), Set([stillThere, rewritten, derived, disabled, pinned].map(\.id))
+        )
+        for memory in [trace, gone] {
+            let vetoed = try await store.isVetoed(dedupKey: memory.dedupKey)
+            XCTAssertFalse(vetoed, "nobody asked for it, so it may be learned again")
+        }
+    }
+
+    func testErasingASourceTakesItsRelationAlongAndARuleLeftWithTooFewIsPutAway() async throws {
+        let store = try makeStore()
+        let sources = DreamFixtures.prepositions(3)
+        try await save(sources, to: store)
+        let dreamer = dreamer(store)
+        await dreamer.run()
+        let parent = try unwrapped(await derived(store).first)
+        try await store.updateMemory(id: sources[0].id) { memory in
+            memory.state = .archived
+            memory.evidenceScore = 0.05
+        }
+
+        let run = try unwrapped(await dreamer.run())
+
+        XCTAssertEqual(run.erasedCount, 1)
+        let erased = try await stored(sources[0].id, in: store)
+        XCTAssertNil(erased)
+        let counts = try await store.sourceCounts()
+        XCTAssertEqual(counts, [parent.id: 2])
+        let rule = try await stored(parent.id, in: store)
+        XCTAssertEqual(rule?.state, .archived, "two sources cannot carry a rule")
+        let vetoed = try await store.isVetoed(dedupKey: parent.dedupKey)
+        XCTAssertFalse(vetoed)
+        let retrieved = MemoryRetriever(memories: try await store.memories(), now: now)
+            .select(for: .init(text: "Please emphasize about the delay, and reply about it today.", mode: .proofread))
+        XCTAssertEqual(Set(retrieved.map(\.id)), Set(sources.dropFirst().map(\.id)), "the rest are used on their own again")
+    }
+
     // MARK: a provider
 
     private func alikeStyleMemories() -> [WritingMemory] {
@@ -809,8 +922,8 @@ final class DreamCoordinatorTests: XCTestCase {
 }
 
 private extension WritingMemory {
-    /// Not seen for so long that the evidence is gone.
-    mutating func confirmedLongAgo() {
-        lastConfirmedAt = DreamFixtures.now.addingTimeInterval(-2_000 * 86_400)
+    /// Not seen for so long that it is forgotten, though its trace is still there to be recognised.
+    mutating func fadedBelowTheBar() {
+        lastConfirmedAt = DreamFixtures.now.addingTimeInterval(-200 * 86_400)
     }
 }

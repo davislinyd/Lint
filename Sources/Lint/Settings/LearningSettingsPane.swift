@@ -118,9 +118,9 @@ struct LearningSettingsPane: View {
     @ViewBuilder
     private func organizeMessage(_ outcome: MemoryOrganizationOutcome) -> some View {
         switch outcome {
-        case .finished(let rules, let covered) where rules == 0 && covered == 0:
+        case .finished(_, _, _, let rules, let covered) where rules == 0 && covered == 0:
             Text("沒有需要整理的記憶。")
-        case .finished(let rules, let covered):
+        case .finished(_, _, _, let rules, let covered):
             Text("已整理：新增 \(rules) 條一般記憶，涵蓋 \(covered) 條具體記憶。")
         case .alreadyRunning:
             Text("整理正在進行中。")

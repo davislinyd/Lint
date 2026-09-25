@@ -84,6 +84,7 @@ public actor LearningCoordinator {
             let inserted = try await store.insertEvent(
                 event, unlessDuplicateWithin: LearningPolicy.eventDedupeWindow
             )
+            await scheduler?.noteActivity()
             // A repeat of the same feedback is not new evidence.
             if inserted {
                 let changes = await learn(from: feedback, action: event.action, at: event.createdAt, store: store)
@@ -186,7 +187,10 @@ public actor LearningCoordinator {
         guard let run else { return .alreadyRunning }
         guard run.status == .completed else { return .failed }
         await scheduler?.didRun()
-        return .finished(newRules: run.generatedCount, coveredMemories: run.supersededCount)
+        return .finished(
+            remembered: run.rememberedCount, forgotten: run.forgottenCount, erased: run.erasedCount,
+            newRules: run.generatedCount, coveredMemories: run.supersededCount
+        )
     }
 
     /// How many memories each generalized or core memory was derived from.

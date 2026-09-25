@@ -45,4 +45,14 @@ final class WritingRequestKeyTests: XCTestCase {
         XCTAssertEqual(key("t", .proofread, custom: "詩"), key("t", .proofread, custom: "散文"))
         XCTAssertEqual(key("t", .translate, custom: "詩"), key("t", .translate, custom: "散文"))
     }
+
+    func testTheTranslationLanguageOnlyMattersToATranslation() {
+        func key(_ mode: WritingMode, _ language: TranslationLanguage) -> WritingRequestKey {
+            WritingRequestKey(source: "t", mode: mode, tone: .preserve, customPrompt: "", translationLanguage: language)
+        }
+        XCTAssertNotEqual(key(.translate, .japanese), key(.translate, .traditionalChinese))
+        XCTAssertEqual(key(.translate, .traditionalChinese), self.key("t", .translate), "Traditional Chinese is the default")
+        XCTAssertEqual(key(.proofread, .japanese), key(.proofread, .thai))
+        XCTAssertEqual(key(.custom, .japanese), key(.custom, .thai))
+    }
 }

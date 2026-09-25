@@ -33,6 +33,15 @@ struct FloatingPanelView: View {
                     .pickerStyle(.menu)
                     .frame(maxWidth: 180)
                 }
+                if viewModel.mode == .translate {
+                    Picker("翻譯語言", selection: Bindable(viewModel.settings).translationLanguage) {
+                        ForEach(TranslationLanguage.allCases) { language in
+                            Text(verbatim: language.englishName).tag(language)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .fixedSize()
+                }
                 Spacer()
                 if viewModel.isStreaming {
                     ProgressView()

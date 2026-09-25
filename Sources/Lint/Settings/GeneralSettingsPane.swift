@@ -1,4 +1,5 @@
 import KeyboardShortcuts
+import LintCore
 import SwiftUI
 
 struct GeneralSettingsPane: View {
@@ -105,19 +106,25 @@ struct GeneralSettingsPane: View {
                     }
                 }
             }
+            Picker("翻譯語言", selection: Bindable(app.settings).translationLanguage) {
+                ForEach(TranslationLanguage.allCases) { language in
+                    Text(verbatim: language.englishName).tag(language)
+                }
+            }
         } header: {
             Text("語言")
         } footer: {
-            Text("重新啟動 Lint 後才會切換語言；若使用本機模型，重新啟動時模型服務會一併重載。")
-                .sectionNote()
+            VStack(alignment: .leading, spacing: 4) {
+                Text("重新啟動 Lint 後才會切換語言；若使用本機模型，重新啟動時模型服務會一併重載。")
+                    .sectionNote()
+                Text("「翻譯」模式與建議下方的參考譯文都用翻譯語言，立即生效。Lint 只把英文翻成這個語言，不會翻成英文。")
+                    .sectionNote()
+            }
         }
     }
 
     private func languageName(_ language: AppLanguage) -> Text {
-        switch language {
-        case .system: Text("跟隨系統")
-        case .zhHant: Text(verbatim: "繁體中文")
-        case .en: Text(verbatim: "English")
-        }
+        if let name = language.englishName { return Text(verbatim: name) }
+        return Text("跟隨系統")
     }
 }

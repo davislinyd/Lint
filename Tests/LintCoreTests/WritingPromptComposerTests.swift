@@ -92,11 +92,40 @@ final class WritingPromptComposerTests: XCTestCase {
 
     // MARK: translate
 
-    func testTranslationAlwaysGoesIntoTraditionalChinese() {
+    func testTranslationGoesIntoTraditionalChineseByDefault() {
         for tone in WritingTone.allCases {
             let prompt = compose(.translate, tone)
             XCTAssertTrue(prompt.contains("翻譯成繁體中文"), "\(tone)")
             XCTAssertTrue(prompt.contains("使用台灣用語與標點習慣"), "\(tone)")
+            XCTAssertEqual(
+                prompt,
+                WritingPromptComposer.compose(mode: .translate, tone: tone, customPrompt: "", translationLanguage: .traditionalChinese)
+            )
+        }
+    }
+
+    func testTranslationGoesIntoTheChosenLanguage() {
+        let expected: [TranslationLanguage: String] = [
+            .indonesian: "印尼文", .japanese: "日文", .korean: "韓文", .portuguese: "巴西葡萄牙文",
+            .simplifiedChinese: "簡體中文", .thai: "泰文", .traditionalChinese: "繁體中文", .vietnamese: "越南文",
+        ]
+        XCTAssertEqual(Set(expected.keys), Set(TranslationLanguage.allCases))
+        for (language, name) in expected {
+            for tone in WritingTone.allCases {
+                let prompt = WritingPromptComposer.compose(
+                    mode: .translate, tone: tone, customPrompt: "", translationLanguage: language
+                )
+                XCTAssertTrue(prompt.contains("把使用者文字翻譯成\(name)。"), "\(language) \(tone)")
+            }
+        }
+    }
+
+    func testTheTranslationLanguageChangesOnlyTheTranslation() {
+        for mode in [WritingMode.proofread, .custom] {
+            XCTAssertEqual(
+                WritingPromptComposer.compose(mode: mode, tone: .formal, customPrompt: "詩", translationLanguage: .japanese),
+                compose(mode, .formal, custom: "詩"), "\(mode)"
+            )
         }
     }
 

@@ -8,6 +8,13 @@
 	<array>
 		<string>zh-Hant</string>
 		<string>en</string>
+		<string>id</string>
+		<string>ja</string>
+		<string>ko</string>
+		<string>pt-BR</string>
+		<string>zh-Hans</string>
+		<string>th</string>
+		<string>vi</string>
 	</array>
 	<key>CFBundleDisplayName</key>
 	<string>Lint</string>

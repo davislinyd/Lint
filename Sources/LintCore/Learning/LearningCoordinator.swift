@@ -109,6 +109,7 @@ public actor LearningCoordinator {
         mode: WritingMode,
         tone: WritingTone = .preserve,
         english: Bool = false,
+        translationLanguage: TranslationLanguage = .traditionalChinese,
         config: LearningConfig,
         timeout: Duration = .milliseconds(150)
     ) async -> PersonalizedPrompt {
@@ -119,8 +120,7 @@ public actor LearningCoordinator {
                 for: text,
                 mode: mode,
                 tone: tone,
-                // Translation only ever writes Traditional Chinese.
-                outputLanguage: mode == .translate ? "zh-Hant" : nil,
+                outputLanguage: mode == .translate ? translationLanguage.rawValue : nil,
                 config: config
             )
             return PromptComposer.compose(base: prompt, memories: memories, english: english)

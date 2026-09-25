@@ -1,0 +1,3 @@
+/* Simplified Chinese Info.plist strings. Keys are Info.plist keys; the base values in Info.plist are zh-Hant. */
+
+"NSAppleEventsUsageDescription" = "Lint 需要控制“系统事件”，才能在替换文本前把你原来使用的 App 带回最前面。";

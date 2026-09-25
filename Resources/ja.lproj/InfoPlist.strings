@@ -1,0 +1,3 @@
+/* Japanese Info.plist strings. Keys are Info.plist keys; the base values in Info.plist are zh-Hant. */
+
+"NSAppleEventsUsageDescription" = "Lint はテキストを置き換える前に、元のアプリを最前面に戻すために「System Events」を使用します。";

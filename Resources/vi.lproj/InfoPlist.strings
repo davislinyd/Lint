@@ -1,0 +1,3 @@
+/* Vietnamese Info.plist strings. Keys are Info.plist keys; the base values in Info.plist are zh-Hant. */
+
+"NSAppleEventsUsageDescription" = "Lint dùng System Events để đưa ứng dụng bạn đang dùng trở lại phía trước trước khi thay thế văn bản.";

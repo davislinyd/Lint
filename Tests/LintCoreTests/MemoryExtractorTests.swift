@@ -492,4 +492,31 @@ final class MemoryExtractorTests: XCTestCase {
             }
         }
     }
+
+    // MARK: the same word in another form
+
+    func testTheSameWordInAnotherFormIsAnInflection() {
+        let inflections = [
+            ("tickets", "ticket"), ("agent", "agents"), ("use", "used"), ("work", "worked"),
+            ("box", "boxes"), ("consider", "considering"), ("company", "companies"), ("study", "studied"),
+            ("manage", "managing"), ("large", "largest"), ("control", "controlled"), ("big", "bigger"),
+            ("quick", "quickly"), ("easy", "easily"), ("user", "user's"), ("informations", "information"),
+        ]
+        for (a, b) in inflections {
+            XCTAssertTrue(MemoryExtractor.isInflection(a, b), "\(a) / \(b)")
+            XCTAssertTrue(MemoryExtractor.isInflection(b, a), "\(b) / \(a)")
+        }
+    }
+
+    func testWordsThatAreOftenConfusedAreNoInflection() {
+        let confusions = [
+            ("recieve", "receive"), ("form", "from"), ("then", "than"), ("their", "there"), ("its", "it's"),
+            ("lose", "loose"), ("advice", "advise"), ("affect", "effect"), ("quite", "quiet"), ("fine", "find"),
+            ("here", "hers"), ("definately", "definitely"), ("led", "lead"), ("ticket", "ticket"),
+        ]
+        for (a, b) in confusions {
+            XCTAssertFalse(MemoryExtractor.isInflection(a, b), "\(a) / \(b)")
+            XCTAssertFalse(MemoryExtractor.isInflection(b, a), "\(b) / \(a)")
+        }
+    }
 }

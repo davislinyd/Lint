@@ -16,11 +16,11 @@ private extension MemoryKind {
 private extension MemoryState {
     var title: LocalizedStringKey {
         switch self {
-        case .candidate: "候選"
-        case .active: "啟用中"
+        case .candidate: "短期"
+        case .active: "長期"
         case .pinned: "已釘選"
         case .disabled: "已停用"
-        case .archived: "已封存"
+        case .archived: "已忘記"
         }
     }
 }
@@ -36,10 +36,12 @@ private extension MemoryLevel {
 }
 
 /// Everything Lint has learned, where each memory can be read, reworded, pinned, disabled or deleted.
+/// Forgotten memories are only traces, so they are listed only when asked for.
 struct MemoryManagementView: View {
     var app: AppModel
     @Environment(\.dismiss) private var dismiss
     @State private var memories: [WritingMemory] = []
+    @State private var showForgotten = false
     /// How many memories each generalized or core memory was derived from.
     @State private var sourceCounts: [UUID: Int] = [:]
     @State private var editing: WritingMemory?
@@ -61,10 +63,14 @@ struct MemoryManagementView: View {
                 Text("還沒有學到任何記憶。")
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if shown.isEmpty {
+                Text("沒有使用中的記憶。")
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 List {
                     ForEach(MemoryKind.allCases, id: \.self) { kind in
-                        let items = memories
+                        let items = shown
                             .filter { $0.kind == kind }
                             .sorted { $0.lastConfirmedAt > $1.lastConfirmedAt }
                         if !items.isEmpty {
@@ -81,6 +87,9 @@ struct MemoryManagementView: View {
                 Button("清除所有記憶…", role: .destructive) { confirmClear = true }
                     .disabled(memories.isEmpty)
                 Spacer()
+                if forgottenCount > 0 {
+                    Toggle("顯示已忘記的記憶（\(forgottenCount)）", isOn: $showForgotten)
+                }
             }
             .padding(16)
         }
@@ -100,8 +109,16 @@ struct MemoryManagementView: View {
         }
     }
 
+    private var forgottenCount: Int {
+        memories.filter { $0.state == .archived }.count
+    }
+
+    private var shown: [WritingMemory] {
+        showForgotten ? memories : memories.filter { $0.state != .archived }
+    }
+
     private func row(_ memory: WritingMemory) -> some View {
-        // Disabled by the user, or faded away and archived: not in use, and enabling brings it back.
+        // Disabled by the user, or forgotten: not in use, and enabling brings it back.
         let dormant = memory.state == .disabled || memory.state == .archived
         // A rule says it already, so this one is not told to the model on its own account.
         let covered = isCovered(memory)
@@ -141,7 +158,7 @@ struct MemoryManagementView: View {
     /// A rule that is in use stands in for this memory.
     private func isCovered(_ memory: WritingMemory) -> Bool {
         guard memory.level == .specific, let rule = memory.supersededBy else { return false }
-        return memories.contains { $0.id == rule && ($0.state == .active || $0.state == .pinned) }
+        return memories.contains { $0.id == rule && [.candidate, .active, .pinned].contains($0.state) }
     }
 
     private func caption(_ memory: WritingMemory, covered: Bool) -> some View {

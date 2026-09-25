@@ -32,8 +32,8 @@ final class InteractiveGate: @unchecked Sendable {
 
 /// Decides when organizing memories runs: only marked as pending by a few triggers, and run once,
 /// after things have been quiet for a while. Nothing here is on the clock (a Mac may be asleep at
-/// any hour): a pass happens after start-up when it has been long enough, after enough new
-/// learning, or when memories pile up.
+/// any hour): a pass happens after start-up, or on the next feedback, when it has been long enough
+/// (so at least daily while Lint is in use), after enough new learning, or when memories pile up.
 ///
 /// Several triggers in a row (feedback, feedback, feedback) restart the same wait and end in one
 /// pass. A pass never starts while the user is waiting on a suggestion, or has just been, and one
@@ -78,8 +78,14 @@ actor DreamScheduler {
     /// The app has started (or learning was switched on): it has been long enough since the last pass.
     func noteStartup(lastCompletedPass: Date?) {
         lastPass = lastCompletedPass
-        guard let lastCompletedPass else { return markPending() }
-        if clock().timeIntervalSince(lastCompletedPass) > LearningPolicy.dreamStartupInterval { markPending() }
+        noteActivity()
+    }
+
+    /// The user is using Lint (feedback was recorded): a menu bar app may run for weeks, and what
+    /// is forgotten should be written down, and faded traces erased, at least daily.
+    func noteActivity() {
+        guard let lastPass else { return markPending() }
+        if clock().timeIntervalSince(lastPass) > LearningPolicy.dreamInterval { markPending() }
     }
 
     /// Memories were learned from, or weakened: this many meaningful changes.

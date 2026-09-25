@@ -6,7 +6,9 @@ public enum MemoryOrganizationOutcome: Sendable, Equatable {
     case unavailable
     /// A pass was already running.
     case alreadyRunning
-    case finished(newRules: Int, coveredMemories: Int)
+    /// What the pass did: memories it found proved (now long-term), memories it forgot, faded traces
+    /// it erased, rules it derived and the memories those stand in for.
+    case finished(remembered: Int, forgotten: Int, erased: Int, newRules: Int, coveredMemories: Int)
     case failed
 }
 
@@ -28,6 +30,13 @@ struct DreamRun: Sendable, Equatable, Identifiable {
     var clusterCount: Int
     var generatedCount: Int
     var supersededCount: Int
+    /// Short-term memories that had proved themselves and were written down as long-term.
+    var rememberedCount = 0
+    /// Memories written down as forgotten: short-term ones that did not prove themselves, and
+    /// long-term ones that faded.
+    var forgottenCount = 0
+    /// Forgotten memories whose trace had faded, removed from the file.
+    var erasedCount = 0
     var status: DreamRunStatus
 }
 
@@ -51,7 +60,8 @@ extension LearningPolicy {
 
 extension LearningPolicy {
     /// Bumped when what organizing does changes in a way that old runs cannot be compared with.
-    static let dreamAlgorithmVersion = 1
+    /// 2: a pass also writes down what is remembered and forgotten, and erases faded traces.
+    static let dreamAlgorithmVersion = 2
 
     /// A rule needs this many compatible memories behind it. Fewer is a coincidence.
     static let dreamMinClusterSize = 3
@@ -68,8 +78,9 @@ extension LearningPolicy {
     /// one pass; after a failure it waits this long before it tries again.
     static let dreamIdleDelay = Duration.seconds(60)
     static let dreamRetryDelay = Duration.seconds(3_600)
-    /// A pass at start-up if the last one was longer ago than this.
-    static let dreamStartupInterval: TimeInterval = 24 * 60 * 60
+    /// Memories are organized at least this often while Lint is in use: at start-up, and on the first
+    /// feedback, once the last pass is longer ago than this.
+    static let dreamInterval: TimeInterval = 24 * 60 * 60
     /// A pass once this many memories have been learned from or weakened since the last one.
     static let dreamChangeThreshold = 25
     /// A pass when this many memories are candidates or in use, though not more often than the cooldown.

@@ -2,13 +2,46 @@ import Foundation
 
 /// How a memory grows and fades, and which state it rests in.
 ///
+/// A memory is used as soon as it is learned: it is short-term (`candidate`). Once it has proved
+/// itself it is long-term (`active`); if it has not within `LearningPolicy.shortTermDays`, it is
+/// forgotten (`archived`). A forgotten memory is only a trace, kept so that its pattern is recognised
+/// if it comes back, and it is erased once the trace has faded (see `MemoryDreamCoordinator`).
+///
 /// Evidence is kept as it stood at `lastConfirmedAt` and fades from there (see
 /// `WritingMemory.evidence(at:)`). Whatever changes a memory first settles that fading into the
 /// stored value and restarts the clock, so the two never count the same time twice.
 enum MemoryLifecycle {
+    /// Whether a memory has shown that it is worth keeping: its pattern came back, either seen again
+    /// or seen again while the model was reminded of it and the user took the fix (which is the
+    /// user's text repeating the habit, not the reminder confirming itself), and the user has never
+    /// undone it. A memory the user rewrote by hand has been judged by the user.
+    static func isProven(_ memory: WritingMemory) -> Bool {
+        if memory.userEdited { return true }
+        guard memory.contradictionCount == 0 else { return false }
+        return memory.occurrenceCount >= 2 || memory.successfulUseCount >= 1
+    }
+
+    /// A change the model made and the user only accepted, which depends on its sentence: another
+    /// word ("used" for "able"), or the same word in another form ("tickets" for "ticket"). One such
+    /// fix says little about a habit, so the memory is used only once its pattern has come back.
+    /// Told apart by the wording it was stored with, so memories learned before this rule follow it.
+    static func waitsForRecurrence(_ memory: WritingMemory) -> Bool {
+        guard memory.level == .specific, !isProven(memory) else { return false }
+        switch MemoryWording(chinese: memory.instruction) {
+        case .acceptedReplacement?: return true
+        case .misspelling(let wrong, let right)?: return MemoryExtractor.isInflection(wrong, right)
+        default: return false
+        }
+    }
+
+    /// Short-term, long-term or pinned: the memories a prompt may be reminded of.
+    static func isUsed(_ memory: WritingMemory) -> Bool {
+        memory.state == .candidate || memory.state == .active || memory.state == .pinned
+    }
+
     /// Folds one observation into what is known about the pattern. Pinned and disabled memories
     /// keep their state; the wording never changes once a memory exists, so the user's own edits
-    /// stay. New evidence wakes a memory that had faded away and been archived.
+    /// stay. New evidence wakes a forgotten memory: it is short-term again, and has come back.
     static func merging(
         _ candidate: MemoryCandidate,
         weight: Double,
@@ -57,33 +90,51 @@ enum MemoryLifecycle {
         return memory
     }
 
-    /// Takes evidence away, because the user undid what the memory asks for. An active memory that
-    /// falls well below the bar is a candidate again; pinned, disabled and archived ones keep their
-    /// state. This is no confirmation, so the clock is not restarted: the stored value is set so
-    /// that, counted from the same last confirmation, it reads what is left today.
+    /// Takes evidence away, because the user undid what the memory asks for. A short-term or
+    /// long-term memory left well below the bar is forgotten at once; pinned, disabled and forgotten
+    /// ones keep their state. This is no confirmation, so the clock is not restarted: the stored
+    /// value is set so that, counted from the same last confirmation, it reads what is left today.
     static func weakened(_ memory: WritingMemory, by amount: Double, at now: Date) -> WritingMemory {
         var memory = memory
         let factor = memory.decayFactor(at: now)
         let remaining = max(0, memory.evidence(at: now) - amount)
         memory.evidenceScore = factor > 0 ? remaining / factor : 0
         memory.contradictionCount += 1
-        if memory.state == .active, remaining < LearningPolicy.demoteThreshold {
-            memory.state = .candidate
+        if memory.state == .active || memory.state == .candidate, remaining < LearningPolicy.demoteThreshold {
+            memory.state = .archived
         }
         return memory
     }
 
-    /// Where a memory stands once its evidence has faded. Pinned and disabled memories are the
-    /// user's and never move. A candidate that has faded away is archived; an active one that has
-    /// faded below the bar to stay active is a candidate again.
+    /// Where a memory stands at `now`: the one place where remembering and forgetting are decided,
+    /// so that what a prompt is reminded of, what Settings shows and what organizing writes all agree.
+    /// Applying it again changes nothing. Pinned and disabled memories are the user's and never move;
+    /// a forgotten one stays forgotten until its pattern comes back (see `merging`).
+    ///
+    /// A short-term memory that has proved itself (`isProven`) is long-term, with at least the
+    /// evidence a long-term memory starts from. One that has not within `shortTermDays` of last
+    /// showing up is forgotten, and so is one that waits for its pattern to come back. A long-term
+    /// memory whose evidence has faded below `demoteThreshold` is forgotten too.
     static func settled(_ memory: WritingMemory, at now: Date) -> WritingMemory {
-        guard memory.state == .candidate || memory.state == .active else { return memory }
-        let evidence = memory.evidence(at: now)
         var memory = memory
-        if evidence < LearningPolicy.archiveThreshold {
+        switch memory.state {
+        case .pinned, .disabled, .archived:
+            return memory
+        case .candidate:
+            guard isProven(memory) else {
+                let idle = now.timeIntervalSince(memory.lastConfirmedAt)
+                if idle > LearningPolicy.shortTermDays * 86_400 || waitsForRecurrence(memory) {
+                    memory.state = .archived
+                }
+                return memory
+            }
+            memory.state = .active
+            memory.evidenceScore = max(memory.evidenceScore, LearningPolicy.activeThreshold)
+        case .active:
+            break
+        }
+        if memory.evidence(at: now) < LearningPolicy.demoteThreshold {
             memory.state = .archived
-        } else if memory.state == .active, evidence < LearningPolicy.demoteThreshold {
-            memory.state = .candidate
         }
         return memory
     }
@@ -109,8 +160,8 @@ enum MemoryLifecycle {
     }
 
     /// The user gives a memory back to the lifecycle (unpins or enables it). The time it was held
-    /// or dormant does not count against it: it fades from now on. One that had faded away and
-    /// been archived starts again as active, since the user asked for it.
+    /// or dormant does not count against it: it fades from now on. A forgotten one comes back as
+    /// long-term, since the user asked for it.
     static func resumed(_ memory: WritingMemory, at now: Date) -> WritingMemory {
         var memory = memory
         var evidence = memory.evidence(at: now)

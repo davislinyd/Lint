@@ -152,34 +152,37 @@ final class LearningCoordinatorTests: XCTestCase {
         return try XCTUnwrap(all.first)
     }
 
-    func testThreeDifferentEditsTurnACandidateIntoAnActiveMemory() async throws {
+    func testOneEditIsUsedAtOnceAndASecondMakesItLongTerm() async throws {
         let coordinator = learner()
-        for topic in topics.prefix(2) {
-            await coordinator.recordFeedback(edit(topic), config: on)
-        }
-        let candidate = await coordinator.memories()
-        XCTAssertEqual(candidate.map(\.dedupKey), ["grammar:en:discuss about"])
-        XCTAssertEqual(candidate.first?.state, .candidate)
-        XCTAssertEqual(candidate.first?.occurrenceCount, 2)
+        await coordinator.recordFeedback(edit(topics[0]), config: on)
+        let first = await coordinator.memories()
+        XCTAssertEqual(first.map(\.dedupKey), ["grammar:en:discuss about"])
+        XCTAssertEqual(first.first?.state, .candidate, "short-term")
+        XCTAssertEqual(first.first?.occurrenceCount, 1)
+        let usedAtOnce = await retrieve(coordinator)
+        XCTAssertEqual(usedAtOnce.map(\.id), first.map(\.id), "used from the next suggestion on")
 
-        await coordinator.recordFeedback(edit(topics[2]), config: on)
-        let active = await coordinator.memories()
-        XCTAssertEqual(active.count, 1)
-        XCTAssertEqual(active.first?.state, .active)
-        XCTAssertEqual(active.first?.occurrenceCount, 3)
-        XCTAssertEqual(active.first?.triggers, ["discuss about"])
+        await coordinator.recordFeedback(edit(topics[1]), config: on)
+        let proven = await coordinator.memories()
+        XCTAssertEqual(proven.count, 1)
+        XCTAssertEqual(proven.first?.state, .active, "it came back: long-term")
+        XCTAssertEqual(proven.first?.occurrenceCount, 2)
+        XCTAssertEqual(proven.first?.triggers, ["discuss about"])
+        XCTAssertEqual(proven.first?.evidenceScore ?? 0, LearningPolicy.activeThreshold, accuracy: 1e-9)
     }
 
-    func testSevenAcceptsAreNeededToPromote() async throws {
+    func testAnAcceptedFixIsUsedAtOnceAndComingBackMakesItLongTerm() async throws {
         let coordinator = learner()
-        for topic in topics.prefix(6) {
-            await coordinator.recordFeedback(accept(topic), config: on)
-        }
-        let beforeSeventh = await coordinator.memories()
-        XCTAssertEqual(beforeSeventh.first?.state, .candidate)
-        await coordinator.recordFeedback(accept(topics[6]), config: on)
-        let afterSeventh = await coordinator.memories()
-        XCTAssertEqual(afterSeventh.first?.state, .active)
+        await coordinator.recordFeedback(accept(topics[0]), config: on)
+        let first = try await onlyMemory(coordinator)
+        XCTAssertEqual(first.state, .candidate)
+        XCTAssertEqual(first.evidenceScore, LearningPolicy.evidenceWeight(for: .accepted), accuracy: 1e-9)
+        let used = await retrieve(coordinator)
+        XCTAssertEqual(used.map(\.id), [first.id])
+
+        await coordinator.recordFeedback(accept(topics[1]), config: on)
+        let second = try await onlyMemory(coordinator)
+        XCTAssertEqual(second.state, .active)
     }
 
     func testTheSameFeedbackTwiceIsOneObservation() async throws {
@@ -232,31 +235,32 @@ final class LearningCoordinatorTests: XCTestCase {
         XCTAssertTrue(miss.isEmpty)
     }
 
-    func testPromotionShowsUpInTheNextRetrievalEvenAfterTheCacheWasFilled() async throws {
+    func testANewMemoryShowsUpInTheNextRetrievalEvenAfterTheCacheWasFilled() async throws {
         let coordinator = learner()
-        for topic in topics.prefix(2) {
-            await coordinator.recordFeedback(edit(topic), config: on)
-        }
-        let candidate = await retrieve(coordinator)
-        XCTAssertTrue(candidate.isEmpty, "a candidate is not used yet")
+        let empty = await retrieve(coordinator)
+        XCTAssertTrue(empty.isEmpty, "nothing learned yet, and the retrieval cache is filled")
 
-        await coordinator.recordFeedback(edit(topics[2]), config: on)
-        let active = await retrieve(coordinator)
-        XCTAssertEqual(active.count, 1)
+        await coordinator.recordFeedback(edit(topics[0]), config: on)
+        let learned = await retrieve(coordinator)
+        XCTAssertEqual(learned.count, 1)
     }
 
     func testEveryChangeShowsUpInTheNextRetrieval() async throws {
         let (coordinator, id) = try await seeded()
         let untouched = await retrieve(coordinator)
-        XCTAssertTrue(untouched.isEmpty, "one edit is only a candidate")
+        XCTAssertEqual(untouched.count, 1, "one edit is used at once")
+
+        await coordinator.setEnabled(false, id: id)
+        let disabled = await retrieve(coordinator)
+        XCTAssertTrue(disabled.isEmpty)
 
         await coordinator.setPinned(true, id: id)
         let pinned = await retrieve(coordinator)
         XCTAssertEqual(pinned.count, 1)
 
         await coordinator.setEnabled(false, id: id)
-        let disabled = await retrieve(coordinator)
-        XCTAssertTrue(disabled.isEmpty)
+        let disabledAgain = await retrieve(coordinator)
+        XCTAssertTrue(disabledAgain.isEmpty)
 
         await coordinator.setPinned(true, id: id)
         let repinned = await retrieve(coordinator)
@@ -303,9 +307,10 @@ final class LearningCoordinatorTests: XCTestCase {
 
     private let basePrompt = "BASE PROMPT\n回覆只要修正後的全文，不要解釋。"
 
+    /// A memory the user's own edit taught, and which came back once: long-term.
     private func learnedDiscussAbout() async throws -> (LearningCoordinator, WritingMemory) {
         let coordinator = learner()
-        for topic in topics.prefix(3) {
+        for topic in topics.prefix(2) {
             await coordinator.recordFeedback(edit(topic), config: on)
         }
         return (coordinator, try await onlyMemory(coordinator))
@@ -622,19 +627,29 @@ final class LearningCoordinatorTests: XCTestCase {
         }
         let forward = try await memory("vocabulary:en:big>large", in: coordinator)
         XCTAssertEqual(forward.state, .active)
+        XCTAssertEqual(forward.evidenceScore, 1.35, accuracy: 1e-9, "long-term from the second edit on (1.0), then one more")
 
         for feedback in swaps(from: "large", to: "big", ["kitchen"]) {
             await coordinator.recordFeedback(feedback, config: on)
         }
         let weakened = try await memory("vocabulary:en:big>large", in: coordinator)
-        XCTAssertEqual(weakened.state, .candidate, "one undo takes 0.7 of its 1.05")
+        XCTAssertEqual(weakened.state, .active, "one undo takes 0.7, and 0.65 is enough to stay")
         XCTAssertEqual(weakened.evidenceScore, forward.evidenceScore - 0.7, accuracy: 1e-9)
         XCTAssertEqual(weakened.occurrenceCount, forward.occurrenceCount, "no confirmation")
         XCTAssertEqual(weakened.lastConfirmedAt, forward.lastConfirmedAt)
+        XCTAssertEqual(weakened.contradictionCount, 1)
 
         let opposite = try await memory("vocabulary:en:large>big", in: coordinator)
         XCTAssertEqual(opposite.state, .candidate)
         XCTAssertEqual(opposite.occurrenceCount, 1)
+
+        for feedback in swaps(from: "large", to: "big", ["attic"]) {
+            await coordinator.recordFeedback(feedback, config: on)
+        }
+        let forgotten = try await memory("vocabulary:en:big>large", in: coordinator)
+        XCTAssertEqual(forgotten.state, .archived, "a second undo leaves nothing: forgotten")
+        let kept = try await memory("vocabulary:en:large>big", in: coordinator)
+        XCTAssertEqual(kept.state, .active, "and the direction the user keeps came back: long-term")
     }
 
     func testTheDirectionTheUserKeepsWinsAndTheOtherLeavesThePrompt() async throws {
@@ -672,7 +687,7 @@ final class LearningCoordinatorTests: XCTestCase {
             config: on
         )
         let after = try await onlyMemory(coordinator)
-        XCTAssertEqual(after.state, .candidate)
+        XCTAssertEqual(after.state, .archived, "0.3 is left: forgotten")
         XCTAssertEqual(after.evidenceScore, memory.evidenceScore - 0.7, accuracy: 1e-9)
         XCTAssertEqual(after.occurrenceCount, memory.occurrenceCount)
         let used = await retrieve(coordinator)
@@ -775,13 +790,13 @@ final class LearningCoordinatorTests: XCTestCase {
 
     private func learnedDiscussAbout(clock: TestClock) async throws -> (LearningCoordinator, WritingMemory) {
         let coordinator = learner(clock: clock)
-        for topic in topics.prefix(3) {
+        for topic in topics.prefix(2) {
             await coordinator.recordFeedback(edit(topic), config: on)
         }
         return (coordinator, try await onlyMemory(coordinator))
     }
 
-    func testAMemoryFadesOutOfThePromptThenIsArchivedAndNewEvidenceWakesIt() async throws {
+    func testAMemoryFadesOutOfThePromptIsForgottenAndComesBackWhenItsPatternDoes() async throws {
         let clock = TestClock()
         let (coordinator, first) = try await learnedDiscussAbout(clock: clock)
         XCTAssertEqual(first.state, .active)
@@ -790,29 +805,25 @@ final class LearningCoordinatorTests: XCTestCase {
 
         clock.advance(days: 100)
         let usedAt100 = await retrieve(coordinator)
-        XCTAssertEqual(usedAt100.count, 1, "0.61 of evidence left")
+        XCTAssertEqual(usedAt100.count, 1, "0.58 of evidence left")
 
         clock.advance(days: 30)
         let usedAt130 = await retrieve(coordinator)
         XCTAssertTrue(usedAt130.isEmpty, "below the bar, so out of the prompt")
-        let demoted = try await onlyMemory(coordinator)
-        XCTAssertEqual(demoted.state, .candidate, "and the sweep makes that official")
+        let forgotten = try await onlyMemory(coordinator)
+        XCTAssertEqual(forgotten.state, .archived, "forgotten, not demoted")
 
-        clock.advance(days: 210)
-        let archived = try await onlyMemory(coordinator)
-        XCTAssertEqual(archived.state, .archived)
+        clock.advance(days: 150)
+        let trace = try await onlyMemory(coordinator)
+        XCTAssertEqual(trace.state, .archived)
 
-        // The habit comes back: fresh evidence wakes it, on top of what little was left.
+        // The habit comes back: the trace is recognised, and the memory is long-term again at once.
         await coordinator.recordFeedback(edit("design"), config: on)
         let woken = try await onlyMemory(coordinator)
-        XCTAssertEqual(woken.state, .candidate)
+        XCTAssertEqual(woken.id, first.id)
+        XCTAssertEqual(woken.state, .active)
         XCTAssertEqual(woken.occurrenceCount, first.occurrenceCount + 1)
-        XCTAssertEqual(woken.evidenceScore, archived.evidence(at: clock.now) + 0.35, accuracy: 1e-9, "on top of what little was left")
-        for topic in topics.prefix(2) {
-            await coordinator.recordFeedback(edit("again \(topic)"), config: on)
-        }
-        let active = try await onlyMemory(coordinator)
-        XCTAssertEqual(active.state, .active)
+        XCTAssertEqual(woken.evidenceScore, LearningPolicy.activeThreshold, accuracy: 1e-9, "what was left and the edit are below the start")
         let used = await retrieve(coordinator)
         XCTAssertEqual(used.count, 1)
     }
@@ -841,8 +852,9 @@ final class LearningCoordinatorTests: XCTestCase {
         XCTAssertEqual(disabled.state, .disabled)
         await coordinator.setEnabled(true, id: memory.id)
         let enabled = try await onlyMemory(coordinator)
-        XCTAssertEqual(enabled.state, .candidate, "what it had faded to before it was disabled is under the bar")
-        XCTAssertEqual(enabled.evidence(at: clock.now), memory.evidenceScore * pow(0.5, 30.0 / 90.0), accuracy: 1e-9)
+        XCTAssertEqual(enabled.state, .active, "it had proved itself, so it is long-term again")
+        XCTAssertEqual(enabled.lastConfirmedAt, clock.now, "the 400 disabled days do not count against it")
+        XCTAssertEqual(enabled.evidence(at: clock.now), LearningPolicy.activeThreshold, accuracy: 1e-9)
     }
 
     func testRestoringAnArchivedMemoryMakesItActiveAgain() async throws {
@@ -902,7 +914,7 @@ final class LearningCoordinatorTests: XCTestCase {
         let after = try await onlyMemory(coordinator)
         let left = memory.evidenceScore * pow(0.5, 30.0 / 90.0)
         XCTAssertEqual(after.evidence(at: clock.now), left - 0.7, accuracy: 1e-9)
-        XCTAssertEqual(after.state, .candidate)
+        XCTAssertEqual(after.state, .archived, "what the undo leaves is below the bar: forgotten")
         XCTAssertEqual(after.lastConfirmedAt, memory.lastConfirmedAt, "no confirmation")
     }
 
@@ -928,7 +940,7 @@ final class LearningCoordinatorTests: XCTestCase {
 
         await coordinator.setPinned(false, id: id)
         let unpinned = await state()
-        XCTAssertEqual(unpinned, .candidate, "0.7 of evidence is below the threshold")
+        XCTAssertEqual(unpinned, .active, "its pattern came back while it was pinned: long-term")
 
         await coordinator.setEnabled(false, id: id)
         let disabled = await state()
@@ -939,7 +951,7 @@ final class LearningCoordinatorTests: XCTestCase {
 
         await coordinator.setEnabled(true, id: id)
         let enabled = await state()
-        XCTAssertEqual(enabled, .active, "three edits' worth of evidence")
+        XCTAssertEqual(enabled, .active, "proved, and well above the bar")
     }
 
     func testEditedInstructionIsCleanedLimitedAndKept() async throws {
@@ -1349,5 +1361,100 @@ final class LearningCoordinatorTests: XCTestCase {
         for secret in ["zq-source-text", "zq-suggestion-text"] {
             XCTAssertNil(file.range(of: Data(secret.utf8)), "\(secret) must not be stored")
         }
+    }
+
+    // MARK: learning at once, forgetting what does not prove itself
+
+    /// The model fixed a number the user got wrong ("tickets" for "ticket") and the user took it.
+    private func numberFix(_ noun: String) -> LearningFeedback {
+        LearningFeedback(
+            gesture: .replaced, mode: .proofread,
+            originalText: "I need a tickets for the \(noun) tonight.",
+            generatedText: "I need a ticket for the \(noun) tonight.",
+            finalText: "I need a ticket for the \(noun) tonight.",
+            provider: "localLlama", model: "qwen"
+        )
+    }
+
+    private let ticketsText = "Please bring the tickets for the concert tonight."
+
+    func testAFixOfTheSameWordInAnotherFormIsUsedOnlyOnceItComesBack() async throws {
+        let coordinator = learner()
+        await coordinator.recordFeedback(numberFix("show"), config: on)
+        let first = try await onlyMemory(coordinator)
+        XCTAssertEqual(first.dedupKey, "spelling:en:tickets>ticket")
+        XCTAssertEqual(first.state, .archived, "only a trace")
+        let unused = await coordinator.relevantMemories(for: ticketsText, mode: .proofread, config: on)
+        XCTAssertTrue(unused.isEmpty)
+
+        await coordinator.recordFeedback(numberFix("game"), config: on)
+        let second = try await onlyMemory(coordinator)
+        XCTAssertEqual(second.state, .active, "it came back: long-term at once")
+        let used = await coordinator.relevantMemories(for: ticketsText, mode: .proofread, config: on)
+        XCTAssertEqual(used.map(\.id), [first.id])
+    }
+
+    func testAReminderThatWorkedMakesAShortTermMemoryLongTerm() async throws {
+        let coordinator = learner()
+        await coordinator.recordFeedback(accept("plan"), config: on)
+        let first = try await onlyMemory(coordinator)
+        XCTAssertEqual(first.state, .candidate)
+
+        // Reminded of it, the model fixed the same habit in a new text, and the user took that.
+        var reminded = accept("budget")
+        reminded.usedMemoryIDs = [first.id]
+        await coordinator.recordFeedback(reminded, config: on)
+        let after = try await onlyMemory(coordinator)
+        XCTAssertEqual(after.state, .active)
+        XCTAssertEqual(after.successfulUseCount, 1)
+        XCTAssertEqual(after.occurrenceCount, 1, "no new evidence, as before")
+    }
+
+    func testAShortTermMemoryThatDoesNotProveItselfIsForgottenAfterSevenDays() async throws {
+        let clock = TestClock()
+        let coordinator = learner(clock: clock)
+        await coordinator.recordFeedback(edit("plan"), config: on)
+
+        clock.advance(days: LearningPolicy.shortTermDays - 1.0 / 24)
+        let stillUsed = await retrieve(coordinator)
+        XCTAssertEqual(stillUsed.count, 1, "an hour to go, and the retrieval cache is filled")
+
+        clock.advance(days: 2.0 / 24)
+        let gone = await retrieve(coordinator)
+        XCTAssertTrue(gone.isEmpty, "a cache two hours old is judged again")
+        let forgotten = try await onlyMemory(coordinator)
+        XCTAssertEqual(forgotten.state, .archived)
+        let stats = await coordinator.stats()
+        XCTAssertEqual(stats.count(.candidate), 0)
+        XCTAssertEqual(stats.count(.archived), 1)
+    }
+
+    func testEnablingAForgottenMemoryBringsItBackLongTerm() async throws {
+        let clock = TestClock()
+        let coordinator = learner(clock: clock)
+        await coordinator.recordFeedback(edit("plan"), config: on)
+        clock.advance(days: 10)
+        let forgotten = try await onlyMemory(coordinator)
+        XCTAssertEqual(forgotten.state, .archived)
+
+        await coordinator.setEnabled(true, id: forgotten.id)
+        let enabled = try await onlyMemory(coordinator)
+        XCTAssertEqual(enabled.state, .active, "what Settings showed is what is enabled")
+        let used = await retrieve(coordinator)
+        XCTAssertEqual(used.count, 1)
+    }
+
+    func testStatsCountTheMemoriesAsTheyStandNow() async throws {
+        let clock = TestClock()
+        let coordinator = learner(clock: clock)
+        await coordinator.recordFeedback(edit("plan"), config: on)
+        await coordinator.recordFeedback(numberFix("show"), config: on)
+        let fresh = await coordinator.stats()
+        XCTAssertEqual([fresh.count(.candidate), fresh.count(.active), fresh.count(.archived)], [1, 0, 1])
+
+        await coordinator.recordFeedback(edit("budget"), config: on)
+        let proven = await coordinator.stats()
+        XCTAssertEqual([proven.count(.candidate), proven.count(.active), proven.count(.archived)], [0, 1, 1])
+        XCTAssertEqual(proven.count(.specific), 2)
     }
 }

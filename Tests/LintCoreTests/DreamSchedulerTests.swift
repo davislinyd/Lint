@@ -57,8 +57,8 @@ final class DreamSchedulerTests: XCTestCase {
         let passes: Passes
     }
 
-    private let idle = LearningPolicy.dreamIdleDelay
-    private let retry = LearningPolicy.dreamRetryDelay
+    private let idle = MemoryPolicy.dreamIdleDelay
+    private let retry = MemoryPolicy.dreamRetryDelay
 
     private func make(_ script: [DreamRunStatus?] = []) -> Setup {
         let gate = InteractiveGate()
@@ -205,7 +205,7 @@ final class DreamSchedulerTests: XCTestCase {
         XCTAssertTrue(due)
     }
 
-    func testEnoughNewLearningSchedulesAPassAndAPassStartsTheCountOver() async {
+    func testEnoughNewMemoriesScheduleAPassAndAPassStartsTheCountOver() async {
         let setup = make()
         await setup.scheduler.noteChanges(24)
         await settle()

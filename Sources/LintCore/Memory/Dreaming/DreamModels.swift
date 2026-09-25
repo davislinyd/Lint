@@ -1,8 +1,8 @@
 import Foundation
 
-/// How an explicit request to organize memories went (`LearningCoordinator.organizeMemories`).
-public enum MemoryOrganizationOutcome: Sendable, Equatable {
-    /// Learning is off, or there is nothing on disk.
+/// How an explicit request to dream went (`MemoryCoordinator.dream`).
+public enum DreamOutcome: Sendable, Equatable {
+    /// Memory is off, or there is nothing on disk.
     case unavailable
     /// A pass was already running.
     case alreadyRunning
@@ -19,8 +19,8 @@ enum DreamRunStatus: String, Sendable {
     case cancelled
 }
 
-/// What one organizing pass did, in numbers only: no memory text, and nothing of what the user
-/// wrote. Kept for the settings page ("last organized") and for finding out why a pass went wrong.
+/// What one dream did, in numbers only: no memory text, and nothing of what the user
+/// wrote. Kept for the settings page ("last dream") and for finding out why a pass went wrong.
 struct DreamRun: Sendable, Equatable, Identifiable {
     var id: UUID
     var startedAt: Date
@@ -40,7 +40,7 @@ struct DreamRun: Sendable, Equatable, Identifiable {
     var status: DreamRunStatus
 }
 
-extension LearningPolicy {
+extension MemoryPolicy {
     /// How much a memory is worth keeping and combining. Each signal is 0...1; the weights add up
     /// to 1, and contradictions take away from the total.
     enum Importance {
@@ -58,8 +58,8 @@ extension LearningPolicy {
     }
 }
 
-extension LearningPolicy {
-    /// Bumped when what organizing does changes in a way that old runs cannot be compared with.
+extension MemoryPolicy {
+    /// Bumped when what a dream does changes in a way that old runs cannot be compared with.
     /// 2: a pass also writes down what is remembered and forgotten, and erases faded traces.
     static let dreamAlgorithmVersion = 2
 
@@ -74,14 +74,14 @@ extension LearningPolicy {
     /// What a generalized memory may list as triggers of its own.
     static let dreamMaxTriggers = 12
 
-    /// Organizing waits until nothing has happened for this long, so that a run of feedback ends in
+    /// A dream waits until nothing has happened for this long, so that a run of feedback ends in
     /// one pass; after a failure it waits this long before it tries again.
     static let dreamIdleDelay = Duration.seconds(60)
     static let dreamRetryDelay = Duration.seconds(3_600)
-    /// Memories are organized at least this often while Lint is in use: at start-up, and on the first
+    /// A dream runs at least this often while Lint is in use: at start-up, and on the first
     /// feedback, once the last pass is longer ago than this.
     static let dreamInterval: TimeInterval = 24 * 60 * 60
-    /// A pass once this many memories have been learned from or weakened since the last one.
+    /// A pass once this many memories have been remembered or weakened since the last one.
     static let dreamChangeThreshold = 25
     /// A pass when this many memories are candidates or in use, though not more often than the cooldown.
     static let dreamPressureThreshold = 200
@@ -126,8 +126,8 @@ enum ConsolidationEligibility {
         memory.level == .specific
             && memory.state == .active
             && !memory.userEdited
-            && memory.occurrenceCount >= LearningPolicy.dreamMinSourceOccurrences
-            && now.timeIntervalSince(memory.createdAt) >= LearningPolicy.dreamMinSourceAgeDays * 86_400
+            && memory.occurrenceCount >= MemoryPolicy.dreamMinSourceOccurrences
+            && now.timeIntervalSince(memory.createdAt) >= MemoryPolicy.dreamMinSourceAgeDays * 86_400
     }
 }
 
@@ -142,12 +142,12 @@ extension ConsolidationEligibility {
         return memory.level == .generalized
             && memory.state == .active
             && !memory.userEdited
-            && sourceCount >= LearningPolicy.coreMinSources
-            && memory.occurrenceCount >= LearningPolicy.coreMinOccurrences
-            && memory.confidence(at: now) >= LearningPolicy.coreMinConfidence
-            && memory.successfulUseCount >= LearningPolicy.coreMinSuccessfulUses
-            && now.timeIntervalSince(memory.createdAt) >= LearningPolicy.coreMinAgeDays * 86_400
-            && contradictionRate <= LearningPolicy.coreMaxContradictionRate
+            && sourceCount >= MemoryPolicy.coreMinSources
+            && memory.occurrenceCount >= MemoryPolicy.coreMinOccurrences
+            && memory.confidence(at: now) >= MemoryPolicy.coreMinConfidence
+            && memory.successfulUseCount >= MemoryPolicy.coreMinSuccessfulUses
+            && now.timeIntervalSince(memory.createdAt) >= MemoryPolicy.coreMinAgeDays * 86_400
+            && contradictionRate <= MemoryPolicy.coreMaxContradictionRate
     }
 }
 
@@ -161,7 +161,7 @@ struct MemoryCluster: Sendable, Equatable {
     var members: [WritingMemory]
 }
 
-/// What organizing wants to store, before anything is checked or written.
+/// What a dream wants to store, before anything is checked or written.
 struct ConsolidationProposal: Sendable, Equatable {
     enum Origin: Sendable, Equatable {
         /// Worded by a fixed template for a family, from nothing but the family itself.
@@ -185,7 +185,7 @@ struct ConsolidationProposal: Sendable, Equatable {
     var allowedExtraWords: Set<String> = []
 }
 
-/// What a synthesis provider gets to see: the learned memories as they are stored, which are already
+/// What a synthesis provider gets to see: the remembered memories as they are stored, which are already
 /// abstracted away from any text, and nothing of what the user wrote.
 struct SynthesisSource: Sendable, Equatable {
     var id: UUID

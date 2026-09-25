@@ -2,8 +2,8 @@ import Foundation
 
 /// How a memory grows and fades, and which state it rests in.
 ///
-/// A memory is used as soon as it is learned: it is short-term (`candidate`). Once it has proved
-/// itself it is long-term (`active`); if it has not within `LearningPolicy.shortTermDays`, it is
+/// A memory is used as soon as it is remembered: it is short-term (`candidate`). Once it has proved
+/// itself it is long-term (`active`); if it has not within `MemoryPolicy.shortTermDays`, it is
 /// forgotten (`archived`). A forgotten memory is only a trace, kept so that its pattern is recognised
 /// if it comes back, and it is erased once the trace has faded (see `MemoryDreamCoordinator`).
 ///
@@ -24,7 +24,7 @@ enum MemoryLifecycle {
     /// A change the model made and the user only accepted, which depends on its sentence: another
     /// word ("used" for "able"), or the same word in another form ("tickets" for "ticket"). One such
     /// fix says little about a habit, so the memory is used only once its pattern has come back.
-    /// Told apart by the wording it was stored with, so memories learned before this rule follow it.
+    /// Told apart by the wording it was stored with, so memories remembered before this rule follow it.
     static func waitsForRecurrence(_ memory: WritingMemory) -> Bool {
         guard memory.level == .specific, !isProven(memory) else { return false }
         switch MemoryWording(chinese: memory.instruction) {
@@ -100,14 +100,14 @@ enum MemoryLifecycle {
         let remaining = max(0, memory.evidence(at: now) - amount)
         memory.evidenceScore = factor > 0 ? remaining / factor : 0
         memory.contradictionCount += 1
-        if memory.state == .active || memory.state == .candidate, remaining < LearningPolicy.demoteThreshold {
+        if memory.state == .active || memory.state == .candidate, remaining < MemoryPolicy.demoteThreshold {
             memory.state = .archived
         }
         return memory
     }
 
     /// Where a memory stands at `now`: the one place where remembering and forgetting are decided,
-    /// so that what a prompt is reminded of, what Settings shows and what organizing writes all agree.
+    /// so that what a prompt is reminded of, what Settings shows and what a dream writes all agree.
     /// Applying it again changes nothing. Pinned and disabled memories are the user's and never move;
     /// a forgotten one stays forgotten until its pattern comes back (see `merging`).
     ///
@@ -123,17 +123,17 @@ enum MemoryLifecycle {
         case .candidate:
             guard isProven(memory) else {
                 let idle = now.timeIntervalSince(memory.lastConfirmedAt)
-                if idle > LearningPolicy.shortTermDays * 86_400 || waitsForRecurrence(memory) {
+                if idle > MemoryPolicy.shortTermDays * 86_400 || waitsForRecurrence(memory) {
                     memory.state = .archived
                 }
                 return memory
             }
             memory.state = .active
-            memory.evidenceScore = max(memory.evidenceScore, LearningPolicy.activeThreshold)
+            memory.evidenceScore = max(memory.evidenceScore, MemoryPolicy.activeThreshold)
         case .active:
             break
         }
-        if memory.evidence(at: now) < LearningPolicy.demoteThreshold {
+        if memory.evidence(at: now) < MemoryPolicy.demoteThreshold {
             memory.state = .archived
         }
         return memory
@@ -165,7 +165,7 @@ enum MemoryLifecycle {
     static func resumed(_ memory: WritingMemory, at now: Date) -> WritingMemory {
         var memory = memory
         var evidence = memory.evidence(at: now)
-        if memory.state == .archived { evidence = max(evidence, LearningPolicy.activeThreshold) }
+        if memory.state == .archived { evidence = max(evidence, MemoryPolicy.activeThreshold) }
         memory.evidenceScore = evidence
         memory.lastConfirmedAt = now
         memory.state = restingState(evidenceScore: evidence)
@@ -235,6 +235,6 @@ enum MemoryLifecycle {
     /// Where a memory settles when the user has neither pinned nor disabled it.
     static func restingState(evidenceScore: Double) -> MemoryState {
         // The tolerance keeps sums like 3 × 0.35 from missing the threshold by rounding.
-        evidenceScore >= LearningPolicy.activeThreshold - 1e-9 ? .active : .candidate
+        evidenceScore >= MemoryPolicy.activeThreshold - 1e-9 ? .active : .candidate
     }
 }

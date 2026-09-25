@@ -7,8 +7,8 @@ struct FeedbackCollector {
     let key: SymmetricKey
 
     /// nil when there is nothing to learn from.
-    func event(for feedback: LearningFeedback, now: Date) -> FeedbackEvent? {
-        guard feedback.isLearnable, let generated = feedback.generatedText else { return nil }
+    func event(for feedback: MemoryFeedback, now: Date) -> FeedbackEvent? {
+        guard feedback.canFormMemory, let generated = feedback.generatedText else { return nil }
         let generatedText = normalized(generated)
         let finalText = normalized(feedback.finalText)
 

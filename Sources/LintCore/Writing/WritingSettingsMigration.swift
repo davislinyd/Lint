@@ -4,7 +4,7 @@ import Foundation
 /// "formal", "concise" and "professional" were modes, and were all proofreading in a tone.
 ///
 /// Keyed by the old raw value rather than by enum case, so that it keeps working once those cases
-/// are gone: values written by an older build can turn up in settings and in the learning database.
+/// are gone: values written by an older build can turn up in settings and in the memory database.
 public enum LegacyWritingMode {
     public static func resolve(_ rawValue: String) -> (mode: WritingMode, tone: WritingTone)? {
         switch rawValue {

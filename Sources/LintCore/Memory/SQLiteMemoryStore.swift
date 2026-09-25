@@ -1,14 +1,14 @@
 import Foundation
 import GRDB
 
-enum LearningStoreError: Error {
+enum MemoryStoreError: Error {
     case cannotCreateFile(URL)
     case invalidRow(String)
 }
 
 /// Column names are snake_case, dates are epoch seconds and IDs are text, so the file stays
 /// readable with the `sqlite3` CLI.
-struct SQLiteLearningStore: LearningStore {
+struct SQLiteMemoryStore: MemoryStore {
     private let dbQueue: DatabaseQueue
 
     /// `url == nil` keeps the database in memory (tests).
@@ -31,7 +31,7 @@ struct SQLiteLearningStore: LearningStore {
                 guard fileManager.createFile(
                     atPath: url.path, contents: nil, attributes: [.posixPermissions: 0o600]
                 ) else {
-                    throw LearningStoreError.cannotCreateFile(url)
+                    throw MemoryStoreError.cannotCreateFile(url)
                 }
             }
             dbQueue = try DatabaseQueue(path: url.path, configuration: configuration)
@@ -76,7 +76,7 @@ struct SQLiteLearningStore: LearningStore {
         }
         // Memories once kept a short stretch of the user's own words as an example. Nothing ever used
         // them, so they are gone. Dropping the columns rewrites the rows, and the old snippets leave
-        // the file with them (`LearningStoreTests` checks the bytes).
+        // the file with them (`MemoryStoreTests` checks the bytes).
         migrator.registerMigration("v2_drop_examples") { db in
             try db.alter(table: "writing_memory") { t in
                 t.drop(column: "negative_example")
@@ -167,7 +167,7 @@ struct SQLiteLearningStore: LearningStore {
     ]
 
     /// A key that names an old tone mode as its scope now names proofreading in that tone, so that a
-    /// pattern learned before matches the same pattern learned after (and a pattern the user vetoed
+    /// pattern remembered before matches the same pattern remembered after (and a pattern the user vetoed
     /// stays vetoed). A key whose new form is taken already is left as it is: nothing is merged or
     /// deleted, and the unique index cannot be broken.
     private static func rewriteLegacyKeys(_ db: Database, table: String, keyColumn: String) throws {
@@ -177,7 +177,7 @@ struct SQLiteLearningStore: LearningStore {
                 db, sql: "SELECT EXISTS(SELECT 1 FROM \(table) WHERE \(keyColumn) = ?)", arguments: [new]
             ) ?? false
             if taken {
-                NSLog("Lint learning: kept a memory key of an older version, its new form is in use")
+                NSLog("Lint memory: kept a memory key of an older version, its new form is in use")
                 continue
             }
             try db.execute(sql: "UPDATE \(table) SET \(keyColumn) = ? WHERE \(keyColumn) = ?", arguments: [new, old])
@@ -465,7 +465,7 @@ struct SQLiteLearningStore: LearningStore {
         }
     }
 
-    func stats() async throws -> LearningStats {
+    func stats() async throws -> MemoryStats {
         try await dbQueue.read { db in
             var counts: [MemoryState: Int] = [:]
             let rows = try Row.fetchAll(
@@ -501,12 +501,12 @@ struct SQLiteLearningStore: LearningStore {
                 sql: "SELECT MAX(finished_at) FROM dream_run WHERE status = ?",
                 arguments: [DreamRunStatus.completed.rawValue]
             )
-            return LearningStats(
+            return MemoryStats(
                 memoriesByState: counts,
                 eventCount: try EventRecord.fetchCount(db),
                 memoriesByLevel: levels,
                 supersededCount: superseded,
-                lastOrganizedAt: lastOrganized.map { Date(timeIntervalSince1970: $0) }
+                lastDreamAt: lastOrganized.map { Date(timeIntervalSince1970: $0) }
             )
         }
     }
@@ -547,12 +547,12 @@ private struct MemoryRecord: FetchableRecord, PersistableRecord {
               let state = MemoryState(rawValue: state),
               let level = MemoryLevel(rawValue: level)
         else {
-            throw LearningStoreError.invalidRow("writing_memory \(id)")
+            throw MemoryStoreError.invalidRow("writing_memory \(id)")
         }
         var parent: UUID?
         if let supersededBy {
             guard let uuid = UUID(uuidString: supersededBy) else {
-                throw LearningStoreError.invalidRow("writing_memory.superseded_by \(supersededBy)")
+                throw MemoryStoreError.invalidRow("writing_memory.superseded_by \(supersededBy)")
             }
             parent = uuid
         }
@@ -563,14 +563,14 @@ private struct MemoryRecord: FetchableRecord, PersistableRecord {
         if let modeScope {
             // A build from before tone was a setting can still write an old tone mode here.
             guard let resolved = LegacyWritingMode.resolve(modeScope) else {
-                throw LearningStoreError.invalidRow("writing_memory.mode_scope \(modeScope)")
+                throw MemoryStoreError.invalidRow("writing_memory.mode_scope \(modeScope)")
             }
             scope = resolved.mode
             tone = resolved.tone == .preserve ? nil : resolved.tone
         }
         if let toneScope {
             guard let parsed = WritingTone(rawValue: toneScope) else {
-                throw LearningStoreError.invalidRow("writing_memory.tone_scope \(toneScope)")
+                throw MemoryStoreError.invalidRow("writing_memory.tone_scope \(toneScope)")
             }
             tone = parsed
         }
@@ -637,7 +637,7 @@ private struct DreamRunRecord: FetchableRecord, PersistableRecord {
         let id: String = row["id"]
         let status: String = row["status"]
         guard let uuid = UUID(uuidString: id), let status = DreamRunStatus(rawValue: status) else {
-            throw LearningStoreError.invalidRow("dream_run \(id)")
+            throw MemoryStoreError.invalidRow("dream_run \(id)")
         }
         let finishedAt: Double? = row["finished_at"]
         run = DreamRun(
@@ -692,7 +692,7 @@ private struct EventRecord: FetchableRecord, PersistableRecord {
               let storedTone = WritingTone(rawValue: tone),
               let action = FeedbackAction(rawValue: action)
         else {
-            throw LearningStoreError.invalidRow("feedback_event \(id)")
+            throw MemoryStoreError.invalidRow("feedback_event \(id)")
         }
         event = FeedbackEvent(
             id: uuid,

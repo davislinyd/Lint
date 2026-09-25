@@ -40,7 +40,7 @@ struct MemoryConsolidationValidator: Sendable {
     func validate(
         _ proposal: ConsolidationProposal,
         cluster: MemoryCluster,
-        minimumSources: Int = LearningPolicy.dreamMinClusterSize,
+        minimumSources: Int = MemoryPolicy.dreamMinClusterSize,
         at now: Date
     ) -> Rejection? {
         guard !proposal.sourceIDs.isEmpty else { return .noSources }
@@ -74,7 +74,7 @@ struct MemoryConsolidationValidator: Sendable {
     private func instructionRejection(of proposal: ConsolidationProposal, sources: [WritingMemory]) -> Rejection? {
         let text = proposal.instruction
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return .emptyInstruction }
-        guard text.count <= LearningPolicy.maxInstructionLength else { return .instructionTooLong }
+        guard text.count <= MemoryPolicy.maxInstructionLength else { return .instructionTooLong }
         guard !text.unicodeScalars.contains(where: {
             CharacterSet.controlCharacters.contains($0) || CharacterSet.newlines.contains($0)
         }) else { return .multilineInstruction }
@@ -101,7 +101,7 @@ struct MemoryConsolidationValidator: Sendable {
     }
 
     private func triggerRejection(of proposal: ConsolidationProposal, sources: [WritingMemory]) -> Rejection? {
-        guard proposal.triggers.count <= LearningPolicy.dreamMaxTriggers else { return .tooManyTriggers }
+        guard proposal.triggers.count <= MemoryPolicy.dreamMaxTriggers else { return .tooManyTriggers }
         let known = Set(sources.flatMap(\.triggers).map { $0.lowercased() })
         for trigger in proposal.triggers
         where trigger.count > MemorySanitizer.maxPhraseLength || !known.contains(trigger.lowercased()) {

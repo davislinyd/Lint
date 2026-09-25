@@ -46,7 +46,7 @@ final class PromptComposerTests: XCTestCase {
     func testAtMostFiveMemoriesGoIn() {
         let memories = (0..<8).map { memory("rule \($0)") }
         let result = PromptComposer.compose(base: base, memories: memories)
-        XCTAssertEqual(result.usedMemoryIDs, memories.prefix(LearningPolicy.maxPersonalizedMemories).map(\.id))
+        XCTAssertEqual(result.usedMemoryIDs, memories.prefix(MemoryPolicy.maxPersonalizedMemories).map(\.id))
         XCTAssertTrue(result.systemPrompt.hasSuffix("5. rule 4"))
         XCTAssertFalse(result.systemPrompt.contains("rule 5"))
     }
@@ -62,7 +62,7 @@ final class PromptComposerTests: XCTestCase {
     }
 
     func testWhenNothingFitsThePromptIsUntouchedAndNothingIsReportedUsed() {
-        let tooLong = memory(String(repeating: "x", count: LearningPolicy.maxPersonalizationCharacters))
+        let tooLong = memory(String(repeating: "x", count: MemoryPolicy.maxPersonalizationCharacters))
         let result = PromptComposer.compose(base: base, memories: [tooLong])
         XCTAssertEqual(result.systemPrompt, base)
         XCTAssertTrue(result.usedMemoryIDs.isEmpty)

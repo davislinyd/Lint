@@ -69,20 +69,20 @@ private struct CancellingSimilarity: MemorySimilarityService {
 final class DreamCoordinatorTests: XCTestCase {
     private let now = DreamFixtures.now
 
-    private func makeStore() throws -> SQLiteLearningStore {
-        try SQLiteLearningStore(url: nil)
+    private func makeStore() throws -> SQLiteMemoryStore {
+        try SQLiteMemoryStore(url: nil)
     }
 
-    private func makeFileStore() throws -> (store: SQLiteLearningStore, url: URL) {
+    private func makeFileStore() throws -> (store: SQLiteMemoryStore, url: URL) {
         let dir = FileManager.default.temporaryDirectory
             .appendingPathComponent("LintDreamTests-\(UUID().uuidString)", isDirectory: true)
         addTeardownBlock { try? FileManager.default.removeItem(at: dir) }
         let url = dir.appendingPathComponent("LintLearning.sqlite")
-        return (try SQLiteLearningStore(url: url), url)
+        return (try SQLiteMemoryStore(url: url), url)
     }
 
     private func dreamer(
-        _ store: SQLiteLearningStore, clock: ManualClock? = nil, synthesis: (any MemorySynthesisProvider)? = nil
+        _ store: SQLiteMemoryStore, clock: ManualClock? = nil, synthesis: (any MemorySynthesisProvider)? = nil
     ) -> MemoryDreamCoordinator {
         if let clock {
             return MemoryDreamCoordinator(store: store, synthesis: synthesis, clock: clock.reader)
@@ -91,11 +91,11 @@ final class DreamCoordinatorTests: XCTestCase {
         return MemoryDreamCoordinator(store: store, synthesis: synthesis, clock: { fixed })
     }
 
-    private func save(_ memories: [WritingMemory], to store: SQLiteLearningStore) async throws {
+    private func save(_ memories: [WritingMemory], to store: SQLiteMemoryStore) async throws {
         for memory in memories { try await store.saveMemory(memory) }
     }
 
-    private func derived(_ store: SQLiteLearningStore) async throws -> [WritingMemory] {
+    private func derived(_ store: SQLiteMemoryStore) async throws -> [WritingMemory] {
         try await store.memories().filter { $0.level != .specific }
     }
 
@@ -117,7 +117,7 @@ final class DreamCoordinatorTests: XCTestCase {
         XCTAssertEqual(
             [run.inputMemoryCount, run.clusterCount, run.generatedCount, run.supersededCount], [3, 1, 1, 3]
         )
-        XCTAssertEqual(run.algorithmVersion, LearningPolicy.dreamAlgorithmVersion)
+        XCTAssertEqual(run.algorithmVersion, MemoryPolicy.dreamAlgorithmVersion)
         XCTAssertNotNil(run.finishedAt)
         let recorded = try await store.lastCompletedDreamRun()
         XCTAssertEqual(recorded, run)
@@ -142,7 +142,7 @@ final class DreamCoordinatorTests: XCTestCase {
         XCTAssertNil(parent.supersededBy)
     }
 
-    func testWhatTheExtractorLearnedFromRealCorrectionsIsCombined() async throws {
+    func testWhatTheExtractorRememberedFromRealCorrectionsIsCombined() async throws {
         let store = try makeStore()
         let corrections = [
             ("We will discuss about the plan tomorrow morning.", "We will discuss the plan tomorrow morning."),
@@ -150,7 +150,7 @@ final class DreamCoordinatorTests: XCTestCase {
             ("We should emphasize on quality this quarter.", "We should emphasize quality this quarter."),
         ]
         for (original, suggestion) in corrections {
-            let feedback = LearningFeedback(
+            let feedback = MemoryFeedback(
                 gesture: .replaced, mode: .proofread, originalText: original, generatedText: suggestion,
                 finalText: suggestion, provider: "p", model: "m"
             )
@@ -749,7 +749,7 @@ final class DreamCoordinatorTests: XCTestCase {
 
     // MARK: remembering, forgetting and erasing
 
-    private func stored(_ id: UUID, in store: SQLiteLearningStore) async throws -> WritingMemory? {
+    private func stored(_ id: UUID, in store: SQLiteMemoryStore) async throws -> WritingMemory? {
         try await store.memory(id: id)
     }
 
@@ -793,7 +793,7 @@ final class DreamCoordinatorTests: XCTestCase {
             XCTAssertEqual(now?.state, state, memory.dedupKey)
         }
         let remembered = try await stored(cameBack.id, in: store)
-        XCTAssertEqual(remembered?.evidenceScore ?? 0, LearningPolicy.activeThreshold, accuracy: 1e-12, "written down too")
+        XCTAssertEqual(remembered?.evidenceScore ?? 0, MemoryPolicy.activeThreshold, accuracy: 1e-12, "written down too")
         let recorded = try await store.lastCompletedDreamRun()
         XCTAssertEqual(recorded, run, "and the counts are kept with the pass")
 
@@ -828,7 +828,7 @@ final class DreamCoordinatorTests: XCTestCase {
         )
         for memory in [trace, gone] {
             let vetoed = try await store.isVetoed(dedupKey: memory.dedupKey)
-            XCTAssertFalse(vetoed, "nobody asked for it, so it may be learned again")
+            XCTAssertFalse(vetoed, "nobody asked for it, so it may be remembered again")
         }
     }
 

@@ -1,6 +1,6 @@
 import Foundation
 
-/// Organizes memories in the background, the way sleep sorts what was learned during the day. What
+/// Dreams in the background, the way sleep sorts what was remembered during the day. What
 /// has proved itself is written down as long-term and what has not as forgotten (the rules are in
 /// `MemoryLifecycle.settled`), forgotten memories whose trace has faded are erased, many specific
 /// memories of one family become one generalized memory (the specific ones stay behind it), and a
@@ -14,7 +14,7 @@ import Foundation
 ///
 /// Running it again on memories that have not changed changes nothing.
 actor MemoryDreamCoordinator {
-    private let store: any LearningStore
+    private let store: any MemoryStore
     private let clusterer: MemoryClusterer
     private let consolidator: MemoryConsolidator
     private let validator = MemoryConsolidationValidator()
@@ -22,7 +22,7 @@ actor MemoryDreamCoordinator {
     private var isRunning = false
 
     init(
-        store: any LearningStore,
+        store: any MemoryStore,
         similarity: any MemorySimilarityService = StructuralMemorySimilarity(),
         synthesis: (any MemorySynthesisProvider)? = nil,
         clock: @escaping @Sendable () -> Date = { Date() }
@@ -45,7 +45,7 @@ actor MemoryDreamCoordinator {
 
         var record = DreamRun(
             id: UUID(), startedAt: clock(), finishedAt: nil,
-            algorithmVersion: LearningPolicy.dreamAlgorithmVersion,
+            algorithmVersion: MemoryPolicy.dreamAlgorithmVersion,
             inputMemoryCount: 0, clusterCount: 0, generatedCount: 0, supersededCount: 0, status: .running
         )
         await save(record)
@@ -55,7 +55,7 @@ actor MemoryDreamCoordinator {
         } catch is CancellationError {
             record.status = .cancelled
         } catch {
-            NSLog("Lint learning: organizing memories failed: \(error.localizedDescription)")
+            NSLog("Lint memory: dreaming failed: \(error.localizedDescription)")
             record.status = .failed
         }
         record.finishedAt = clock()
@@ -93,7 +93,7 @@ actor MemoryDreamCoordinator {
                 && !(memory.supersededBy.map(usableParents.contains) ?? false)
         }
 
-        let minimum = LearningPolicy.dreamMinClusterSize
+        let minimum = MemoryPolicy.dreamMinClusterSize
         for cluster in await clusterer.clusters(from: candidates, at: now) {
             try Self.checkpoint(gate)
             if cluster.members.count < minimum {
@@ -108,7 +108,7 @@ actor MemoryDreamCoordinator {
             if let rejection = validator.validate(
                 proposal, cluster: cluster, minimumSources: joining ? 1 : minimum, at: now
             ) {
-                NSLog("Lint learning: dropped a proposed memory (\(rejection))")
+                NSLog("Lint memory: dropped a proposed memory (\(rejection))")
                 continue
             }
             let outcome = try await store.applyConsolidation(
@@ -149,7 +149,7 @@ actor MemoryDreamCoordinator {
     private func erase(_ record: inout DreamRun, at now: Date, gate: InteractiveGate?) async throws {
         try Self.checkpoint(gate)
         let faded = try await store.memories().filter { memory in
-            memory.state == .archived && memory.evidence(at: now) < LearningPolicy.archiveThreshold
+            memory.state == .archived && memory.evidence(at: now) < MemoryPolicy.archiveThreshold
         }
         record.erasedCount = try await store.eraseMemories(ids: faded.map(\.id))
     }
@@ -163,7 +163,7 @@ actor MemoryDreamCoordinator {
             try Self.checkpoint(gate)
             guard parent.state == .active || parent.state == .candidate, !parent.userEdited else { continue }
             let count = counts[parent.id] ?? 0
-            if count < LearningPolicy.dreamMinClusterSize {
+            if count < MemoryPolicy.dreamMinClusterSize {
                 try await store.updateMemory(id: parent.id) { memory in
                     guard memory.state == .active || memory.state == .candidate, !memory.userEdited else { return }
                     memory.state = .archived
@@ -193,7 +193,7 @@ actor MemoryDreamCoordinator {
             }
         }.value
         if let failure {
-            NSLog("Lint learning: could not record an organizing pass: \(failure.localizedDescription)")
+            NSLog("Lint memory: could not record a dream: \(failure.localizedDescription)")
         }
     }
 }

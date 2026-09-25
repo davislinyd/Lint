@@ -47,8 +47,8 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
     /// Once the user drags, stop auto-repositioning on size changes.
     private var bubbleUserDragged = false
     /// Show the bubble without making Lint a regular, active app. Activating Lint while one of its own
-    /// windows (Settings, full panel) sits on another Space makes macOS jump to that Space, taking the
-    /// user away from the app they are typing in. Keys still work through `BubbleKeyEventTap`.
+    /// windows (Settings, full panel) is open brings that window in front of the app the user is typing
+    /// in, and if it sits on another Space macOS jumps there. Keys still work through `BubbleKeyEventTap`.
     private var bubbleNonActivating = false
     /// App that had the focus when a non-activating bubble opened; clicking the bubble activates Lint,
     /// so closing it hands the focus back.
@@ -132,13 +132,15 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
         bubbleAnchorPoint = NSEvent.mouseLocation
         bubbleAvoidRect = nil
         bubbleUserDragged = false
-        bubbleNonActivating = hasLintWindowOnAnotherSpace()
+        bubbleNonActivating = activationWouldRaiseLintWindow()
         showBubbleNearCapture()
     }
 
-    private func hasLintWindowOnAnotherSpace() -> Bool {
-        NSApp.windows.contains {
-            $0.styleMask.contains(.titled) && $0.isVisible && !$0.isOnActiveSpace
+    /// Stage Manager hides Lint while its window waits in the strip, and every window then reports
+    /// `isVisible == false`; activating Lint would unhide that window too.
+    private func activationWouldRaiseLintWindow() -> Bool {
+        NSApp.isHidden || NSApp.windows.contains {
+            $0.styleMask.contains(.titled) && $0.isVisible
         }
     }
 
@@ -154,7 +156,7 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
         bubbleAvoidRect = TextCaptureService.focusedFieldScreenRect(for: result)
             ?? TextCaptureService.selectionScreenRect(for: result)
         bubbleUserDragged = false
-        bubbleNonActivating = hasLintWindowOnAnotherSpace()
+        bubbleNonActivating = activationWouldRaiseLintWindow()
         showBubbleNearCapture()
     }
 
@@ -625,6 +627,8 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
         panel.isFloatingPanel = true
         panel.level = .floating
         panel.hidesOnDeactivate = false
+        // A non-activating bubble must show while Lint is hidden, without unhiding Lint's other windows.
+        panel.canHide = false
         panel.isReleasedWhenClosed = false
         panel.isOpaque = false
         panel.backgroundColor = .clear

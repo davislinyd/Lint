@@ -13,6 +13,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             check: { [weak self] in self?.model.runCheckHotkey() }
         )
         model.startPolling()
+        model.updates.start()
         Task { await model.presentInitialOnboarding() }
     }
 

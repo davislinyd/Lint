@@ -65,6 +65,18 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         app.presentLocalAISetup()
     }
 
+    @objc private func checkForUpdates() {
+        app.updates.checkNow()
+    }
+
+    @objc private func installUpdate() {
+        app.updates.installNow()
+    }
+
+    @objc private func showRelease() {
+        app.updates.openReleasePage()
+    }
+
     @objc private func quit() {
         NSApp.terminate(nil)
     }
@@ -128,6 +140,20 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         }
 
         menu.addItem(.separator())
+        let check = NSMenuItem(title: String(localized: "檢查更新…"), action: #selector(checkForUpdates), keyEquivalent: "")
+        check.target = self
+        check.isEnabled = !app.updates.isBusy
+        menu.addItem(check)
+        if let title = app.updates.menuInstallTitle() {
+            let install = NSMenuItem(title: title, action: #selector(installUpdate), keyEquivalent: "")
+            install.target = self
+            install.isEnabled = !app.updates.isBusy
+            menu.addItem(install)
+        } else if let title = app.updates.menuAnnounceTitle() {
+            let announce = NSMenuItem(title: title, action: #selector(showRelease), keyEquivalent: "")
+            announce.target = self
+            menu.addItem(announce)
+        }
         let version = NSMenuItem(title: "Lint \(AppVersion.display)", action: nil, keyEquivalent: "")
         version.isEnabled = false
         menu.addItem(version)

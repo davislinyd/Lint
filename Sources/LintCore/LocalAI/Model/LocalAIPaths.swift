@@ -5,6 +5,7 @@ import Foundation
 ///     ~/Library/Application Support/Lint/
 ///         Models/<model id>/…        installed models (complete and verified)
 ///         Downloads/<model id>/…     in-progress downloads (`*.partial`) and verified files waiting to be installed
+///         Updates/<version>/…        a release disk image being checked before it can replace Lint.app
 public struct LocalAIPaths: Equatable, Sendable {
     public var root: URL
 
@@ -26,6 +27,7 @@ public struct LocalAIPaths: Equatable, Sendable {
 
     public var modelsDirectory: URL { root.appendingPathComponent("Models", isDirectory: true) }
     public var downloadsDirectory: URL { root.appendingPathComponent("Downloads", isDirectory: true) }
+    public var updatesDirectory: URL { root.appendingPathComponent("Updates", isDirectory: true) }
 
     public func installDirectory(for model: ModelDescriptor) -> URL {
         modelsDirectory.appendingPathComponent(model.id, isDirectory: true)

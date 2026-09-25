@@ -12,6 +12,7 @@ struct GeneralSettingsPane: View {
             behaviorSection
             hotkeySection
             languageSection
+            updateSection
         }
         .formStyle(.grouped)
     }
@@ -120,6 +121,74 @@ struct GeneralSettingsPane: View {
                 Text("「翻譯」模式與建議下方的參考譯文都用翻譯語言，立即生效。Lint 只把英文翻成這個語言，不會翻成英文。")
                     .sectionNote()
             }
+        }
+    }
+
+    @ViewBuilder
+    private var updateSection: some View {
+        Section {
+            Picker("更新方式", selection: Bindable(app.settings).updateMode) {
+                ForEach(UpdateMode.allCases) { mode in
+                    Text(updateModeTitle(mode)).tag(mode)
+                }
+            }
+            Picker("檢查頻率", selection: Bindable(app.settings).updateFrequency) {
+                ForEach(UpdateCheckFrequency.allCases) { frequency in
+                    Text(updateFrequencyTitle(frequency)).tag(frequency)
+                }
+            }
+            LabeledContent("更新狀態") {
+                Text(app.updates.statusText)
+                    .foregroundStyle(.secondary)
+            }
+            if let lastCheck = app.updates.lastCheckText {
+                LabeledContent("上次檢查") {
+                    Text(lastCheck)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            HStack {
+                Button("立即檢查") {
+                    app.updates.checkNow()
+                }
+                .disabled(app.updates.isBusy)
+                if app.updates.showsInstallButton {
+                    Button("下載並安裝") {
+                        app.updates.installNow()
+                    }
+                }
+                if app.updates.showsReleasePage {
+                    Button("打開釋出頁面") {
+                        app.updates.openReleasePage()
+                    }
+                }
+            }
+        } header: {
+            Text("更新")
+        } footer: {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("到時間會檢查 GitHub 上的正式版。自動更新會在建議視窗關閉後換上新版並重新啟動；手動更新要按「下載並安裝」；只檢查只顯示結果。")
+                    .sectionNote()
+                Text("選單的「檢查更新…」不受頻率限制。")
+                    .sectionNote()
+            }
+        }
+    }
+
+    private func updateModeTitle(_ mode: UpdateMode) -> LocalizedStringKey {
+        switch mode {
+        case .automatic: "自動更新"
+        case .manual: "手動更新"
+        case .checkOnly: "只檢查"
+        }
+    }
+
+    private func updateFrequencyTitle(_ frequency: UpdateCheckFrequency) -> LocalizedStringKey {
+        switch frequency {
+        case .launch: "每次啟動"
+        case .daily: "每天"
+        case .weekly: "每週"
+        case .monthly: "每月"
         }
     }
 

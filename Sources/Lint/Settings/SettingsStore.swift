@@ -76,6 +76,8 @@ final class SettingsStore {
         static let localServerPort = "app.lint.localServer.port"
         static let localServerExtraArgs = "app.lint.localServer.extraArgs"
         static let localServerIdleSleep = "app.lint.localServer.idleSleepSeconds"
+        static let updateMode = "app.lint.update.mode"
+        static let updateFrequency = "app.lint.update.frequency"
         static let migratedManagedTuning = "app.lint.localServer.migratedManagedTuning"
         static let migratedUninstalledDefault = "app.lint.localServer.migratedUninstalledDefault"
         static let systemPromptOverrides = "app.lint.systemPromptOverrides"
@@ -187,6 +189,21 @@ final class SettingsStore {
     var localServerIdleSleep: IdleSleepOption {
         didSet { defaults.set(localServerIdleSleep.seconds, forKey: Keys.localServerIdleSleep) }
     }
+    /// What to do when GitHub has a newer release, and how often to look.
+    var updateMode: UpdateMode {
+        didSet {
+            defaults.set(updateMode.rawValue, forKey: Keys.updateMode)
+            onUpdatePreferenceChanged?()
+        }
+    }
+    var updateFrequency: UpdateCheckFrequency {
+        didSet {
+            defaults.set(updateFrequency.rawValue, forKey: Keys.updateFrequency)
+            onUpdatePreferenceChanged?()
+        }
+    }
+    /// Set by the app after init. `didSet` above does not run while this store is being created.
+    var onUpdatePreferenceChanged: (() -> Void)?
 
     static let defaultLocalHFModel = ModelCatalog.recommended.huggingFaceSpec
     var apiKeyDraft: String = ""
@@ -290,6 +307,8 @@ final class SettingsStore {
             defaults.object(forKey: Keys.localServerIdleSleep) == nil
                 ? nil : defaults.integer(forKey: Keys.localServerIdleSleep)
         )
+        updateMode = UpdateMode(rawValue: defaults.string(forKey: Keys.updateMode) ?? "") ?? .manual
+        updateFrequency = UpdateCheckFrequency(rawValue: defaults.string(forKey: Keys.updateFrequency) ?? "") ?? .weekly
         baseURLString = defaults.string(forKey: Keys.url(kind)) ?? kind.defaultBaseURL.absoluteString
         model = defaults.string(forKey: Keys.model(kind)) ?? kind.defaultModel
         if kind == .chatgptAccount, model == "auto" || model.isEmpty {

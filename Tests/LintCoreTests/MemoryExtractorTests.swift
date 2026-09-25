@@ -8,14 +8,14 @@ final class MemoryExtractorTests: XCTestCase {
         original: String,
         generated: String?,
         final: String? = nil
-    ) -> LearningFeedback {
-        LearningFeedback(
+    ) -> MemoryFeedback {
+        MemoryFeedback(
             gesture: .replaced, mode: mode, tone: tone, originalText: original, generatedText: generated,
             finalText: final ?? generated ?? "", provider: "localLlama", model: "qwen"
         )
     }
 
-    private func extract(_ action: FeedbackAction, _ feedback: LearningFeedback) -> [MemoryCandidate] {
+    private func extract(_ action: FeedbackAction, _ feedback: MemoryFeedback) -> [MemoryCandidate] {
         MemoryExtractor().candidates(from: feedback, action: action)
     }
 
@@ -263,7 +263,7 @@ final class MemoryExtractorTests: XCTestCase {
         XCTAssertTrue(memory.triggers.isEmpty, "the model's word is not in the English source, so it is a general habit")
     }
 
-    func testAToneLearnsOnlyFromTheUsersEdits() throws {
+    func testAToneRemembersOnlyFromTheUsersEdits() throws {
         let sample = feedback(
             .proofread, tone: .formal, original: "I need a big house",
             generated: "I need a large house", final: "I need a huge house"
@@ -331,7 +331,7 @@ final class MemoryExtractorTests: XCTestCase {
         XCTAssertEqual(keys(extract(.accepted, plain)), ["grammar:en:articles"])
     }
 
-    func testTranslatingInAnyToneLearnsNothingFromTheModelsRewrite() {
+    func testTranslatingInAnyToneRemembersNothingFromTheModelsRewrite() {
         for tone in WritingTone.allCases {
             let sample = feedback(
                 .translate, tone: tone,
@@ -363,7 +363,7 @@ final class MemoryExtractorTests: XCTestCase {
         }
     }
 
-    func testCopyingLearnsFromTheDifferenceItActuallyShows() {
+    func testCopyingRemembersFromTheDifferenceItActuallyShows() {
         let unchanged = feedback(original: "I have meeting.", generated: "I have a meeting.")
         XCTAssertEqual(keys(extract(.copied, unchanged)), ["grammar:en:articles"])
 

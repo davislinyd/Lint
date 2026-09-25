@@ -1,14 +1,15 @@
 import CryptoKit
 import Foundation
 
-/// Entry point of the learning subsystem. Everything here runs off the main actor, and a
+/// Entry point for remembering and dreaming. Everything here runs off the main actor, and a
 /// disabled feature never touches the disk.
-public actor LearningCoordinator {
+public actor MemoryCoordinator {
+    /// Keychain account. The name stays so hashes already on disk still match.
     private static let hmacKeyAccount = "learning.hmacKey"
 
     private let storeURL: URL?
     private let hmacKeyProvider: @Sendable () throws -> Data
-    private var store: (any LearningStore)?
+    private var store: (any MemoryStore)?
     private var hmacKey: SymmetricKey?
     private let clock: @Sendable () -> Date
     private var retriever: MemoryRetriever?
@@ -21,11 +22,11 @@ public actor LearningCoordinator {
     private let organizingSleep: @Sendable (Duration) async throws -> Void
     private var organizer: MemoryDreamCoordinator?
     private var scheduler: DreamScheduler?
-    /// Learning is on, so organizing may run in the background.
+    /// Memory is on, so dreaming may run in the background.
     private var organizingAllowed = false
 
     /// Longest instruction a memory keeps, however it was edited.
-    public static let maxInstructionLength = LearningPolicy.maxInstructionLength
+    public static let maxInstructionLength = MemoryPolicy.maxInstructionLength
 
     /// `~/Library/Application Support/Lint/LintLearning.sqlite`
     public static var defaultStoreURL: URL {
@@ -35,8 +36,8 @@ public actor LearningCoordinator {
     }
 
     /// `storeURL == nil` keeps everything in memory (tests).
-    public init(storeURL: URL? = LearningCoordinator.defaultStoreURL) {
-        self.init(storeURL: storeURL, hmacKey: { try LearningCoordinator.keychainHMACKey() })
+    public init(storeURL: URL? = MemoryCoordinator.defaultStoreURL) {
+        self.init(storeURL: storeURL, hmacKey: { try MemoryCoordinator.keychainHMACKey() })
     }
 
     init(
@@ -51,56 +52,56 @@ public actor LearningCoordinator {
         self.organizingSleep = organizingSleep
     }
 
-    /// Creates and migrates the database when learning is on, trims old events and asks for the
-    /// memories to be organized when that is due. Does nothing otherwise.
-    public func prepare(config: LearningConfig) async {
+    /// Creates and migrates the database when memory is on, trims old events and asks for the
+    /// memories to be dreamed when that is due. Does nothing otherwise.
+    public func prepare(config: MemoryConfig) async {
         organizingAllowed = config.enabled
         guard config.enabled else {
             await scheduler?.cancelPending()
             return
         }
         guard let store = openStore(create: true) else { return }
-        let cutoff = clock().addingTimeInterval(-Double(LearningPolicy.eventRetentionDays) * 86_400)
+        let cutoff = clock().addingTimeInterval(-Double(MemoryPolicy.eventRetentionDays) * 86_400)
         do {
-            try await store.pruneEvents(keepingLast: LearningPolicy.eventRetentionCount, olderThan: cutoff)
+            try await store.pruneEvents(keepingLast: MemoryPolicy.eventRetentionCount, olderThan: cutoff)
         } catch {
-            NSLog("Lint learning: prune failed: \(error.localizedDescription)")
+            NSLog("Lint memory: prune failed: \(error.localizedDescription)")
         }
         let lastPass = (try? await store.lastCompletedDreamRun())?.finishedAt
         await scheduler?.noteStartup(lastCompletedPass: lastPass)
         await noteMemoryPressure(store: store)
     }
 
-    /// Records what the user did with a suggestion. Nothing is kept while learning is off, or when
+    /// Records what the user did with a suggestion. Nothing is kept while memory is off, or when
     /// the suggestion never finished generating.
-    public func recordFeedback(_ feedback: LearningFeedback, config: LearningConfig) async {
+    public func recordFeedback(_ feedback: MemoryFeedback, config: MemoryConfig) async {
         organizingAllowed = config.enabled
-        guard config.enabled, feedback.isLearnable,
+        guard config.enabled, feedback.canFormMemory,
               let key = symmetricKey(),
               let store = openStore(create: true),
               let event = FeedbackCollector(key: key).event(for: feedback, now: clock())
         else { return }
         do {
             let inserted = try await store.insertEvent(
-                event, unlessDuplicateWithin: LearningPolicy.eventDedupeWindow
+                event, unlessDuplicateWithin: MemoryPolicy.eventDedupeWindow
             )
             await scheduler?.noteActivity()
             // A repeat of the same feedback is not new evidence.
             if inserted {
-                let changes = await learn(from: feedback, action: event.action, at: event.createdAt, store: store)
+                let changes = await remember(from: feedback, action: event.action, at: event.createdAt, store: store)
                 if changes > 0 {
                     await scheduler?.noteChanges(changes)
                     await noteMemoryPressure(store: store)
                 }
             }
         } catch {
-            NSLog("Lint learning: could not record feedback: \(error.localizedDescription)")
+            NSLog("Lint memory: could not record feedback: \(error.localizedDescription)")
         }
     }
 
     /// `prompt` with the memories relevant to `text` added at its end, and the memories used.
-    /// It comes back untouched while learning is off or nothing is relevant, and also when this
-    /// takes longer than `timeout`: a suggestion must never wait on the learning. An `english`
+    /// It comes back untouched while memory is off or nothing is relevant, and also when this
+    /// takes longer than `timeout`: a suggestion must never wait on the memory. An `english`
     /// prompt gets them worded in English.
     public nonisolated func personalize(
         prompt: String,
@@ -109,7 +110,7 @@ public actor LearningCoordinator {
         tone: WritingTone = .preserve,
         english: Bool = false,
         translationLanguage: TranslationLanguage = .traditionalChinese,
-        config: LearningConfig,
+        config: MemoryConfig,
         timeout: Duration = .milliseconds(150)
     ) async -> PersonalizedPrompt {
         let unchanged = PersonalizedPrompt(systemPrompt: prompt, usedMemoryIDs: [])
@@ -128,21 +129,21 @@ public actor LearningCoordinator {
 
     /// The few memories worth reminding the model about for this text: short-term, long-term or
     /// pinned ones whose trigger is in it, plus general habits that fit its language. Empty while
-    /// learning is off.
+    /// memory is off.
     /// `outputLanguage` is the language written when it differs from the text's (translation).
     public func relevantMemories(
         for text: String,
         mode: WritingMode,
         tone: WritingTone = .preserve,
         outputLanguage: String? = nil,
-        config: LearningConfig
+        config: MemoryConfig
     ) async -> [WritingMemory] {
         guard config.enabled, let store = openStore(create: false) else { return [] }
         let query = MemoryRetriever.Query(text: text, mode: mode, tone: tone, outputLanguage: outputLanguage)
         let now = clock()
         // Evidence keeps fading and short-term memories run out, so an old retriever is rebuilt
         // even if nothing changed.
-        if let retriever, now.timeIntervalSince(retrieverBuiltAt) < LearningPolicy.retrieverMaxAge {
+        if let retriever, now.timeIntervalSince(retrieverBuiltAt) < MemoryPolicy.retrieverMaxAge {
             return retriever.select(for: query)
         }
         let versionBeforeReading = memoryVersion
@@ -154,33 +155,33 @@ public actor LearningCoordinator {
             }
             return fresh.select(for: query)
         } catch {
-            NSLog("Lint learning: could not read memories: \(error.localizedDescription)")
+            NSLog("Lint memory: could not read memories: \(error.localizedDescription)")
             return []
         }
     }
 
     /// Every memory as it stands now (see `MemoryLifecycle.settled`), which can be ahead of what was
-    /// last written: organizing the memories is what writes it down.
+    /// last written: dreaming is what writes it down.
     public func memories() async -> [WritingMemory] {
         guard let store = openStore(create: false) else { return [] }
         do {
             let now = clock()
             return try await store.memories().map { MemoryLifecycle.settled($0, at: now) }
         } catch {
-            NSLog("Lint learning: could not read memories: \(error.localizedDescription)")
+            NSLog("Lint memory: could not read memories: \(error.localizedDescription)")
             return []
         }
     }
 
-    /// Says whether the user is waiting on a suggestion right now. Organizing the memories does not
+    /// Says whether the user is waiting on a suggestion right now. Dreaming does not
     /// start while they are, or shortly after, and one that is running gives way. Does not wait.
     public nonisolated func setInteractiveActivity(_ active: Bool) {
         gate.set(active)
     }
 
-    /// Organizes the memories now, on the user's request: it does not wait for a quiet moment. Only
+    /// Dreams now, on the user's request: it does not wait for a quiet moment. Only
     /// what is on this Mac is used, and nothing is started or downloaded for it.
-    public func organizeMemories(config: LearningConfig) async -> MemoryOrganizationOutcome {
+    public func dream(config: MemoryConfig) async -> DreamOutcome {
         guard config.enabled, openStore(create: false) != nil, let organizer else { return .unavailable }
         let run = await organizer.run()
         invalidateMemories()
@@ -199,7 +200,7 @@ public actor LearningCoordinator {
         do {
             return try await store.sourceCounts()
         } catch {
-            NSLog("Lint learning: could not read the sources: \(error.localizedDescription)")
+            NSLog("Lint memory: could not read the sources: \(error.localizedDescription)")
             return [:]
         }
     }
@@ -210,7 +211,7 @@ public actor LearningCoordinator {
         do {
             return try await store.sources(ofParent: id)
         } catch {
-            NSLog("Lint learning: could not read the sources: \(error.localizedDescription)")
+            NSLog("Lint memory: could not read the sources: \(error.localizedDescription)")
             return []
         }
     }
@@ -240,7 +241,7 @@ public actor LearningCoordinator {
     public func setInstruction(_ text: String, id: UUID) async {
         let cleaned = String(
             text.split(whereSeparator: \.isWhitespace).joined(separator: " ")
-                .prefix(LearningPolicy.maxInstructionLength)
+                .prefix(MemoryPolicy.maxInstructionLength)
         )
         guard !cleaned.isEmpty else { return }
         await change(id) { memory in
@@ -255,7 +256,7 @@ public actor LearningCoordinator {
             try await store.deleteMemory(id: id)
             invalidateMemories()
         } catch {
-            NSLog("Lint learning: could not delete a memory: \(error.localizedDescription)")
+            NSLog("Lint memory: could not delete a memory: \(error.localizedDescription)")
         }
     }
 
@@ -265,13 +266,13 @@ public actor LearningCoordinator {
             try await store.deleteAllMemories()
             invalidateMemories()
         } catch {
-            NSLog("Lint learning: could not clear memories: \(error.localizedDescription)")
+            NSLog("Lint memory: could not clear memories: \(error.localizedDescription)")
         }
     }
 
-    /// Reads whatever is on disk, also while learning is off, so the data stays visible. The memories
+    /// Reads whatever is on disk, also while memory is off, so the data stays visible. The memories
     /// are counted as they stand now, like `memories()`.
-    public func stats() async -> LearningStats {
+    public func stats() async -> MemoryStats {
         guard let store = openStore(create: false) else { return .empty }
         do {
             var stats = try await store.stats()
@@ -283,36 +284,36 @@ public actor LearningCoordinator {
             stats.supersededCount = current.filter { $0.supersededBy.map(rulesInUse.contains) ?? false }.count
             return stats
         } catch {
-            NSLog("Lint learning: stats failed: \(error.localizedDescription)")
+            NSLog("Lint memory: stats failed: \(error.localizedDescription)")
             return .empty
         }
     }
 
-    /// Wipes all memories and events, also while learning is off.
+    /// Wipes all memories and events, also while memory is off.
     public func resetAll() async {
         guard let store = openStore(create: false) else { return }
         do {
             try await store.resetAll()
             invalidateMemories()
         } catch {
-            NSLog("Lint learning: reset failed: \(error.localizedDescription)")
+            NSLog("Lint memory: reset failed: \(error.localizedDescription)")
         }
     }
 
-    /// Returns how many memories were learned from or weakened: what counts towards organizing them.
-    private func learn(
-        from feedback: LearningFeedback,
+    /// Returns how many memories were remembered or weakened: what counts towards a dream.
+    private func remember(
+        from feedback: MemoryFeedback,
         action: FeedbackAction,
         at now: Date,
-        store: any LearningStore
+        store: any MemoryStore
     ) async -> Int {
-        let weight = LearningPolicy.evidenceWeight(for: action)
+        let weight = MemoryPolicy.evidenceWeight(for: action)
         guard weight > 0 else { return 0 }
         await countUse(of: feedback.usedMemoryIDs, at: now, store: store)
         let extractor = MemoryExtractor()
         let injected = await injectedPatterns(feedback.usedMemoryIDs, store: store)
         let extraction = extractor.extraction(from: feedback, action: action, injected: Set(injected.keys))
-        let against = LearningPolicy.contradictionWeight(for: action)
+        let against = MemoryPolicy.contradictionWeight(for: action)
         var changed = false
         var changes = 0
         for candidate in extraction.candidates {
@@ -330,7 +331,7 @@ public actor LearningCoordinator {
                     changed = true
                 }
             } catch {
-                NSLog("Lint learning: could not update a memory: \(error.localizedDescription)")
+                NSLog("Lint memory: could not update a memory: \(error.localizedDescription)")
             }
             // Wanting `b` where a memory asks for `a` is evidence against that memory.
             if let opposite = MemoryExtractor.reversedKey(of: candidate.dedupKey),
@@ -352,7 +353,7 @@ public actor LearningCoordinator {
                 }
                 changed = true
             } catch {
-                NSLog("Lint learning: could not refresh a memory: \(error.localizedDescription)")
+                NSLog("Lint memory: could not refresh a memory: \(error.localizedDescription)")
             }
             for id in injected[key] ?? [] where await creditSuccess(id, at: now, store: store) {
                 changed = true
@@ -362,13 +363,13 @@ public actor LearningCoordinator {
         return changes
     }
 
-    /// Memories that are candidates or in use pile up: organizing them may thin them out.
-    private func noteMemoryPressure(store: any LearningStore) async {
+    /// Memories that are candidates or in use pile up: dreaming may thin them out.
+    private func noteMemoryPressure(store: any MemoryStore) async {
         guard let stats = try? await store.stats() else { return }
         await scheduler?.notePressure(memories: stats.count(.candidate) + stats.count(.active))
     }
 
-    /// The scheduled pass: not while learning is off, and it gives way to the user.
+    /// The scheduled pass: not while memory is off, and it gives way to the user.
     private func runScheduledOrganizing() async -> DreamRunStatus? {
         guard organizingAllowed, let organizer else { return .completed }
         let run = await organizer.run(yieldingTo: gate)
@@ -378,7 +379,7 @@ public actor LearningCoordinator {
 
     /// The suggestion that carried these memories was used, so they were: counted once each. That
     /// says nothing about the text, and changes nothing about what is retrieved.
-    private func countUse(of ids: [UUID], at now: Date, store: any LearningStore) async {
+    private func countUse(of ids: [UUID], at now: Date, store: any MemoryStore) async {
         for id in Set(ids) {
             do {
                 try await store.updateMemory(id: id) { memory in
@@ -386,14 +387,14 @@ public actor LearningCoordinator {
                     memory.lastUsedAt = now
                 }
             } catch {
-                NSLog("Lint learning: could not count the use of a memory: \(error.localizedDescription)")
+                NSLog("Lint memory: could not count the use of a memory: \(error.localizedDescription)")
             }
         }
     }
 
     /// The model applied what the memory reminded it of and the user accepted that. A generalized
     /// or core memory that gave the reminder is kept alive by it, as a specific one is.
-    private func creditSuccess(_ id: UUID, at now: Date, store: any LearningStore) async -> Bool {
+    private func creditSuccess(_ id: UUID, at now: Date, store: any MemoryStore) async -> Bool {
         do {
             try await store.updateMemory(id: id) { memory in
                 memory.successfulUseCount += 1
@@ -401,7 +402,7 @@ public actor LearningCoordinator {
             }
             return true
         } catch {
-            NSLog("Lint learning: could not count a successful use: \(error.localizedDescription)")
+            NSLog("Lint memory: could not count a successful use: \(error.localizedDescription)")
             return false
         }
     }
@@ -409,7 +410,7 @@ public actor LearningCoordinator {
     /// A specific memory was seen again: so was the pattern of the generalized or core memory that
     /// stands in for it, as long as that one is in use (not forgotten or switched off). False if
     /// nothing was written.
-    private func support(parentOf dedupKey: String, weight: Double, at now: Date, store: any LearningStore) async -> Bool {
+    private func support(parentOf dedupKey: String, weight: Double, at now: Date, store: any MemoryStore) async -> Bool {
         guard let parentID = (try? await store.memory(dedupKey: dedupKey))?.supersededBy else { return false }
         do {
             try await store.updateMemory(id: parentID) { memory in
@@ -419,14 +420,14 @@ public actor LearningCoordinator {
             }
             return true
         } catch {
-            NSLog("Lint learning: could not update a rule: \(error.localizedDescription)")
+            NSLog("Lint memory: could not update a rule: \(error.localizedDescription)")
             return false
         }
     }
 
     /// Does nothing if there is no such memory. False if it could not be written. What goes against a
     /// memory goes against the rule that stands in for it too.
-    private func weaken(_ dedupKey: String, by amount: Double, at now: Date, store: any LearningStore) async -> Bool {
+    private func weaken(_ dedupKey: String, by amount: Double, at now: Date, store: any MemoryStore) async -> Bool {
         do {
             let parentID = try await store.memory(dedupKey: dedupKey)?.supersededBy
             try await store.updateMemory(dedupKey: dedupKey) { memory in
@@ -439,7 +440,7 @@ public actor LearningCoordinator {
             }
             return true
         } catch {
-            NSLog("Lint learning: could not weaken a memory: \(error.localizedDescription)")
+            NSLog("Lint memory: could not weaken a memory: \(error.localizedDescription)")
             return false
         }
     }
@@ -447,7 +448,7 @@ public actor LearningCoordinator {
     /// The patterns (by `dedupKey`) the prompt reminded the model of, each with the memories that gave
     /// the reminder: the memory of that pattern itself, and any generalized or core memory that
     /// stands in for it. A memory deleted since is simply not counted.
-    private func injectedPatterns(_ ids: [UUID], store: any LearningStore) async -> [String: Set<UUID>] {
+    private func injectedPatterns(_ ids: [UUID], store: any MemoryStore) async -> [String: Set<UUID>] {
         var patterns: [String: Set<UUID>] = [:]
         for id in ids {
             guard let memory = try? await store.memory(id: id) else { continue }
@@ -476,7 +477,7 @@ public actor LearningCoordinator {
             }
             invalidateMemories()
         } catch {
-            NSLog("Lint learning: could not change a memory: \(error.localizedDescription)")
+            NSLog("Lint memory: could not change a memory: \(error.localizedDescription)")
         }
     }
 
@@ -487,7 +488,7 @@ public actor LearningCoordinator {
             hmacKey = key
             return key
         } catch {
-            NSLog("Lint learning: no HMAC key: \(error)")
+            NSLog("Lint memory: no HMAC key: \(error)")
             return nil
         }
     }
@@ -504,13 +505,13 @@ public actor LearningCoordinator {
         return data
     }
 
-    private func openStore(create: Bool) -> (any LearningStore)? {
+    private func openStore(create: Bool) -> (any MemoryStore)? {
         if let store { return store }
         if !create, let storeURL, !FileManager.default.fileExists(atPath: storeURL.path) {
             return nil
         }
         do {
-            let opened = try SQLiteLearningStore(url: storeURL)
+            let opened = try SQLiteMemoryStore(url: storeURL)
             store = opened
             organizer = MemoryDreamCoordinator(store: opened, clock: clock)
             scheduler = DreamScheduler(gate: gate, clock: clock, sleep: organizingSleep) { [weak self] in
@@ -518,7 +519,7 @@ public actor LearningCoordinator {
             }
             return opened
         } catch {
-            NSLog("Lint learning: cannot open store: \(error.localizedDescription)")
+            NSLog("Lint memory: cannot open store: \(error.localizedDescription)")
             return nil
         }
     }

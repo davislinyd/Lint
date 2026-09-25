@@ -1,6 +1,6 @@
 import Foundation
 
-/// Whether the user is waiting on a suggestion. The app layer reports it (`LearningCoordinator.
+/// Whether the user is waiting on a suggestion. The app layer reports it (`MemoryCoordinator.
 /// setInteractiveActivity`); it can be read and set from anywhere without waiting, because
 /// reporting it must never queue behind the work it is meant to hold back.
 final class InteractiveGate: @unchecked Sendable {
@@ -30,10 +30,10 @@ final class InteractiveGate: @unchecked Sendable {
     }
 }
 
-/// Decides when organizing memories runs: only marked as pending by a few triggers, and run once,
+/// Decides when a dream runs: only marked as pending by a few triggers, and run once,
 /// after things have been quiet for a while. Nothing here is on the clock (a Mac may be asleep at
 /// any hour): a pass happens after start-up, or on the next feedback, when it has been long enough
-/// (so at least daily while Lint is in use), after enough new learning, or when memories pile up.
+/// (so at least daily while Lint is in use), after enough new memory, or when memories pile up.
 ///
 /// Several triggers in a row (feedback, feedback, feedback) restart the same wait and end in one
 /// pass. A pass never starts while the user is waiting on a suggestion, or has just been, and one
@@ -61,8 +61,8 @@ actor DreamScheduler {
         gate: InteractiveGate,
         clock: @escaping @Sendable () -> Date = { Date() },
         sleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) },
-        idleDelay: Duration = LearningPolicy.dreamIdleDelay,
-        retryDelay: Duration = LearningPolicy.dreamRetryDelay,
+        idleDelay: Duration = MemoryPolicy.dreamIdleDelay,
+        retryDelay: Duration = MemoryPolicy.dreamRetryDelay,
         pass: @escaping Pass
     ) {
         self.gate = gate
@@ -75,7 +75,7 @@ actor DreamScheduler {
 
     // MARK: triggers
 
-    /// The app has started (or learning was switched on): it has been long enough since the last pass.
+    /// The app has started (or memory was switched on): it has been long enough since the last pass.
     func noteStartup(lastCompletedPass: Date?) {
         lastPass = lastCompletedPass
         noteActivity()
@@ -85,20 +85,20 @@ actor DreamScheduler {
     /// is forgotten should be written down, and faded traces erased, at least daily.
     func noteActivity() {
         guard let lastPass else { return markPending() }
-        if clock().timeIntervalSince(lastPass) > LearningPolicy.dreamInterval { markPending() }
+        if clock().timeIntervalSince(lastPass) > MemoryPolicy.dreamInterval { markPending() }
     }
 
-    /// Memories were learned from, or weakened: this many meaningful changes.
+    /// Memories were remembered from, or weakened: this many meaningful changes.
     func noteChanges(_ count: Int) {
         changesSinceLastPass += count
-        if changesSinceLastPass >= LearningPolicy.dreamChangeThreshold { markPending() }
+        if changesSinceLastPass >= MemoryPolicy.dreamChangeThreshold { markPending() }
     }
 
     /// This many memories are candidates or in use. Repeated passes could not thin them out any
     /// further than the last one did, so this only counts once a while has passed since.
     func notePressure(memories: Int) {
-        guard memories >= LearningPolicy.dreamPressureThreshold else { return }
-        if let lastPass, clock().timeIntervalSince(lastPass) < LearningPolicy.dreamPressureCooldown { return }
+        guard memories >= MemoryPolicy.dreamPressureThreshold else { return }
+        if let lastPass, clock().timeIntervalSince(lastPass) < MemoryPolicy.dreamPressureCooldown { return }
         markPending()
     }
 
@@ -107,7 +107,7 @@ actor DreamScheduler {
         if !running { schedule(after: idleDelay) }
     }
 
-    /// Nothing is due any more (learning was switched off).
+    /// Nothing is due any more (memory was switched off).
     func cancelPending() {
         pending = false
         waiter?.cancel()

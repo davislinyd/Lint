@@ -86,7 +86,7 @@ struct WritingEvalRun: Codable {
 /// check and single retry, one fresh session per request and greedy sampling; llama gets the English
 /// prompts with the language line, temperature 0.3 and no guard. `LINT_EVAL_GUARD=0|1` overrides the
 /// guard, `LINT_EVAL_TEMPERATURE` the temperature, `LINT_EVAL_PROFILE=standard` the prompts.
-/// `LINT_EVAL_REMINDERS=zh|en` adds what a user with two learned habits gets (articles, prepositions
+/// `LINT_EVAL_REMINDERS=zh|en` adds what a user with two remembered habits gets (articles, prepositions
 /// after verbs), picked by the app's retriever and worded in Chinese or in English.
 final class WritingEvalRunTests: XCTestCase {
     /// Two habits as Lint words them when it learns them: general, so they go with every English text.

@@ -232,7 +232,7 @@ final class MemoryClustererTests: XCTestCase {
             instruction: "英文常漏用或誤用冠詞（a／an／the）：請特別檢查單數可數名詞前的冠詞。"
         )
         let other = await similarity.similarity(discuss, articles)
-        XCTAssertLessThan(other, LearningPolicy.dreamSimilarityThreshold)
+        XCTAssertLessThan(other, MemoryPolicy.dreamSimilarityThreshold)
 
         let real = DreamFixtures.prepositions(4) + [articles]
         let result = await clusterer(similarity).clusters(from: real, at: now)

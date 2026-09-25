@@ -122,7 +122,7 @@ final class MemoryRetrieverTests: XCTestCase {
         var memories = (0..<7).map { memory("lex\($0)", kind: .spelling, triggers: ["prospective"], evidence: Double($0 + 1)) }
         memories.append(memory("habit", evidence: 50, count: 50))
         let result = keys(memories, english)
-        XCTAssertEqual(result.count, LearningPolicy.maxPersonalizedMemories)
+        XCTAssertEqual(result.count, MemoryPolicy.maxPersonalizedMemories)
         XCTAssertFalse(result.contains("habit"))
         XCTAssertEqual(result, ["lex6", "lex5", "lex4", "lex3", "lex2"])
     }
@@ -149,7 +149,7 @@ final class MemoryRetrieverTests: XCTestCase {
 
     func testAShortTermMemoryThatRanOutOrWaitsForItsPatternIsNotRetrieved() {
         var ranOut = memory("ran-out", triggers: ["prospective"], state: .candidate, evidence: 0.35, count: 1)
-        ranOut.lastConfirmedAt = now.addingTimeInterval(-(LearningPolicy.shortTermDays + 1) * 86_400)
+        ranOut.lastConfirmedAt = now.addingTimeInterval(-(MemoryPolicy.shortTermDays + 1) * 86_400)
         let waits = memory(
             "vocabulary:en:prospective>perspective", kind: .vocabulary, triggers: ["prospective"],
             state: .candidate, evidence: 0.15, count: 1,
@@ -248,8 +248,8 @@ final class MemoryRetrieverTests: XCTestCase {
         ]
         let picked = MemoryRetriever(memories: memories, now: now).select(for: .init(text: english, mode: .proofread))
         XCTAssertEqual(picked.map(\.dedupKey), ["A", "C"])
-        let used = picked.reduce(0) { $0 + $1.instruction.count + LearningPolicy.personalizationLineOverhead }
-        XCTAssertLessThanOrEqual(used, LearningPolicy.maxPersonalizationCharacters)
+        let used = picked.reduce(0) { $0 + $1.instruction.count + MemoryPolicy.personalizationLineOverhead }
+        XCTAssertLessThanOrEqual(used, MemoryPolicy.maxPersonalizationCharacters)
     }
 
     func testTheOrderDoesNotDependOnTheInputOrder() {
@@ -399,7 +399,7 @@ final class MemoryRetrieverTests: XCTestCase {
 
         let result = retriever.select(for: query)
         XCTAssertEqual(result.first?.dedupKey, "prospective>perspective")
-        XCTAssertLessThanOrEqual(result.count, LearningPolicy.maxPersonalizedMemories)
+        XCTAssertLessThanOrEqual(result.count, MemoryPolicy.maxPersonalizedMemories)
         XCTAssertTrue(result.allSatisfy { $0.modeScope == nil && $0.toneScope == nil }, "no tone or translation memory leaks in")
         XCTAssertTrue(result.allSatisfy { $0.state == .active })
 
@@ -529,7 +529,7 @@ final class MemoryRetrieverTests: XCTestCase {
     func testARuleTakesOneOfTheHabitSlots() {
         let habits = (0..<3).map { memory("grammar:en:habit\($0)") }
         let picked = keys(habits + [rule()], english)
-        XCTAssertEqual(picked.count, LearningPolicy.maxHabitMemories)
+        XCTAssertEqual(picked.count, MemoryPolicy.maxHabitMemories)
         XCTAssertEqual(picked.first, "dream:rule")
     }
 
@@ -546,8 +546,8 @@ final class MemoryRetrieverTests: XCTestCase {
         let picked = MemoryRetriever(memories: bound + [rule], now: now)
             .select(for: .init(text: text, mode: .proofread, outputLanguage: nil))
 
-        XCTAssertLessThanOrEqual(picked.count, LearningPolicy.maxPersonalizedMemories)
-        XCTAssertLessThanOrEqual(picked.map(LearningPolicy.promptCost).reduce(0, +), LearningPolicy.maxPersonalizationCharacters)
+        XCTAssertLessThanOrEqual(picked.count, MemoryPolicy.maxPersonalizedMemories)
+        XCTAssertLessThanOrEqual(picked.map(MemoryPolicy.promptCost).reduce(0, +), MemoryPolicy.maxPersonalizationCharacters)
         XCTAssertEqual(picked.count, 3, "150 characters and the numbering: three fit in 600")
         XCTAssertFalse(picked.contains { $0.id == rule.id })
 

@@ -35,7 +35,7 @@ private extension MemoryLevel {
     }
 }
 
-/// Everything Lint has learned, where each memory can be read, reworded, pinned, disabled or deleted.
+/// Every memory, where each one can be read, reworded, pinned, disabled or deleted.
 /// Forgotten memories are only traces, so they are listed only when asked for.
 struct MemoryManagementView: View {
     var app: AppModel
@@ -60,7 +60,7 @@ struct MemoryManagementView: View {
             Divider()
 
             if memories.isEmpty {
-                Text("還沒有學到任何記憶。")
+                Text("還沒有任何記憶。")
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if shown.isEmpty {
@@ -97,15 +97,15 @@ struct MemoryManagementView: View {
         .task { await reload() }
         .sheet(item: $editing) { memory in
             InstructionEditor(text: memory.instruction) { text in
-                perform { await app.learning.setInstruction(text, id: memory.id) }
+                perform { await app.memory.setInstruction(text, id: memory.id) }
             }
         }
         .confirmationDialog("清除所有記憶？", isPresented: $confirmClear) {
             Button("清除", role: .destructive) {
-                perform { await app.learning.deleteAllMemories() }
+                perform { await app.memory.deleteAllMemories() }
             }
         } message: {
-            Text("這會刪除所有已學到的記憶，回饋紀錄會保留。")
+            Text("這會刪除所有記憶，回饋紀錄會保留。")
         }
     }
 
@@ -135,15 +135,15 @@ struct MemoryManagementView: View {
             Spacer(minLength: 8)
             Menu {
                 Button(memory.state == .pinned ? LocalizedStringKey("取消釘選") : LocalizedStringKey("釘選")) {
-                    perform { await app.learning.setPinned(memory.state != .pinned, id: memory.id) }
+                    perform { await app.memory.setPinned(memory.state != .pinned, id: memory.id) }
                 }
                 Button(dormant ? LocalizedStringKey("啟用") : LocalizedStringKey("停用")) {
-                    perform { await app.learning.setEnabled(dormant, id: memory.id) }
+                    perform { await app.memory.setEnabled(dormant, id: memory.id) }
                 }
                 Button("編輯…") { editing = memory }
                 Divider()
                 Button("刪除", role: .destructive) {
-                    perform { await app.learning.deleteMemory(id: memory.id) }
+                    perform { await app.memory.deleteMemory(id: memory.id) }
                 }
             } label: {
                 Image(systemName: "ellipsis.circle")
@@ -197,8 +197,8 @@ struct MemoryManagementView: View {
     }
 
     private func reload() async {
-        memories = await app.learning.memories()
-        sourceCounts = await app.learning.sourceCounts()
+        memories = await app.memory.memories()
+        sourceCounts = await app.memory.sourceCounts()
     }
 }
 
@@ -224,7 +224,7 @@ private struct SourceMemories: View {
         }
         .font(.caption)
         .task(id: expanded) {
-            if expanded { sources = await app.learning.sources(of: parent.id) }
+            if expanded { sources = await app.memory.sources(of: parent.id) }
         }
     }
 }
@@ -250,7 +250,7 @@ private struct InstructionEditor: View {
                 .frame(height: 110)
                 .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 8))
             HStack {
-                Text("最多 \(LearningCoordinator.maxInstructionLength) 字")
+                Text("最多 \(MemoryCoordinator.maxInstructionLength) 字")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Spacer()
@@ -266,8 +266,8 @@ private struct InstructionEditor: View {
         .padding(16)
         .frame(width: 460)
         .onChange(of: text) {
-            if text.count > LearningCoordinator.maxInstructionLength {
-                text = String(text.prefix(LearningCoordinator.maxInstructionLength))
+            if text.count > MemoryCoordinator.maxInstructionLength {
+                text = String(text.prefix(MemoryCoordinator.maxInstructionLength))
             }
         }
     }

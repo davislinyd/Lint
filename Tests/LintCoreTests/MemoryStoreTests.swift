@@ -2,7 +2,7 @@ import GRDB
 import XCTest
 @testable import LintCore
 
-final class LearningStoreTests: XCTestCase {
+final class MemoryStoreTests: XCTestCase {
     private func makeTempDirectory() throws -> URL {
         let dir = FileManager.default.temporaryDirectory
             .appendingPathComponent("LintLearningTests-\(UUID().uuidString)", isDirectory: true)
@@ -55,7 +55,7 @@ final class LearningStoreTests: XCTestCase {
     }
 
     func testMemoryRoundTripKeepsEveryField() async throws {
-        let store = try SQLiteLearningStore(url: nil)
+        let store = try SQLiteMemoryStore(url: nil)
         let saved = memory(modeScope: .translate)
         try await store.saveMemory(saved)
         let loaded = try await store.memory(id: saved.id)
@@ -65,7 +65,7 @@ final class LearningStoreTests: XCTestCase {
     }
 
     func testSavingSameIDUpdatesInsteadOfDuplicating() async throws {
-        let store = try SQLiteLearningStore(url: nil)
+        let store = try SQLiteMemoryStore(url: nil)
         var saved = memory()
         try await store.saveMemory(saved)
         saved.evidenceScore = 1.05
@@ -76,7 +76,7 @@ final class LearningStoreTests: XCTestCase {
     }
 
     func testDedupKeyIsUniqueAcrossDifferentIDs() async throws {
-        let store = try SQLiteLearningStore(url: nil)
+        let store = try SQLiteMemoryStore(url: nil)
         try await store.saveMemory(memory())
         do {
             try await store.saveMemory(memory())
@@ -87,7 +87,7 @@ final class LearningStoreTests: XCTestCase {
     }
 
     func testDeleteMemory() async throws {
-        let store = try SQLiteLearningStore(url: nil)
+        let store = try SQLiteMemoryStore(url: nil)
         let kept = memory(key: "grammar:en:articles")
         let dropped = memory()
         try await store.saveMemory(kept)
@@ -98,7 +98,7 @@ final class LearningStoreTests: XCTestCase {
     }
 
     func testMergeMemoryInsertsThenSeesTheExistingRow() async throws {
-        let store = try SQLiteLearningStore(url: nil)
+        let store = try SQLiteMemoryStore(url: nil)
         let base = memory()
         try await store.mergeMemory(dedupKey: base.dedupKey) { existing in
             XCTAssertNil(existing)
@@ -116,7 +116,7 @@ final class LearningStoreTests: XCTestCase {
     }
 
     func testUpdateMemoryChangesOneRowAndIgnoresAMissingOne() async throws {
-        let store = try SQLiteLearningStore(url: nil)
+        let store = try SQLiteMemoryStore(url: nil)
         let target = memory(key: "a")
         let other = memory(key: "b")
         try await store.saveMemory(target)
@@ -130,7 +130,7 @@ final class LearningStoreTests: XCTestCase {
     }
 
     func testUpdateMemoryByKeyChangesOnlyThatMemoryAndIgnoresAMissingKey() async throws {
-        let store = try SQLiteLearningStore(url: nil)
+        let store = try SQLiteMemoryStore(url: nil)
         let target = memory(key: "spelling:en:a>b")
         let other = memory(key: "spelling:en:b>a")
         try await store.saveMemory(target)
@@ -146,7 +146,7 @@ final class LearningStoreTests: XCTestCase {
     }
 
     func testDeleteAllMemoriesKeepsEvents() async throws {
-        let store = try SQLiteLearningStore(url: nil)
+        let store = try SQLiteMemoryStore(url: nil)
         try await store.saveMemory(memory(key: "a"))
         try await store.saveMemory(memory(key: "b"))
         try await store.insertEvent(event(at: 1), unlessDuplicateWithin: nil)
@@ -157,7 +157,7 @@ final class LearningStoreTests: XCTestCase {
     }
 
     func testInsertEventsAndCount() async throws {
-        let store = try SQLiteLearningStore(url: nil)
+        let store = try SQLiteMemoryStore(url: nil)
         try await store.insertEvent(event(at: 1), unlessDuplicateWithin: nil)
         try await store.insertEvent(event(at: 2, action: .editedAndAccepted), unlessDuplicateWithin: nil)
         let count = try await store.eventCount()
@@ -165,7 +165,7 @@ final class LearningStoreTests: XCTestCase {
     }
 
     func testDuplicateWithinWindowIsSkippedAndLaterOneIsKept() async throws {
-        let store = try SQLiteLearningStore(url: nil)
+        let store = try SQLiteMemoryStore(url: nil)
         let hour: TimeInterval = 3_600
         let window = 24 * hour
         let first = try await store.insertEvent(event(at: 0), unlessDuplicateWithin: window)
@@ -179,7 +179,7 @@ final class LearningStoreTests: XCTestCase {
     }
 
     func testDedupeKeepsDifferentActionsAndFinalTexts() async throws {
-        let store = try SQLiteLearningStore(url: nil)
+        let store = try SQLiteMemoryStore(url: nil)
         let window: TimeInterval = 24 * 3_600
         var edited = event(at: 0, action: .editedAndAccepted)
         edited.finalHMAC = "final-a"
@@ -200,7 +200,7 @@ final class LearningStoreTests: XCTestCase {
     }
 
     func testPruneDropsOldEventsThenKeepsNewest() async throws {
-        let store = try SQLiteLearningStore(url: nil)
+        let store = try SQLiteMemoryStore(url: nil)
         for seconds in [100, 200, 300, 400, 500] {
             try await store.insertEvent(event(at: TimeInterval(seconds)), unlessDuplicateWithin: nil)
         }
@@ -213,7 +213,7 @@ final class LearningStoreTests: XCTestCase {
     }
 
     func testStatsCountsMemoriesByStateAndEvents() async throws {
-        let store = try SQLiteLearningStore(url: nil)
+        let store = try SQLiteMemoryStore(url: nil)
         try await store.saveMemory(memory(key: "a", state: .candidate))
         try await store.saveMemory(memory(key: "b", state: .candidate))
         try await store.saveMemory(memory(key: "c", state: .active))
@@ -226,7 +226,7 @@ final class LearningStoreTests: XCTestCase {
     }
 
     func testResetAllEmptiesTheStoreAndStaysUsable() async throws {
-        let store = try SQLiteLearningStore(url: nil)
+        let store = try SQLiteMemoryStore(url: nil)
         try await store.saveMemory(memory())
         try await store.insertEvent(event(at: 1), unlessDuplicateWithin: nil)
         try await store.resetAll()
@@ -241,10 +241,10 @@ final class LearningStoreTests: XCTestCase {
         let url = try makeTempDirectory().appendingPathComponent("LintLearning.sqlite")
         let saved = memory()
         do {
-            let store = try SQLiteLearningStore(url: url)
+            let store = try SQLiteMemoryStore(url: url)
             try await store.saveMemory(saved)
         }
-        let reopened = try SQLiteLearningStore(url: url)
+        let reopened = try SQLiteMemoryStore(url: url)
         let loaded = try await reopened.memory(id: saved.id)
         XCTAssertEqual(loaded, saved)
     }
@@ -254,7 +254,7 @@ final class LearningStoreTests: XCTestCase {
         // A database as the first version left it: the snippet columns exist and hold stretches of text.
         do {
             let queue = try DatabaseQueue(path: url.path)
-            try SQLiteLearningStore.migrator.migrate(queue, upTo: "v1_learning")
+            try SQLiteMemoryStore.migrator.migrate(queue, upTo: "v1_learning")
             try await queue.write { db in
                 for index in 0..<300 {
                     try db.execute(
@@ -273,7 +273,7 @@ final class LearningStoreTests: XCTestCase {
         let before = try Data(contentsOf: url)
         XCTAssertNotNil(before.range(of: Data("quokka".utf8)), "sanity: the snippets are in the file")
 
-        let store = try SQLiteLearningStore(url: url)
+        let store = try SQLiteMemoryStore(url: url)
 
         let memories = try await store.memories()
         XCTAssertEqual(memories.count, 300)
@@ -286,7 +286,7 @@ final class LearningStoreTests: XCTestCase {
     func testFileIsOwnerOnly() throws {
         let dir = try makeTempDirectory().appendingPathComponent("Lint", isDirectory: true)
         let url = dir.appendingPathComponent("LintLearning.sqlite")
-        _ = try SQLiteLearningStore(url: url)
+        _ = try SQLiteMemoryStore(url: url)
         func permissions(_ url: URL) throws -> Int {
             let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
             return (attributes[.posixPermissions] as? NSNumber)?.intValue ?? -1
@@ -295,7 +295,7 @@ final class LearningStoreTests: XCTestCase {
         XCTAssertEqual(try permissions(dir), 0o700)
     }
 
-    // MARK: organizing memories
+    // MARK: dreaming
 
     private func dreamRun(
         status: DreamRunStatus = .completed, startedAt: TimeInterval = 1_800_000_000, finished: Bool = true
@@ -311,7 +311,7 @@ final class LearningStoreTests: XCTestCase {
 
     /// A generalized parent and `count` specific memories that it stands in for, related in the file.
     private func makeFamily(
-        in store: SQLiteLearningStore, url: URL, count: Int = 3, parentState: MemoryState = .active
+        in store: SQLiteMemoryStore, url: URL, count: Int = 3, parentState: MemoryState = .active
     ) async throws -> (parent: WritingMemory, children: [WritingMemory]) {
         var parent = memory(key: "dream:test:parent", state: parentState)
         parent.level = .generalized
@@ -345,13 +345,13 @@ final class LearningStoreTests: XCTestCase {
         return try queue.read { db in try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM \(table)") ?? -1 }
     }
 
-    private func makeFileStore() throws -> (store: SQLiteLearningStore, url: URL) {
+    private func makeFileStore() throws -> (store: SQLiteMemoryStore, url: URL) {
         let url = try makeTempDirectory().appendingPathComponent("LintLearning.sqlite")
-        return (try SQLiteLearningStore(url: url), url)
+        return (try SQLiteMemoryStore(url: url), url)
     }
 
-    func testTheOrganizingFieldsRoundTrip() async throws {
-        let store = try SQLiteLearningStore(url: nil)
+    func testTheDreamFieldsRoundTrip() async throws {
+        let store = try SQLiteMemoryStore(url: nil)
         var saved = memory()
         saved.level = .core
         saved.supersededBy = UUID()
@@ -370,7 +370,7 @@ final class LearningStoreTests: XCTestCase {
         let id = UUID()
         do {
             let queue = try DatabaseQueue(path: url.path)
-            try SQLiteLearningStore.migrator.migrate(queue, upTo: "v1_learning")
+            try SQLiteMemoryStore.migrator.migrate(queue, upTo: "v1_learning")
             try await queue.write { db in
                 try db.execute(
                     sql: """
@@ -385,7 +385,7 @@ final class LearningStoreTests: XCTestCase {
             }
         }
 
-        let store = try SQLiteLearningStore(url: url)
+        let store = try SQLiteMemoryStore(url: url)
 
         let loaded = try await store.memory(id: id)
         let memory = try XCTUnwrap(loaded)
@@ -407,7 +407,7 @@ final class LearningStoreTests: XCTestCase {
         let url = try makeTempDirectory().appendingPathComponent("LintLearning.sqlite")
         do {
             let queue = try DatabaseQueue(path: url.path)
-            try SQLiteLearningStore.migrator.migrate(queue, upTo: "v2_drop_examples")
+            try SQLiteMemoryStore.migrator.migrate(queue, upTo: "v2_drop_examples")
             try await queue.write { db in
                 for index in 0..<3 {
                     try db.execute(
@@ -423,7 +423,7 @@ final class LearningStoreTests: XCTestCase {
             }
         }
 
-        let store = try SQLiteLearningStore(url: url)
+        let store = try SQLiteMemoryStore(url: url)
 
         let memories = try await store.memories()
         XCTAssertEqual(memories.count, 3)
@@ -435,7 +435,7 @@ final class LearningStoreTests: XCTestCase {
         let stats = try await store.stats()
         XCTAssertEqual(stats.count(.specific), 3)
         XCTAssertEqual(stats.supersededCount, 0)
-        XCTAssertNil(stats.lastOrganizedAt)
+        XCTAssertNil(stats.lastDreamAt)
     }
 
     func testADatabaseWithANewerMigrationStillOpensForAnOlderMigrator() throws {
@@ -479,7 +479,7 @@ final class LearningStoreTests: XCTestCase {
     /// A database as version 0.3.0 leaves it: memories and events that name an old tone mode.
     private func makeDatabaseFromBeforeTone(at url: URL, extra: @escaping @Sendable (Database) throws -> Void = { _ in }) async throws {
         let queue = try DatabaseQueue(path: url.path)
-        try SQLiteLearningStore.migrator.migrate(queue, upTo: "v3_dreaming")
+        try SQLiteMemoryStore.migrator.migrate(queue, upTo: "v3_dreaming")
         try await queue.write { db in
             func memory(_ key: String, _ mode: String?, kind: String = "style", level: String = "specific") throws {
                 try db.execute(
@@ -518,7 +518,7 @@ final class LearningStoreTests: XCTestCase {
         let url = try makeTempDirectory().appendingPathComponent("LintLearning.sqlite")
         try await makeDatabaseFromBeforeTone(at: url)
 
-        let store = try SQLiteLearningStore(url: url)
+        let store = try SQLiteMemoryStore(url: url)
         let memories = try await store.memories()
         XCTAssertEqual(memories.count, 7, "nothing is deleted")
 
@@ -539,13 +539,13 @@ final class LearningStoreTests: XCTestCase {
         XCTAssertTrue(memories.allSatisfy { $0.state == .active && $0.occurrenceCount == 4 })
     }
 
-    func testAMemoryOfBeforeToneIsTheSameMemoryAsTheOneLearnedNow() async throws {
+    func testAMemoryOfBeforeToneIsTheSameMemoryAsTheOneRememberedNow() async throws {
         let url = try makeTempDirectory().appendingPathComponent("LintLearning.sqlite")
         try await makeDatabaseFromBeforeTone(at: url)
-        let store = try SQLiteLearningStore(url: url)
+        let store = try SQLiteMemoryStore(url: url)
 
         // What the extractor makes of a user's edit under proofreading in a professional tone.
-        let feedback = LearningFeedback(
+        let feedback = MemoryFeedback(
             gesture: .replaced, mode: .proofread, tone: .professional, originalText: "I need a big house",
             generatedText: "I need a large house", finalText: "I need a huge house", provider: "p", model: "m"
         )
@@ -553,7 +553,7 @@ final class LearningStoreTests: XCTestCase {
         XCTAssertEqual(candidate.dedupKey, "vocabulary:en:proofread|professional:large>huge")
         let bigToLarge = "vocabulary:en:proofread|professional:big>large"
         let existing = try await store.memory(dedupKey: bigToLarge)
-        XCTAssertNotNil(existing, "the key of a memory learned before is the key the extractor writes now")
+        XCTAssertNotNil(existing, "the key of a memory remembered before is the key the extractor writes now")
 
         let before = try await store.memories().count
         try await store.mergeMemory(dedupKey: bigToLarge) { existing in
@@ -566,14 +566,14 @@ final class LearningStoreTests: XCTestCase {
             return memory
         }
         let after = try await store.memories()
-        XCTAssertEqual(after.count, before, "no duplicate is made for a pattern that was learned before")
+        XCTAssertEqual(after.count, before, "no duplicate is made for a pattern that was remembered before")
         XCTAssertEqual(after.first { $0.dedupKey == bigToLarge }?.occurrenceCount, 5)
     }
 
     func testTheVetoesOfBeforeToneStillVetoTheSameDerivedMemories() async throws {
         let url = try makeTempDirectory().appendingPathComponent("LintLearning.sqlite")
         try await makeDatabaseFromBeforeTone(at: url)
-        let store = try SQLiteLearningStore(url: url)
+        let store = try SQLiteMemoryStore(url: url)
 
         let family = try await store.isVetoed(dedupKey: "dream:redundant-preposition:grammar:en")
         XCTAssertTrue(family)
@@ -587,7 +587,7 @@ final class LearningStoreTests: XCTestCase {
     func testTheEventsOfBeforeToneSayWhichToneWasAskedFor() async throws {
         let url = try makeTempDirectory().appendingPathComponent("LintLearning.sqlite")
         try await makeDatabaseFromBeforeTone(at: url)
-        _ = try SQLiteLearningStore(url: url)
+        _ = try SQLiteMemoryStore(url: url)
 
         let queue = try DatabaseQueue(path: url.path)
         let pairs = try await queue.read { db in
@@ -602,8 +602,8 @@ final class LearningStoreTests: XCTestCase {
     func testOpeningTheUpgradedDatabaseAgainChangesNothing() async throws {
         let url = try makeTempDirectory().appendingPathComponent("LintLearning.sqlite")
         try await makeDatabaseFromBeforeTone(at: url)
-        let first = try await SQLiteLearningStore(url: url).memories()
-        let second = try await SQLiteLearningStore(url: url).memories()
+        let first = try await SQLiteMemoryStore(url: url).memories()
+        let second = try await SQLiteMemoryStore(url: url).memories()
         XCTAssertEqual(first, second)
     }
 
@@ -621,7 +621,7 @@ final class LearningStoreTests: XCTestCase {
             )
         }
 
-        let store = try SQLiteLearningStore(url: url)
+        let store = try SQLiteMemoryStore(url: url)
         let memories = try await store.memories()
         XCTAssertEqual(memories.count, 8, "no memory is merged away or deleted")
         XCTAssertEqual(Set(memories.map(\.dedupKey)).count, 8)
@@ -646,13 +646,13 @@ final class LearningStoreTests: XCTestCase {
             )
         }
         let memories = try await store.memories()
-        XCTAssertEqual(memories.count, 1, "learning does not stop reading over an old name")
+        XCTAssertEqual(memories.count, 1, "an old name is still read")
         XCTAssertEqual(memories.first?.modeScope, .proofread)
         XCTAssertEqual(memories.first?.toneScope, .concise)
     }
 
     func testTheKeyRewriteOnlyTouchesAToneModeInTheScopeOfAKey() {
-        let rewrite = SQLiteLearningStore.rewrittenKey
+        let rewrite = SQLiteMemoryStore.rewrittenKey
         XCTAssertEqual(rewrite("style:en:toneFormal:a>b"), "style:en:proofread|formal:a>b")
         XCTAssertEqual(rewrite("terminology:zh-Hant:toneProfessional:軟件>軟體"), "terminology:zh-Hant:proofread|professional:軟件>軟體")
         XCTAssertEqual(rewrite("dream:synthesized:style:en:toneConcise:abc"), "dream:synthesized:style:en:proofread|concise:abc")
@@ -694,7 +694,7 @@ final class LearningStoreTests: XCTestCase {
     }
 
     func testDeletingASpecificMemoryLeavesNoVeto() async throws {
-        let store = try SQLiteLearningStore(url: nil)
+        let store = try SQLiteMemoryStore(url: nil)
         let plain = memory()
         try await store.saveMemory(plain)
         try await store.deleteMemory(id: plain.id)
@@ -703,7 +703,7 @@ final class LearningStoreTests: XCTestCase {
     }
 
     func testDeletingAMemoryThatIsGoneDoesNothing() async throws {
-        let store = try SQLiteLearningStore(url: nil)
+        let store = try SQLiteMemoryStore(url: nil)
         try await store.deleteMemory(id: UUID())
         let memories = try await store.memories()
         XCTAssertTrue(memories.isEmpty)
@@ -723,7 +723,7 @@ final class LearningStoreTests: XCTestCase {
         XCTAssertEqual(events, 1)
     }
 
-    func testResetAllClearsTheOrganizingRecords() async throws {
+    func testResetAllClearsTheDreamRecords() async throws {
         let (store, url) = try makeFileStore()
         let family = try await makeFamily(in: store, url: url)
         try await store.deleteMemory(id: family.parent.id)
@@ -751,7 +751,7 @@ final class LearningStoreTests: XCTestCase {
     }
 
     func testDreamRunsRoundTripAndOnlyACompletedOneCountsAsTheLast() async throws {
-        let store = try SQLiteLearningStore(url: nil)
+        let store = try SQLiteMemoryStore(url: nil)
         var running = dreamRun(status: .running, startedAt: 1_800_000_000, finished: false)
         try await store.recordDreamRun(running)
         let whileRunning = try await store.lastCompletedDreamRun()
@@ -771,7 +771,7 @@ final class LearningStoreTests: XCTestCase {
         XCTAssertEqual(last, running, "the newest completed one, whatever else has happened since")
     }
 
-    func testStatsCountLevelsCoveredMemoriesAndTheLastOrganizingPass() async throws {
+    func testStatsCountLevelsCoveredMemoriesAndTheLastDream() async throws {
         let (store, url) = try makeFileStore()
         let family = try await makeFamily(in: store, url: url, count: 3)
         // One more, covered by a parent that cannot be used.
@@ -789,7 +789,7 @@ final class LearningStoreTests: XCTestCase {
         XCTAssertEqual(stats.count(.generalized), 1)
         XCTAssertEqual(stats.count(.core), 1)
         XCTAssertEqual(stats.supersededCount, family.children.count, "a memory behind an unusable parent is not covered")
-        XCTAssertEqual(stats.lastOrganizedAt, Date(timeIntervalSince1970: 1_800_000_005))
+        XCTAssertEqual(stats.lastDreamAt, Date(timeIntervalSince1970: 1_800_000_005))
     }
 
     // MARK: applying a consolidation
@@ -829,7 +829,7 @@ final class LearningStoreTests: XCTestCase {
     }
 
     func testTheSourcesAreHandedOverInTheOrderAskedFor() async throws {
-        let store = try SQLiteLearningStore(url: nil)
+        let store = try SQLiteMemoryStore(url: nil)
         let sources = DreamFixtures.prepositions(3)
         for source in sources { try await store.saveMemory(source) }
         let reversed = sources.reversed().map(\.id)
@@ -868,7 +868,7 @@ final class LearningStoreTests: XCTestCase {
             XCTAssertEqual(try relationRows(url), 0, name)
         }
 
-        let store = try SQLiteLearningStore(url: nil)
+        let store = try SQLiteMemoryStore(url: nil)
         let sources = DreamFixtures.prepositions(3)
         for source in sources.dropLast() { try await store.saveMemory(source) }
         let gone = try await store.applyConsolidation(
@@ -879,7 +879,7 @@ final class LearningStoreTests: XCTestCase {
 
     func testASourceBehindAnotherUsableMemoryIsLeftThereButNotBehindOneThatIsNot() async throws {
         for (coverState, expected) in [(MemoryState.active, false), (.pinned, false), (.archived, true), (.disabled, true), (.candidate, true)] {
-            let store = try SQLiteLearningStore(url: nil)
+            let store = try SQLiteMemoryStore(url: nil)
             let other = { var other = derivedMemory("dream:other"); other.state = coverState; return other }()
             try await store.saveMemory(other)
             var sources = DreamFixtures.prepositions(3)
@@ -983,7 +983,7 @@ final class LearningStoreTests: XCTestCase {
         let id = UUID()
         do {
             let queue = try DatabaseQueue(path: url.path)
-            try SQLiteLearningStore.migrator.migrate(queue, upTo: "v4_writing_tone")
+            try SQLiteMemoryStore.migrator.migrate(queue, upTo: "v4_writing_tone")
             try await queue.write { db in
                 try db.execute(
                     sql: """
@@ -996,7 +996,7 @@ final class LearningStoreTests: XCTestCase {
             }
         }
 
-        let store = try SQLiteLearningStore(url: url)
+        let store = try SQLiteMemoryStore(url: url)
 
         let run = try await store.lastCompletedDreamRun()
         XCTAssertEqual(run?.id, id)
@@ -1006,7 +1006,7 @@ final class LearningStoreTests: XCTestCase {
     }
 
     func testADreamRunKeepsWhatItRememberedForgotAndErased() async throws {
-        let store = try SQLiteLearningStore(url: nil)
+        let store = try SQLiteMemoryStore(url: nil)
         var run = dreamRun()
         run.rememberedCount = 4
         run.forgottenCount = 7
@@ -1049,7 +1049,7 @@ final class LearningStoreTests: XCTestCase {
         XCTAssertEqual(erased, 1)
         XCTAssertEqual(try count("memory_relation", in: url), 2)
         let parent = try await store.memory(id: family.parent.id)
-        XCTAssertEqual(parent?.state, family.parent.state, "the rule itself is left to organizing")
+        XCTAssertEqual(parent?.state, family.parent.state, "the rule itself is left to a dream")
         let vetoed = try await store.isVetoed(dedupKey: family.parent.dedupKey)
         XCTAssertFalse(vetoed)
     }

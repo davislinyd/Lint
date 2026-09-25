@@ -1,7 +1,7 @@
 import Foundation
 
-/// Persistence boundary of the learning subsystem; SQLite in the app, swappable in tests.
-protocol LearningStore: Sendable {
+/// Persistence boundary of memory; SQLite in the app, swappable in tests.
+protocol MemoryStore: Sendable {
     /// Inserts, or updates the row with the same `id`. A different `id` with an existing
     /// `dedupKey` is an error: merging evidence is the caller's job.
     func saveMemory(_ memory: WritingMemory) async throws
@@ -56,7 +56,7 @@ protocol LearningStore: Sendable {
     /// Drops events older than `cutoff`, then everything but the newest `maxCount`.
     func pruneEvents(keepingLast maxCount: Int, olderThan cutoff: Date) async throws
 
-    func stats() async throws -> LearningStats
+    func stats() async throws -> MemoryStats
     /// Removes every memory and event, and scrubs the freed pages from the file.
     func resetAll() async throws
 }

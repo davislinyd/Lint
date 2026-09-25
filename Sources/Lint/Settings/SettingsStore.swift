@@ -57,7 +57,8 @@ final class SettingsStore {
         static let liveWatchWhileTyping = "app.lint.liveWatchWhileTyping"
         static let showReadyChipNearField = "app.lint.showReadyChipNearField"
         static let fastMode = "app.lint.fastMode"
-        static let learningEnabled = "app.lint.learning.enabled"
+        /// On-disk key. The name stays so a switch that is already on stays on.
+        static let memoryEnabled = "app.lint.learning.enabled"
         static let localServerAutoStart = "app.lint.localServer.autoStart"
         static let localServerBinaryPath = "app.lint.localServer.binaryPath"
         static let localRuntimeSource = "app.lint.localServer.runtimeSource"
@@ -146,9 +147,9 @@ final class SettingsStore {
     var fastMode: Bool {
         didSet { defaults.set(fastMode, forKey: Keys.fastMode) }
     }
-    /// Personalized learning is opt-in; while off, nothing is recorded and prompts are untouched.
-    var learningEnabled: Bool {
-        didSet { defaults.set(learningEnabled, forKey: Keys.learningEnabled) }
+    /// Memory is opt-in; while off, nothing is recorded and prompts are untouched.
+    var memoryEnabled: Bool {
+        didSet { defaults.set(memoryEnabled, forKey: Keys.memoryEnabled) }
     }
     /// With the local llama.cpp provider, launch llama-server if nothing is listening.
     var localServerAutoStart: Bool {
@@ -267,7 +268,7 @@ final class SettingsStore {
         } else {
             fastMode = defaults.bool(forKey: Keys.fastMode)
         }
-        learningEnabled = defaults.bool(forKey: Keys.learningEnabled)
+        memoryEnabled = defaults.bool(forKey: Keys.memoryEnabled)
         if defaults.object(forKey: Keys.localServerAutoStart) == nil {
             localServerAutoStart = true
         } else {
@@ -484,8 +485,8 @@ final class SettingsStore {
         systemPromptOverrides = copy
     }
 
-    var learningConfig: LearningConfig {
-        LearningConfig(enabled: learningEnabled)
+    var memoryConfig: MemoryConfig {
+        MemoryConfig(enabled: memoryEnabled)
     }
 
     /// Lint launches and talks to its own llama-server for a request that goes to the local llama.cpp

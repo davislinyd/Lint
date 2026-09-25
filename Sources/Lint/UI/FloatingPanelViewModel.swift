@@ -50,7 +50,7 @@ final class FloatingPanelViewModel {
     let settings: SettingsStore
     private let capture: TextCaptureService
     private let llm: LLMService
-    private let learning: LearningCoordinator
+    private let memory: MemoryCoordinator
     private let localAI: LocalAISetupCoordinator
     private let appleIntelligence: any AppleIntelligenceAvailabilityChecking
     /// Only the newest request may put its answer on screen (see `WritingRequestTickets`).
@@ -97,14 +97,14 @@ final class FloatingPanelViewModel {
     var onPrefetchStateChange: (() -> Void)?
 
     init(
-        settings: SettingsStore, capture: TextCaptureService, llm: LLMService, learning: LearningCoordinator,
+        settings: SettingsStore, capture: TextCaptureService, llm: LLMService, memory: MemoryCoordinator,
         localAI: LocalAISetupCoordinator,
         appleIntelligence: any AppleIntelligenceAvailabilityChecking = SystemAppleIntelligence()
     ) {
         self.settings = settings
         self.capture = capture
         self.llm = llm
-        self.learning = learning
+        self.memory = memory
         self.localAI = localAI
         self.appleIntelligence = appleIntelligence
         loadSelectionFromSettings()
@@ -392,10 +392,10 @@ final class FloatingPanelViewModel {
         return nil
     }
 
-    /// Says whether the user is waiting on a suggestion, so that the upkeep of the learned memories
+    /// Says whether the user is waiting on a suggestion, so that the upkeep of the remembered memories
     /// keeps out of the way of it.
     private func reportInteractiveActivity() {
-        learning.setInteractiveActivity(isStreaming || isPrefetching || isTranslating)
+        memory.setInteractiveActivity(isStreaming || isPrefetching || isTranslating)
     }
 
     /// Lint edits English only: a proofread of text without any English is not sent to a model, so
@@ -407,29 +407,29 @@ final class FloatingPanelViewModel {
 
     private static var noEnglishMessage: String { String(localized: "Lint 只校對英文，這段文字裡沒有英文。") }
 
-    /// The prompt with the user's learned habits added; untouched, and without a moment's delay,
-    /// while learning is off. The lookup runs off the main actor and is cut short rather than let
+    /// The prompt with the user's remembered habits added; untouched, and without a moment's delay,
+    /// while memory is off. The lookup runs off the main actor and is cut short rather than let
     /// it hold a suggestion back.
     private func personalize(
         _ prompt: String, for text: String, mode: WritingMode, tone: WritingTone, english: Bool,
         translationLanguage: TranslationLanguage?
     ) async -> PersonalizedPrompt {
-        guard settings.learningEnabled else {
+        guard settings.memoryEnabled else {
             return PersonalizedPrompt(systemPrompt: prompt, usedMemoryIDs: [])
         }
-        return await learning.personalize(
+        return await memory.personalize(
             prompt: prompt, for: text, mode: mode, tone: tone, english: english,
-            translationLanguage: translationLanguage ?? .traditionalChinese, config: settings.learningConfig
+            translationLanguage: translationLanguage ?? .traditionalChinese, config: settings.memoryConfig
         )
     }
 
-    /// Tells the learning subsystem what the user did with the suggestion on screen. Fire and
+    /// Tells memory what the user did with the suggestion on screen. Fire and
     /// forget; a suggestion that never finished streaming is passed as nil and ignored there.
     private func recordFeedback(_ gesture: UserGesture) {
-        guard settings.learningEnabled else { return }
-        // A translation into another language is only there to be read: nothing is learned from it.
+        guard settings.memoryEnabled else { return }
+        // A translation into another language is only there to be read: nothing is remembered from it.
         if let language = generated?.translationLanguage, language != .traditionalChinese { return }
-        let feedback = LearningFeedback(
+        let feedback = MemoryFeedback(
             gesture: gesture,
             mode: generated?.mode ?? mode,
             tone: generated?.tone ?? tone,
@@ -440,9 +440,9 @@ final class FloatingPanelViewModel {
             model: settings.model,
             usedMemoryIDs: generated?.usedMemoryIDs ?? []
         )
-        let config = settings.learningConfig
-        Task { [learning] in
-            await learning.recordFeedback(feedback, config: config)
+        let config = settings.memoryConfig
+        Task { [memory] in
+            await memory.recordFeedback(feedback, config: config)
         }
     }
 

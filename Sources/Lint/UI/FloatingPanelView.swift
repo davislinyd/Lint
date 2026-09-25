@@ -176,7 +176,7 @@ struct FloatingPanelView: View {
     }
 
     /// Read-only with the changes highlighted, or editable so the user's own wording is what gets
-    /// applied (and learned from).
+    /// applied (and remembered).
     private var resultColumn: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {

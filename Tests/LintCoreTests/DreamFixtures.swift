@@ -1,7 +1,7 @@
 import Foundation
 @testable import LintCore
 
-/// Memories the way the extractor writes them, for the tests of organizing memories.
+/// Memories the way the extractor writes them, for the tests of dreaming.
 enum DreamFixtures {
     static let now = Date(timeIntervalSince1970: 1_800_000_000)
 

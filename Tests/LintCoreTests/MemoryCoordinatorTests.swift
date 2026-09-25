@@ -27,7 +27,7 @@ private final class TestClock: @unchecked Sendable {
     }
 }
 
-final class LearningCoordinatorTests: XCTestCase {
+final class MemoryCoordinatorTests: XCTestCase {
     private func makeStoreURL() throws -> URL {
         let dir = FileManager.default.temporaryDirectory
             .appendingPathComponent("LintLearningTests-\(UUID().uuidString)", isDirectory: true)
@@ -41,8 +41,8 @@ final class LearningCoordinatorTests: XCTestCase {
         original: String = "zq-source-text discuss about",
         generated: String? = "zq-suggestion-text discuss",
         final: String = "zq-suggestion-text discuss"
-    ) -> LearningFeedback {
-        LearningFeedback(
+    ) -> MemoryFeedback {
+        MemoryFeedback(
             gesture: gesture, mode: .proofread, originalText: original, generatedText: generated,
             finalText: final, provider: "localLlama", model: "qwen"
         )
@@ -52,16 +52,16 @@ final class LearningCoordinatorTests: XCTestCase {
         { Data(repeating: 9, count: 32) }
     }
 
-    func testFeedbackIsIgnoredWhileLearningIsOff() async throws {
+    func testFeedbackIsIgnoredWhileMemoryIsOff() async throws {
         let url = try makeStoreURL()
-        let coordinator = LearningCoordinator(storeURL: url, hmacKey: testKey())
-        await coordinator.recordFeedback(feedback(), config: LearningConfig(enabled: false))
+        let coordinator = MemoryCoordinator(storeURL: url, hmacKey: testKey())
+        await coordinator.recordFeedback(feedback(), config: MemoryConfig(enabled: false))
         XCTAssertFalse(FileManager.default.fileExists(atPath: url.path))
     }
 
     func testRecordedFeedbackCountsOncePerDay() async throws {
-        let coordinator = LearningCoordinator(storeURL: nil, hmacKey: testKey())
-        let on = LearningConfig(enabled: true)
+        let coordinator = MemoryCoordinator(storeURL: nil, hmacKey: testKey())
+        let on = MemoryConfig(enabled: true)
         await coordinator.recordFeedback(feedback(), config: on)
         await coordinator.recordFeedback(feedback(), config: on)
         await coordinator.recordFeedback(feedback(final: "zq-edited-text"), config: on)
@@ -71,15 +71,15 @@ final class LearningCoordinatorTests: XCTestCase {
 
     func testHalfStreamedSuggestionRecordsNothingAndCreatesNothing() async throws {
         let url = try makeStoreURL()
-        let coordinator = LearningCoordinator(storeURL: url, hmacKey: testKey())
-        await coordinator.recordFeedback(feedback(generated: nil), config: LearningConfig(enabled: true))
+        let coordinator = MemoryCoordinator(storeURL: url, hmacKey: testKey())
+        await coordinator.recordFeedback(feedback(generated: nil), config: MemoryConfig(enabled: true))
         XCTAssertFalse(FileManager.default.fileExists(atPath: url.path))
     }
 
     func testStoredEventsContainNoPlaintext() async throws {
         let url = try makeStoreURL()
-        let coordinator = LearningCoordinator(storeURL: url, hmacKey: testKey())
-        await coordinator.recordFeedback(feedback(), config: LearningConfig(enabled: true))
+        let coordinator = MemoryCoordinator(storeURL: url, hmacKey: testKey())
+        await coordinator.recordFeedback(feedback(), config: MemoryConfig(enabled: true))
 
         let file = try Data(contentsOf: url)
         XCTAssertNotNil(file.range(of: Data("localLlama".utf8)), "sanity: plaintext columns are visible in the file")
@@ -92,8 +92,8 @@ final class LearningCoordinatorTests: XCTestCase {
 
     func testMissingHMACKeyRecordsNothing() async throws {
         struct NoKey: Error {}
-        let coordinator = LearningCoordinator(storeURL: nil, hmacKey: { throw NoKey() })
-        await coordinator.recordFeedback(feedback(), config: LearningConfig(enabled: true))
+        let coordinator = MemoryCoordinator(storeURL: nil, hmacKey: { throw NoKey() })
+        await coordinator.recordFeedback(feedback(), config: MemoryConfig(enabled: true))
         let stats = await coordinator.stats()
         XCTAssertEqual(stats.eventCount, 0)
     }
@@ -106,24 +106,24 @@ final class LearningCoordinatorTests: XCTestCase {
             var count: Int { lock.lock(); defer { lock.unlock() }; return value }
         }
         let calls = Counter()
-        let coordinator = LearningCoordinator(storeURL: nil, hmacKey: {
+        let coordinator = MemoryCoordinator(storeURL: nil, hmacKey: {
             calls.increment()
             return Data(repeating: 9, count: 32)
         })
-        let on = LearningConfig(enabled: true)
+        let on = MemoryConfig(enabled: true)
         await coordinator.recordFeedback(feedback(), config: on)
         await coordinator.recordFeedback(feedback(.copied), config: on)
         XCTAssertEqual(calls.count, 1)
     }
 
-    // MARK: learning
+    // MARK: memory
 
-    private let on = LearningConfig(enabled: true)
+    private let on = MemoryConfig(enabled: true)
     private let topics = ["plan", "budget", "schedule", "firewall", "report", "contract", "design"]
 
     /// The model left "discuss about" alone and the user fixed it by hand.
-    private func edit(_ topic: String, gesture: UserGesture = .replaced) -> LearningFeedback {
-        LearningFeedback(
+    private func edit(_ topic: String, gesture: UserGesture = .replaced) -> MemoryFeedback {
+        MemoryFeedback(
             gesture: gesture, mode: .proofread,
             originalText: "we should discuss about the \(topic).",
             generatedText: "we should discuss about the \(topic).",
@@ -133,8 +133,8 @@ final class LearningCoordinatorTests: XCTestCase {
     }
 
     /// The model fixed "discuss about" and the user took it as is.
-    private func accept(_ topic: String, gesture: UserGesture = .replaced) -> LearningFeedback {
-        LearningFeedback(
+    private func accept(_ topic: String, gesture: UserGesture = .replaced) -> MemoryFeedback {
+        MemoryFeedback(
             gesture: gesture, mode: .proofread,
             originalText: "we should discuss about the \(topic).",
             generatedText: "we should discuss the \(topic).",
@@ -143,11 +143,11 @@ final class LearningCoordinatorTests: XCTestCase {
         )
     }
 
-    private func learner(clock: TestClock = TestClock()) -> LearningCoordinator {
-        LearningCoordinator(storeURL: nil, hmacKey: testKey(), clock: clock.reader)
+    private func learner(clock: TestClock = TestClock()) -> MemoryCoordinator {
+        MemoryCoordinator(storeURL: nil, hmacKey: testKey(), clock: clock.reader)
     }
 
-    private func onlyMemory(_ coordinator: LearningCoordinator) async throws -> WritingMemory {
+    private func onlyMemory(_ coordinator: MemoryCoordinator) async throws -> WritingMemory {
         let all = await coordinator.memories()
         return try XCTUnwrap(all.first)
     }
@@ -168,7 +168,7 @@ final class LearningCoordinatorTests: XCTestCase {
         XCTAssertEqual(proven.first?.state, .active, "it came back: long-term")
         XCTAssertEqual(proven.first?.occurrenceCount, 2)
         XCTAssertEqual(proven.first?.triggers, ["discuss about"])
-        XCTAssertEqual(proven.first?.evidenceScore ?? 0, LearningPolicy.activeThreshold, accuracy: 1e-9)
+        XCTAssertEqual(proven.first?.evidenceScore ?? 0, MemoryPolicy.activeThreshold, accuracy: 1e-9)
     }
 
     func testAnAcceptedFixIsUsedAtOnceAndComingBackMakesItLongTerm() async throws {
@@ -176,7 +176,7 @@ final class LearningCoordinatorTests: XCTestCase {
         await coordinator.recordFeedback(accept(topics[0]), config: on)
         let first = try await onlyMemory(coordinator)
         XCTAssertEqual(first.state, .candidate)
-        XCTAssertEqual(first.evidenceScore, LearningPolicy.evidenceWeight(for: .accepted), accuracy: 1e-9)
+        XCTAssertEqual(first.evidenceScore, MemoryPolicy.evidenceWeight(for: .accepted), accuracy: 1e-9)
         let used = await retrieve(coordinator)
         XCTAssertEqual(used.map(\.id), [first.id])
 
@@ -202,13 +202,13 @@ final class LearningCoordinatorTests: XCTestCase {
         await coordinator.recordFeedback(accept("plan", gesture: .copied), config: on)
         let copied = await coordinator.memories()
         let evidence = try XCTUnwrap(copied.first?.evidenceScore)
-        XCTAssertEqual(evidence, LearningPolicy.evidenceWeight(for: .copied), accuracy: 1e-9)
+        XCTAssertEqual(evidence, MemoryPolicy.evidenceWeight(for: .copied), accuracy: 1e-9)
     }
 
-    func testNothingIsLearnedWhileLearningIsOff() async throws {
+    func testNothingIsRememberedWhileMemoryIsOff() async throws {
         let url = try makeStoreURL()
-        let coordinator = LearningCoordinator(storeURL: url, hmacKey: testKey())
-        await coordinator.recordFeedback(edit("plan"), config: LearningConfig(enabled: false))
+        let coordinator = MemoryCoordinator(storeURL: url, hmacKey: testKey())
+        await coordinator.recordFeedback(edit("plan"), config: MemoryConfig(enabled: false))
         let memories = await coordinator.memories()
         XCTAssertTrue(memories.isEmpty)
         XCTAssertFalse(FileManager.default.fileExists(atPath: url.path))
@@ -216,13 +216,13 @@ final class LearningCoordinatorTests: XCTestCase {
 
     // MARK: retrieval
 
-    private func retrieve(_ coordinator: LearningCoordinator, config: LearningConfig? = nil) async -> [WritingMemory] {
+    private func retrieve(_ coordinator: MemoryCoordinator, config: MemoryConfig? = nil) async -> [WritingMemory] {
         await coordinator.relevantMemories(
             for: "we should discuss about the roadmap", mode: .proofread, config: config ?? on
         )
     }
 
-    func testLearnedMemoriesAreRetrievedOnlyForRelevantText() async throws {
+    func testRememberedMemoriesAreRetrievedOnlyForRelevantText() async throws {
         let coordinator = learner()
         for topic in topics.prefix(3) {
             await coordinator.recordFeedback(edit(topic), config: on)
@@ -290,16 +290,16 @@ final class LearningCoordinatorTests: XCTestCase {
         XCTAssertTrue(reset.isEmpty)
     }
 
-    func testNothingIsRetrievedWhileLearningIsOffAndRetrievingNeverCreatesTheDatabase() async throws {
+    func testNothingIsRetrievedWhileMemoryIsOffAndRetrievingNeverCreatesTheDatabase() async throws {
         let url = try makeStoreURL()
-        let fresh = LearningCoordinator(storeURL: url, hmacKey: testKey())
+        let fresh = MemoryCoordinator(storeURL: url, hmacKey: testKey())
         let none = await retrieve(fresh)
         XCTAssertTrue(none.isEmpty)
         XCTAssertFalse(FileManager.default.fileExists(atPath: url.path))
 
         let (coordinator, id) = try await seeded()
         await coordinator.setPinned(true, id: id)
-        let off = await retrieve(coordinator, config: LearningConfig(enabled: false))
+        let off = await retrieve(coordinator, config: MemoryConfig(enabled: false))
         XCTAssertTrue(off.isEmpty)
     }
 
@@ -308,7 +308,7 @@ final class LearningCoordinatorTests: XCTestCase {
     private let basePrompt = "BASE PROMPT\n回覆只要修正後的全文，不要解釋。"
 
     /// A memory the user's own edit taught, and which came back once: long-term.
-    private func learnedDiscussAbout() async throws -> (LearningCoordinator, WritingMemory) {
+    private func learnedDiscussAbout() async throws -> (MemoryCoordinator, WritingMemory) {
         let coordinator = learner()
         for topic in topics.prefix(2) {
             await coordinator.recordFeedback(edit(topic), config: on)
@@ -326,7 +326,7 @@ final class LearningCoordinatorTests: XCTestCase {
         XCTAssertEqual(result.usedMemoryIDs, [memory.id])
     }
 
-    func testAnEnglishPromptGetsWhatWasLearnedInEnglish() async throws {
+    func testAnEnglishPromptGetsWhatWasRememberedInEnglish() async throws {
         let (coordinator, memory) = try await learnedDiscussAbout()
         let result = await coordinator.personalize(
             prompt: basePrompt, for: "we should discuss about the roadmap", mode: .proofread, english: true, config: on
@@ -336,12 +336,12 @@ final class LearningCoordinatorTests: XCTestCase {
         XCTAssertEqual(result.usedMemoryIDs, [memory.id])
     }
 
-    func testThePromptIsUntouchedWhileLearningIsOffOrWhenNothingIsRelevant() async throws {
+    func testThePromptIsUntouchedWhileMemoryIsOffOrWhenNothingIsRelevant() async throws {
         let (coordinator, _) = try await learnedDiscussAbout()
 
         let off = await coordinator.personalize(
             prompt: basePrompt, for: "we should discuss about the roadmap", mode: .proofread,
-            config: LearningConfig(enabled: false)
+            config: MemoryConfig(enabled: false)
         )
         XCTAssertEqual(Array(off.systemPrompt.utf8), Array(basePrompt.utf8), "byte for byte")
         XCTAssertTrue(off.usedMemoryIDs.isEmpty)
@@ -353,9 +353,9 @@ final class LearningCoordinatorTests: XCTestCase {
         XCTAssertTrue(irrelevant.usedMemoryIDs.isEmpty)
     }
 
-    func testThePromptIsUntouchedWhenThereIsNothingLearnedAtAll() async throws {
+    func testThePromptIsUntouchedWhenThereIsNothingRememberedAtAll() async throws {
         let url = try makeStoreURL()
-        let coordinator = LearningCoordinator(storeURL: url, hmacKey: testKey())
+        let coordinator = MemoryCoordinator(storeURL: url, hmacKey: testKey())
         let result = await coordinator.personalize(prompt: basePrompt, for: "any text at all", mode: .proofread, config: on)
         XCTAssertEqual(result.systemPrompt, basePrompt)
         XCTAssertFalse(FileManager.default.fileExists(atPath: url.path), "personalizing never creates the database")
@@ -370,7 +370,7 @@ final class LearningCoordinatorTests: XCTestCase {
         ]
         for (source, generated, final) in pairs {
             await coordinator.recordFeedback(
-                LearningFeedback(
+                MemoryFeedback(
                     gesture: .replaced, mode: .translate, originalText: source, generatedText: generated,
                     finalText: final, provider: "localLlama", model: "qwen"
                 ),
@@ -398,8 +398,8 @@ final class LearningCoordinatorTests: XCTestCase {
     // MARK: tone
 
     /// The model added the article, and the user took it as it is.
-    private func acceptedArticle(_ mode: WritingMode, _ tone: WritingTone, _ topic: String) -> LearningFeedback {
-        LearningFeedback(
+    private func acceptedArticle(_ mode: WritingMode, _ tone: WritingTone, _ topic: String) -> MemoryFeedback {
+        MemoryFeedback(
             gesture: .replaced, mode: mode, tone: tone,
             originalText: "I have meeting about the \(topic).", generatedText: "I have a meeting about the \(topic).",
             finalText: "I have a meeting about the \(topic).", provider: "localLlama", model: "qwen"
@@ -413,7 +413,7 @@ final class LearningCoordinatorTests: XCTestCase {
                 await coordinator.recordFeedback(acceptedArticle(.proofread, tone, topic), config: on)
             }
             let memories = await coordinator.memories()
-            XCTAssertTrue(memories.isEmpty, "\(tone): nothing is learned from what the model wrote")
+            XCTAssertTrue(memories.isEmpty, "\(tone): nothing is remembered from what the model wrote")
             let stats = await coordinator.stats()
             XCTAssertEqual(stats.eventCount, 3, "\(tone): what happened is still recorded, without the text")
         }
@@ -425,7 +425,7 @@ final class LearningCoordinatorTests: XCTestCase {
         XCTAssertEqual(learned.map(\.dedupKey), ["grammar:en:articles"], "plain proofreading still learns")
     }
 
-    func testTranslatingInAnyToneLearnsNothingFromTheModelsRewrite() async throws {
+    func testTranslatingInAnyToneRemembersNothingFromTheModelsRewrite() async throws {
         for tone in WritingTone.allCases {
             let coordinator = learner()
             for topic in topics.prefix(3) {
@@ -436,11 +436,11 @@ final class LearningCoordinatorTests: XCTestCase {
         }
     }
 
-    func testTheUsersEditUnderAToneIsLearnedForThatToneOnly() async throws {
+    func testTheUsersEditUnderAToneIsRememberedForThatToneOnly() async throws {
         let coordinator = learner()
         for noun in ["house", "office", "car"] {
             await coordinator.recordFeedback(
-                LearningFeedback(
+                MemoryFeedback(
                     gesture: .replaced, mode: .proofread, tone: .professional,
                     originalText: "I need a big \(noun)", generatedText: "I need a large \(noun)",
                     finalText: "I need a huge \(noun)", provider: "localLlama", model: "qwen"
@@ -481,12 +481,12 @@ final class LearningCoordinatorTests: XCTestCase {
         XCTAssertTrue(usedPreserve.isEmpty)
     }
 
-    func testAHabitLearnedUnderAToneStaysAvailableInEveryTone() async throws {
+    func testAHabitRememberedUnderAToneStaysAvailableInEveryTone() async throws {
         let coordinator = learner()
         for topic in topics.prefix(3) {
             // The user put the article in themselves: a habit of theirs, whatever the tone.
             await coordinator.recordFeedback(
-                LearningFeedback(
+                MemoryFeedback(
                     gesture: .replaced, mode: .proofread, tone: .concise,
                     originalText: "I have meeting about the \(topic).",
                     generatedText: "I have meeting about the \(topic).",
@@ -511,7 +511,7 @@ final class LearningCoordinatorTests: XCTestCase {
         let coordinator = learner()
         for noun in ["house", "office", "car"] {
             await coordinator.recordFeedback(
-                LearningFeedback(
+                MemoryFeedback(
                     gesture: .replaced, mode: .translate, tone: .formal,
                     originalText: "This \(noun) is very big and old", generatedText: "這個\(noun)非常大而且很舊",
                     finalText: "這個\(noun)極為龐大而且老舊", provider: "localLlama", model: "qwen"
@@ -524,19 +524,19 @@ final class LearningCoordinatorTests: XCTestCase {
         XCTAssertTrue(memories.allSatisfy { $0.modeScope == .translate && $0.toneScope == .formal })
     }
 
-    func testAToneChangesNothingWhileLearningIsOff() async throws {
+    func testAToneChangesNothingWhileMemoryIsOff() async throws {
         let url = try makeStoreURL()
-        let coordinator = LearningCoordinator(storeURL: url, hmacKey: testKey())
-        await coordinator.recordFeedback(acceptedArticle(.proofread, .professional, "plan"), config: LearningConfig(enabled: false))
+        let coordinator = MemoryCoordinator(storeURL: url, hmacKey: testKey())
+        await coordinator.recordFeedback(acceptedArticle(.proofread, .professional, "plan"), config: MemoryConfig(enabled: false))
         XCTAssertFalse(FileManager.default.fileExists(atPath: url.path))
         let off = await coordinator.personalize(
             prompt: basePrompt, for: "we should discuss about the roadmap", mode: .proofread, tone: .professional,
-            config: LearningConfig(enabled: false)
+            config: MemoryConfig(enabled: false)
         )
         XCTAssertEqual(Array(off.systemPrompt.utf8), Array(basePrompt.utf8), "byte for byte")
     }
 
-    // MARK: not learning from its own reminders
+    // MARK: not remembering from its own reminders
 
     func testAMemoryIsNotCountedAgainWhenTheModelJustObeyedIt() async throws {
         let (coordinator, memory) = try await learnedDiscussAbout()
@@ -565,7 +565,7 @@ final class LearningCoordinatorTests: XCTestCase {
     func testOtherPatternsInTheSameFeedbackStillCount() async throws {
         let (coordinator, memory) = try await learnedDiscussAbout()
         await coordinator.recordFeedback(
-            LearningFeedback(
+            MemoryFeedback(
                 gesture: .replaced, mode: .proofread,
                 originalText: "we should discuss about the plan and buy laptop.",
                 generatedText: "we should discuss the plan and buy a laptop.",
@@ -591,7 +591,7 @@ final class LearningCoordinatorTests: XCTestCase {
 
     func testTheMemoriesUsedAreKeptWithTheEvent() async throws {
         let url = try makeStoreURL()
-        let coordinator = LearningCoordinator(storeURL: url, hmacKey: testKey())
+        let coordinator = MemoryCoordinator(storeURL: url, hmacKey: testKey())
         let usedNowhereElse = UUID()
         var feedback = edit("plan")
         feedback.usedMemoryIDs = [usedNowhereElse]
@@ -603,9 +603,9 @@ final class LearningCoordinatorTests: XCTestCase {
     // MARK: opposites and contradictions
 
     /// The user keeps replacing `from` with `to` in what the model left alone, one object at a time.
-    private func swaps(from: String, to: String, _ objects: [String]) -> [LearningFeedback] {
+    private func swaps(from: String, to: String, _ objects: [String]) -> [MemoryFeedback] {
         objects.map { object in
-            LearningFeedback(
+            MemoryFeedback(
                 gesture: .replaced, mode: .proofread,
                 originalText: "I need a \(from) \(object).",
                 generatedText: "I need a \(from) \(object).",
@@ -615,7 +615,7 @@ final class LearningCoordinatorTests: XCTestCase {
         }
     }
 
-    private func memory(_ key: String, in coordinator: LearningCoordinator) async throws -> WritingMemory {
+    private func memory(_ key: String, in coordinator: MemoryCoordinator) async throws -> WritingMemory {
         let all = await coordinator.memories()
         return try XCTUnwrap(all.first { $0.dedupKey == key }, key)
     }
@@ -677,7 +677,7 @@ final class LearningCoordinatorTests: XCTestCase {
 
         // The model, reminded, dropped "about"; the user put it back.
         await coordinator.recordFeedback(
-            LearningFeedback(
+            MemoryFeedback(
                 gesture: .replaced, mode: .proofread,
                 originalText: "we should discuss about the plan.",
                 generatedText: "we should discuss the plan.",
@@ -696,8 +696,8 @@ final class LearningCoordinatorTests: XCTestCase {
 
     /// The exact situation of copying from the full panel: a pinned memory with a single copy's worth of
     /// evidence, a reminded model that dropped "about", and a copy of the text with it put back.
-    private func remindedCopy(_ memory: WritingMemory, edited: Bool) -> LearningFeedback {
-        LearningFeedback(
+    private func remindedCopy(_ memory: WritingMemory, edited: Bool) -> MemoryFeedback {
+        MemoryFeedback(
             gesture: .copied, mode: .proofread,
             originalText: "we must discuss about the schedule tomorrow.",
             generatedText: "we must discuss the schedule tomorrow.",
@@ -735,7 +735,7 @@ final class LearningCoordinatorTests: XCTestCase {
     func testAContradictionOfAMemoryThatDoesNotExistCreatesNothing() async throws {
         let coordinator = learner()
         await coordinator.recordFeedback(
-            LearningFeedback(
+            MemoryFeedback(
                 gesture: .replaced, mode: .proofread,
                 originalText: "we should discuss about the plan.",
                 generatedText: "we should discuss the plan.",
@@ -762,8 +762,8 @@ final class LearningCoordinatorTests: XCTestCase {
         let weakenedForward = try await memory("vocabulary:en:big>large", in: coordinator)
 
         // The model, reminded of big>large, made that change and the user took it as is.
-        func modelSwap(_ object: String, reminded: Bool) -> LearningFeedback {
-            LearningFeedback(
+        func modelSwap(_ object: String, reminded: Bool) -> MemoryFeedback {
+            MemoryFeedback(
                 gesture: .replaced, mode: .proofread,
                 originalText: "I need a big \(object).", generatedText: "I need a large \(object).",
                 finalText: "I need a large \(object).", provider: "localLlama", model: "qwen",
@@ -788,7 +788,7 @@ final class LearningCoordinatorTests: XCTestCase {
 
     private let key = "grammar:en:discuss about"
 
-    private func learnedDiscussAbout(clock: TestClock) async throws -> (LearningCoordinator, WritingMemory) {
+    private func learnedDiscussAbout(clock: TestClock) async throws -> (MemoryCoordinator, WritingMemory) {
         let coordinator = learner(clock: clock)
         for topic in topics.prefix(2) {
             await coordinator.recordFeedback(edit(topic), config: on)
@@ -823,7 +823,7 @@ final class LearningCoordinatorTests: XCTestCase {
         XCTAssertEqual(woken.id, first.id)
         XCTAssertEqual(woken.state, .active)
         XCTAssertEqual(woken.occurrenceCount, first.occurrenceCount + 1)
-        XCTAssertEqual(woken.evidenceScore, LearningPolicy.activeThreshold, accuracy: 1e-9, "what was left and the edit are below the start")
+        XCTAssertEqual(woken.evidenceScore, MemoryPolicy.activeThreshold, accuracy: 1e-9, "what was left and the edit are below the start")
         let used = await retrieve(coordinator)
         XCTAssertEqual(used.count, 1)
     }
@@ -854,7 +854,7 @@ final class LearningCoordinatorTests: XCTestCase {
         let enabled = try await onlyMemory(coordinator)
         XCTAssertEqual(enabled.state, .active, "it had proved itself, so it is long-term again")
         XCTAssertEqual(enabled.lastConfirmedAt, clock.now, "the 400 disabled days do not count against it")
-        XCTAssertEqual(enabled.evidence(at: clock.now), LearningPolicy.activeThreshold, accuracy: 1e-9)
+        XCTAssertEqual(enabled.evidence(at: clock.now), MemoryPolicy.activeThreshold, accuracy: 1e-9)
     }
 
     func testRestoringAnArchivedMemoryMakesItActiveAgain() async throws {
@@ -902,7 +902,7 @@ final class LearningCoordinatorTests: XCTestCase {
         let (coordinator, memory) = try await learnedDiscussAbout(clock: clock)
         clock.advance(days: 60)
         await coordinator.recordFeedback(
-            LearningFeedback(
+            MemoryFeedback(
                 gesture: .replaced, mode: .proofread,
                 originalText: "we should discuss about the plan.",
                 generatedText: "we should discuss the plan.",
@@ -920,7 +920,7 @@ final class LearningCoordinatorTests: XCTestCase {
 
     // MARK: managing memories
 
-    private func seeded() async throws -> (LearningCoordinator, UUID) {
+    private func seeded() async throws -> (MemoryCoordinator, UUID) {
         let coordinator = learner()
         await coordinator.recordFeedback(edit("plan"), config: on)
         let id = try await onlyMemory(coordinator).id
@@ -971,13 +971,13 @@ final class LearningCoordinatorTests: XCTestCase {
 
         await coordinator.setInstruction(String(repeating: "x", count: 500), id: id)
         memory = try await onlyMemory(coordinator)
-        XCTAssertEqual(memory.instruction.count, LearningPolicy.maxInstructionLength)
+        XCTAssertEqual(memory.instruction.count, MemoryPolicy.maxInstructionLength)
     }
 
     func testDeletingOneOrAllMemories() async throws {
         let (coordinator, id) = try await seeded()
         await coordinator.recordFeedback(
-            LearningFeedback(
+            MemoryFeedback(
                 gesture: .replaced, mode: .proofread, originalText: "i have meeting.",
                 generatedText: "i have a meeting.", finalText: "i have a meeting.",
                 provider: "localLlama", model: "qwen"
@@ -1000,7 +1000,7 @@ final class LearningCoordinatorTests: XCTestCase {
 
     func testManagementNeverCreatesTheDatabase() async throws {
         let url = try makeStoreURL()
-        let coordinator = LearningCoordinator(storeURL: url, hmacKey: testKey())
+        let coordinator = MemoryCoordinator(storeURL: url, hmacKey: testKey())
         let id = UUID()
         await coordinator.setPinned(true, id: id)
         await coordinator.setEnabled(false, id: id)
@@ -1014,8 +1014,8 @@ final class LearningCoordinatorTests: XCTestCase {
 
     func testMemoriesOnDiskHoldNoSentences() async throws {
         let url = try makeStoreURL()
-        let coordinator = LearningCoordinator(storeURL: url, hmacKey: testKey())
-        let secretLine = LearningFeedback(
+        let coordinator = MemoryCoordinator(storeURL: url, hmacKey: testKey())
+        let secretLine = MemoryFeedback(
             gesture: .replaced, mode: .proofread,
             originalText: "we should discuss about the quokka schedule.",
             generatedText: "we should discuss about the quokka schedule.",
@@ -1031,10 +1031,10 @@ final class LearningCoordinatorTests: XCTestCase {
         XCTAssertNil(file.range(of: Data("we should".utf8)))
     }
 
-    func testDisabledLearningNeverCreatesTheDatabase() async throws {
+    func testDisabledMemoryNeverCreatesTheDatabase() async throws {
         let url = try makeStoreURL()
-        let coordinator = LearningCoordinator(storeURL: url)
-        await coordinator.prepare(config: LearningConfig(enabled: false))
+        let coordinator = MemoryCoordinator(storeURL: url)
+        await coordinator.prepare(config: MemoryConfig(enabled: false))
         let stats = await coordinator.stats()
         await coordinator.resetAll()
         XCTAssertEqual(stats, .empty)
@@ -1042,10 +1042,10 @@ final class LearningCoordinatorTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: url.deletingLastPathComponent().path))
     }
 
-    func testEnablingLearningCreatesTheDatabase() async throws {
+    func testEnablingMemoryCreatesTheDatabase() async throws {
         let url = try makeStoreURL()
-        let coordinator = LearningCoordinator(storeURL: url)
-        await coordinator.prepare(config: LearningConfig(enabled: true))
+        let coordinator = MemoryCoordinator(storeURL: url)
+        await coordinator.prepare(config: MemoryConfig(enabled: true))
         XCTAssertTrue(FileManager.default.fileExists(atPath: url.path))
         let stats = await coordinator.stats()
         XCTAssertEqual(stats, .empty)
@@ -1053,7 +1053,7 @@ final class LearningCoordinatorTests: XCTestCase {
 
     func testExistingDataStaysVisibleAndResettableAfterDisabling() async throws {
         let url = try makeStoreURL()
-        let seeded = try SQLiteLearningStore(url: url)
+        let seeded = try SQLiteMemoryStore(url: url)
         try await seeded.saveMemory(
             WritingMemory(
                 id: UUID(), dedupKey: "grammar:en:articles", kind: .grammar, language: "en",
@@ -1063,8 +1063,8 @@ final class LearningCoordinatorTests: XCTestCase {
             )
         )
 
-        let coordinator = LearningCoordinator(storeURL: url)
-        await coordinator.prepare(config: LearningConfig(enabled: false))
+        let coordinator = MemoryCoordinator(storeURL: url)
+        await coordinator.prepare(config: MemoryConfig(enabled: false))
         let before = await coordinator.stats()
         XCTAssertEqual(before.count(.active), 1)
 
@@ -1078,17 +1078,17 @@ final class LearningCoordinatorTests: XCTestCase {
     /// A suggestion that left the text as it was: nothing to learn, but the memories were in the prompt.
     private func unchanged(
         _ subject: String = "roadmap", used: [UUID], gesture: UserGesture = .replaced
-    ) -> LearningFeedback {
+    ) -> MemoryFeedback {
         let text = "the \(subject) looks fine to everyone here."
-        return LearningFeedback(
+        return MemoryFeedback(
             gesture: gesture, mode: .proofread, originalText: text, generatedText: text,
             finalText: text, provider: "localLlama", model: "qwen", usedMemoryIDs: used
         )
     }
 
     private struct Organized {
-        let coordinator: LearningCoordinator
-        let store: SQLiteLearningStore
+        let coordinator: MemoryCoordinator
+        let store: SQLiteMemoryStore
         let url: URL
         let parent: WritingMemory
         let children: [WritingMemory]
@@ -1097,17 +1097,17 @@ final class LearningCoordinatorTests: XCTestCase {
     /// A store holding a rule and the three memories it stands in for, made by a real organizing pass.
     private func organized(clock: TestClock = TestClock(), sources: Int = 3) async throws -> Organized {
         let url = try makeStoreURL()
-        let store = try SQLiteLearningStore(url: url)
+        let store = try SQLiteMemoryStore(url: url)
         let children = ["discuss", "mention", "emphasize", "reply", "describe", "explain"]
             .prefix(sources).map { DreamFixtures.preposition($0) }
         for child in children { try await store.saveMemory(child) }
         await MemoryDreamCoordinator(store: store, clock: clock.reader).run()
         let parent = try unwrapped(await store.memories().first { $0.level != .specific })
-        let coordinator = LearningCoordinator(storeURL: url, hmacKey: testKey(), clock: clock.reader)
+        let coordinator = MemoryCoordinator(storeURL: url, hmacKey: testKey(), clock: clock.reader)
         return Organized(coordinator: coordinator, store: store, url: url, parent: parent, children: children)
     }
 
-    private func stored(_ id: UUID, in store: SQLiteLearningStore) async throws -> WritingMemory {
+    private func stored(_ id: UUID, in store: SQLiteMemoryStore) async throws -> WritingMemory {
         try unwrapped(await store.memory(id: id))
     }
 
@@ -1241,7 +1241,7 @@ final class LearningCoordinatorTests: XCTestCase {
 
     func testUndoingAMemoryCountsAgainstItAndAgainstItsRule() async throws {
         let setup = try await organized()
-        let putBack = LearningFeedback(
+        let putBack = MemoryFeedback(
             gesture: .replaced, mode: .proofread,
             originalText: "we should discuss about the plan.",
             generatedText: "we should discuss the plan.",
@@ -1269,7 +1269,7 @@ final class LearningCoordinatorTests: XCTestCase {
         XCTAssertEqual(quiet.contradictionCount, 0, "regenerating, or using a suggestion as it was, says nothing against it")
 
         await coordinator.recordFeedback(
-            LearningFeedback(
+            MemoryFeedback(
                 gesture: .replaced, mode: .proofread,
                 originalText: "we should discuss about the plan.", generatedText: "we should discuss the plan.",
                 finalText: "we should discuss about the plan.", provider: "localLlama", model: "qwen",
@@ -1281,9 +1281,9 @@ final class LearningCoordinatorTests: XCTestCase {
         XCTAssertEqual(undone.contradictionCount, 1)
     }
 
-    func testLearningOffLeavesOrganizedMemoriesAndTheirCountsAlone() async throws {
+    func testMemoryOffLeavesDreamedMemoriesAndTheirCountsAlone() async throws {
         let setup = try await organized()
-        let off = LearningConfig(enabled: false)
+        let off = MemoryConfig(enabled: false)
         let before = try await setup.store.memories()
 
         var feedback = accept("firewall")
@@ -1299,7 +1299,7 @@ final class LearningCoordinatorTests: XCTestCase {
         XCTAssertEqual(after, before)
     }
 
-    func testAnOrganizedStoreGivesThePreciseMemoryOrTheRuleWithinTheBudget() async throws {
+    func testADreamedStoreGivesThePreciseMemoryOrTheRuleWithinTheBudget() async throws {
         let setup = try await organized()
 
         let general = await setup.coordinator.personalize(
@@ -1316,7 +1316,7 @@ final class LearningCoordinatorTests: XCTestCase {
         XCTAssertTrue(precise.systemPrompt.hasSuffix(setup.children[0].instruction))
         XCTAssertFalse(precise.systemPrompt.contains(setup.parent.instruction))
         let added = precise.systemPrompt.dropFirst(basePrompt.count)
-        XCTAssertLessThanOrEqual(added.count, PromptComposer.header.count + LearningPolicy.maxPersonalizationCharacters + 10)
+        XCTAssertLessThanOrEqual(added.count, PromptComposer.header.count + MemoryPolicy.maxPersonalizationCharacters + 10)
     }
 
     func testARuleThatKeepsWorkingBecomesCoreOnceItIsOldEnough() async throws {
@@ -1351,7 +1351,7 @@ final class LearningCoordinatorTests: XCTestCase {
         XCTAssertEqual(children.count, 5)
     }
 
-    func testOrganizingAddsNoTextToTheFile() async throws {
+    func testDreamingAddsNoTextToTheFile() async throws {
         let setup = try await organized()
         var feedback = self.feedback()
         feedback.usedMemoryIDs = [setup.parent.id]
@@ -1363,11 +1363,11 @@ final class LearningCoordinatorTests: XCTestCase {
         }
     }
 
-    // MARK: learning at once, forgetting what does not prove itself
+    // MARK: remembering at once, forgetting what does not prove itself
 
     /// The model fixed a number the user got wrong ("tickets" for "ticket") and the user took it.
-    private func numberFix(_ noun: String) -> LearningFeedback {
-        LearningFeedback(
+    private func numberFix(_ noun: String) -> MemoryFeedback {
+        MemoryFeedback(
             gesture: .replaced, mode: .proofread,
             originalText: "I need a tickets for the \(noun) tonight.",
             generatedText: "I need a ticket for the \(noun) tonight.",
@@ -1415,7 +1415,7 @@ final class LearningCoordinatorTests: XCTestCase {
         let coordinator = learner(clock: clock)
         await coordinator.recordFeedback(edit("plan"), config: on)
 
-        clock.advance(days: LearningPolicy.shortTermDays - 1.0 / 24)
+        clock.advance(days: MemoryPolicy.shortTermDays - 1.0 / 24)
         let stillUsed = await retrieve(coordinator)
         XCTAssertEqual(stillUsed.count, 1, "an hour to go, and the retrieval cache is filled")
 

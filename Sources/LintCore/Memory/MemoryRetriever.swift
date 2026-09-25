@@ -46,7 +46,7 @@ struct MemoryRetriever: Sendable {
 
     /// Evidence fades and short-term memories run out, so every memory is judged as it stands at
     /// `now`: short-term, long-term and pinned ones can be retrieved (a memory is used as soon as it
-    /// is learned), and of two that ask for opposite things (`a>b` and `b>a`) only the
+    /// is remembered), and of two that ask for opposite things (`a>b` and `b>a`) only the
     /// better-evidenced one: a prompt must not tell the model both.
     init(memories: [WritingMemory], now: Date = Date()) {
         self.now = now
@@ -149,10 +149,10 @@ struct MemoryRetriever: Sendable {
         var habits = 0
         var characters = 0
         for candidate in candidates {
-            guard picked.count < LearningPolicy.maxPersonalizedMemories else { break }
-            if !candidate.isLexical, habits >= LearningPolicy.maxHabitMemories { continue }
-            let cost = LearningPolicy.promptCost(of: candidate.memory)
-            guard characters + cost <= LearningPolicy.maxPersonalizationCharacters else { continue }
+            guard picked.count < MemoryPolicy.maxPersonalizedMemories else { break }
+            if !candidate.isLexical, habits >= MemoryPolicy.maxHabitMemories { continue }
+            let cost = MemoryPolicy.promptCost(of: candidate.memory)
+            guard characters + cost <= MemoryPolicy.maxPersonalizationCharacters else { continue }
             picked.append(candidate)
             characters += cost
             if !candidate.isLexical { habits += 1 }

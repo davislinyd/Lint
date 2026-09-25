@@ -156,7 +156,7 @@ enum DiffAnalyzer {
         }
     }
 
-    /// Most of the text changed: a rewrite, not a set of small habits worth learning from.
+    /// Most of the text changed: a rewrite, not a set of small habits worth remembering.
     static func isRewrite(_ spans: [EditSpan], oldCount: Int, newCount: Int) -> Bool {
         let changed = spans.reduce(0) { $0 + $1.removed.count + $1.added.count }
         return changed >= 6 && Double(changed) > 0.4 * Double(oldCount + newCount)

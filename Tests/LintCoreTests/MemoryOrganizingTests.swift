@@ -2,14 +2,14 @@ import GRDB
 import XCTest
 @testable import LintCore
 
-/// Organizing memories as the app uses it: through `LearningCoordinator`, on a store in a file.
+/// Organizing memories as the app uses it: through `MemoryCoordinator`, on a store in a file.
 final class MemoryOrganizingTests: XCTestCase {
-    private let on = LearningConfig(enabled: true)
-    private let off = LearningConfig(enabled: false)
+    private let on = MemoryConfig(enabled: true)
+    private let off = MemoryConfig(enabled: false)
     private let english = "The roadmap for the next quarter looks quite fine to everyone."
 
     private struct Setup {
-        let coordinator: LearningCoordinator
+        let coordinator: MemoryCoordinator
         let url: URL
         let sleeper: ManualSleeper
         let clock: DreamClock
@@ -21,7 +21,7 @@ final class MemoryOrganizingTests: XCTestCase {
         addTeardownBlock { try? FileManager.default.removeItem(at: dir) }
         let url = dir.appendingPathComponent("Lint", isDirectory: true).appendingPathComponent("LintLearning.sqlite")
         let sleeper = ManualSleeper()
-        let coordinator = LearningCoordinator(
+        let coordinator = MemoryCoordinator(
             storeURL: url, hmacKey: { Data(repeating: 9, count: 32) }, clock: clock.reader,
             organizingSleep: sleeper.reader
         )
@@ -29,8 +29,8 @@ final class MemoryOrganizingTests: XCTestCase {
     }
 
     /// The store behind the coordinator, opened separately to put memories there and to look.
-    private func openStore(_ setup: Setup) throws -> SQLiteLearningStore {
-        try SQLiteLearningStore(url: setup.url)
+    private func openStore(_ setup: Setup) throws -> SQLiteMemoryStore {
+        try SQLiteMemoryStore(url: setup.url)
     }
 
     private func rowCount(_ table: String, in url: URL) throws -> Int {
@@ -39,8 +39,8 @@ final class MemoryOrganizingTests: XCTestCase {
     }
 
     /// The model left "discuss about" alone and the user fixed it, in a text of its own.
-    private func edit(_ index: Int) -> LearningFeedback {
-        LearningFeedback(
+    private func edit(_ index: Int) -> MemoryFeedback {
+        MemoryFeedback(
             gesture: .replaced, mode: .proofread,
             originalText: "we should discuss about the topic\(index).",
             generatedText: "we should discuss about the topic\(index).",
@@ -49,7 +49,7 @@ final class MemoryOrganizingTests: XCTestCase {
         )
     }
 
-    private func seedPrepositions(_ setup: Setup, count: Int = 3) async throws -> SQLiteLearningStore {
+    private func seedPrepositions(_ setup: Setup, count: Int = 3) async throws -> SQLiteMemoryStore {
         let store = try openStore(setup)
         for memory in DreamFixtures.prepositions(count) { try await store.saveMemory(memory) }
         return store
@@ -66,7 +66,7 @@ final class MemoryOrganizingTests: XCTestCase {
         XCTAssertEqual(try rowCount("dream_run", in: setup.url), 0, "nothing runs until things are quiet")
 
         setup.sleeper.wake()
-        let ran = await eventually { await setup.coordinator.stats().lastOrganizedAt != nil }
+        let ran = await eventually { await setup.coordinator.stats().lastDreamAt != nil }
         XCTAssertTrue(ran)
         XCTAssertEqual(try rowCount("dream_run", in: setup.url), 1)
     }
@@ -111,7 +111,7 @@ final class MemoryOrganizingTests: XCTestCase {
         }
     }
 
-    func testNothingIsScheduledOrRunWhileLearningIsOffOrOnceItIsSwitchedOff() async throws {
+    func testNothingIsScheduledOrRunWhileMemoryIsOffOrOnceItIsSwitchedOff() async throws {
         let setup = try makeSetup()
         await setup.coordinator.prepare(config: off)
         await settle()
@@ -129,7 +129,7 @@ final class MemoryOrganizingTests: XCTestCase {
         XCTAssertEqual(try rowCount("dream_run", in: setup.url), 0)
     }
 
-    func testAPassThatComesDueJustAsLearningIsSwitchedOffDoesNotRun() async throws {
+    func testAPassThatComesDueJustAsMemoryIsSwitchedOffDoesNotRun() async throws {
         let setup = try makeSetup()
         await setup.coordinator.prepare(config: on)
         let waiting = await eventually { setup.sleeper.waitingCount == 1 }
@@ -205,7 +205,7 @@ final class MemoryOrganizingTests: XCTestCase {
             try await store.saveMemory(DreamFixtures.plain("style:en:trace\(index)", evidence: 0.05, state: .archived))
         }
 
-        let outcome = await setup.coordinator.organizeMemories(config: on)
+        let outcome = await setup.coordinator.dream(config: on)
 
         XCTAssertEqual(outcome, .finished(remembered: 3, forgotten: 1, erased: 2, newRules: 0, coveredMemories: 0))
     }
@@ -234,35 +234,35 @@ final class MemoryOrganizingTests: XCTestCase {
 
     // MARK: on request
 
-    func testAnExplicitRequestOrganizesAtOnceAndReportsWhatItDid() async throws {
+    func testAnExplicitRequestDreamsAtOnceAndReportsWhatItDid() async throws {
         let setup = try makeSetup()
         let store = try await seedPrepositions(setup)
 
-        let outcome = await setup.coordinator.organizeMemories(config: on)
+        let outcome = await setup.coordinator.dream(config: on)
 
         XCTAssertEqual(outcome, .finished(remembered: 0, forgotten: 0, erased: 0, newRules: 1, coveredMemories: 3))
         let stats = await setup.coordinator.stats()
         XCTAssertEqual([stats.count(.specific), stats.count(.generalized), stats.count(.core)], [3, 1, 0])
         XCTAssertEqual(stats.supersededCount, 3)
-        XCTAssertNotNil(stats.lastOrganizedAt)
+        XCTAssertNotNil(stats.lastDreamAt)
         let parent = try unwrapped(await store.memories().first { $0.level != .specific })
         let counts = await setup.coordinator.sourceCounts()
         XCTAssertEqual(counts, [parent.id: 3])
         let sources = await setup.coordinator.sources(of: parent.id)
         XCTAssertEqual(sources.count, 3)
 
-        let again = await setup.coordinator.organizeMemories(config: on)
+        let again = await setup.coordinator.dream(config: on)
         XCTAssertEqual(again, .finished(remembered: 0, forgotten: 0, erased: 0, newRules: 0, coveredMemories: 0), "nothing more to do")
     }
 
-    func testAnExplicitRequestNeedsLearningOnAndSomethingOnDisk() async throws {
+    func testAnExplicitRequestNeedsMemoryOnAndSomethingOnDisk() async throws {
         let setup = try makeSetup()
-        let nothing = await setup.coordinator.organizeMemories(config: on)
+        let nothing = await setup.coordinator.dream(config: on)
         XCTAssertEqual(nothing, .unavailable)
         XCTAssertFalse(FileManager.default.fileExists(atPath: setup.url.path))
 
         _ = try await seedPrepositions(setup)
-        let disabled = await setup.coordinator.organizeMemories(config: off)
+        let disabled = await setup.coordinator.dream(config: off)
         XCTAssertEqual(disabled, .unavailable)
         XCTAssertEqual(try rowCount("dream_run", in: setup.url), 0)
     }
@@ -273,25 +273,25 @@ final class MemoryOrganizingTests: XCTestCase {
         let waiting = await eventually { setup.sleeper.waitingCount == 1 }
         XCTAssertTrue(waiting)
 
-        let outcome = await setup.coordinator.organizeMemories(config: on)
+        let outcome = await setup.coordinator.dream(config: on)
         XCTAssertEqual(outcome, .finished(remembered: 0, forgotten: 0, erased: 0, newRules: 0, coveredMemories: 0))
         let none = await eventually { setup.sleeper.waitingCount == 0 }
         XCTAssertTrue(none, "the one that was waiting is no longer needed")
     }
 
-    func testOrganizingShowsUpInTheNextRetrievalEvenAfterTheCacheWasFilled() async throws {
+    func testDreamingShowsUpInTheNextRetrievalEvenAfterTheCacheWasFilled() async throws {
         let setup = try makeSetup()
         _ = try await seedPrepositions(setup)
         let before = await setup.coordinator.relevantMemories(for: english, mode: .proofread, config: on)
         XCTAssertTrue(before.isEmpty, "the cache is filled, and nothing applies to this text")
 
-        await setup.coordinator.organizeMemories(config: on)
+        _ = await setup.coordinator.dream(config: on)
 
         let after = await setup.coordinator.relevantMemories(for: english, mode: .proofread, config: on)
         XCTAssertEqual(after.map(\.dedupKey), ["dream:redundant-preposition:grammar:en"])
     }
 
-    func testASuggestionKeepsWorkingWhateverOrganizingDoes() async throws {
+    func testASuggestionKeepsWorkingWhateverDreamingDoes() async throws {
         let setup = try makeSetup()
         let store = try await seedPrepositions(setup)
         // A row the store cannot read makes a pass fail, as any other damage to the file would.
@@ -301,7 +301,7 @@ final class MemoryOrganizingTests: XCTestCase {
         }
         _ = store
 
-        let outcome = await setup.coordinator.organizeMemories(config: on)
+        let outcome = await setup.coordinator.dream(config: on)
         XCTAssertEqual(outcome, .failed)
 
         let prompt = await setup.coordinator.personalize(prompt: "BASE", for: english, mode: .proofread, config: on)

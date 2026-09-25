@@ -49,9 +49,9 @@ struct TextProfile: Sendable {
     func dominates(_ language: String) -> Bool {
         switch language {
         case "en":
-            latinLetters >= LearningPolicy.minHabitLatinLetters && latinLetters >= cjkCharacters
+            latinLetters >= MemoryPolicy.minHabitLatinLetters && latinLetters >= cjkCharacters
         case "zh-Hant", "zh-Hans":
-            cjkCharacters >= LearningPolicy.minHabitCJKCharacters
+            cjkCharacters >= MemoryPolicy.minHabitCJKCharacters
                 && cjkCharacters * 2 >= latinLetters && chineseVariant == language
         default:
             false

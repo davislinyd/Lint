@@ -141,17 +141,17 @@ final class MemoryLifecycleTests: XCTestCase {
     func testAContradictionWeighsTwiceWhatTheSameObservationWouldHaveAdded() {
         for action in FeedbackAction.allCases {
             XCTAssertEqual(
-                LearningPolicy.contradictionWeight(for: action), 2 * LearningPolicy.evidenceWeight(for: action),
+                MemoryPolicy.contradictionWeight(for: action), 2 * MemoryPolicy.evidenceWeight(for: action),
                 accuracy: 1e-9
             )
         }
-        XCTAssertLessThan(LearningPolicy.demoteThreshold, LearningPolicy.activeThreshold)
+        XCTAssertLessThan(MemoryPolicy.demoteThreshold, MemoryPolicy.activeThreshold)
     }
 
     // MARK: fading
 
-    private let grace = LearningPolicy.evidenceGraceDays
-    private let halfLife = LearningPolicy.evidenceHalfLifeDays
+    private let grace = MemoryPolicy.evidenceGraceDays
+    private let halfLife = MemoryPolicy.evidenceHalfLifeDays
 
     /// `days` after the memories were last confirmed.
     private func later(_ days: Double) -> Date {
@@ -268,7 +268,7 @@ final class MemoryLifecycleTests: XCTestCase {
         archived.state = .archived
         let restored = MemoryLifecycle.resumed(archived, at: later(1_000))
         XCTAssertEqual(restored.state, .active)
-        XCTAssertGreaterThanOrEqual(restored.evidenceScore, LearningPolicy.activeThreshold - 1e-9)
+        XCTAssertGreaterThanOrEqual(restored.evidenceScore, MemoryPolicy.activeThreshold - 1e-9)
         XCTAssertEqual(restored.lastConfirmedAt, later(1_000))
     }
 
@@ -290,15 +290,15 @@ final class MemoryLifecycleTests: XCTestCase {
 
     func testEvidenceWeights() {
         XCTAssertGreaterThan(
-            LearningPolicy.evidenceWeight(for: .editedAndAccepted), LearningPolicy.evidenceWeight(for: .accepted)
+            MemoryPolicy.evidenceWeight(for: .editedAndAccepted), MemoryPolicy.evidenceWeight(for: .accepted)
         )
         XCTAssertGreaterThan(
-            LearningPolicy.evidenceWeight(for: .accepted), LearningPolicy.evidenceWeight(for: .copied)
+            MemoryPolicy.evidenceWeight(for: .accepted), MemoryPolicy.evidenceWeight(for: .copied)
         )
-        XCTAssertEqual(LearningPolicy.evidenceWeight(for: .regenerated), 0)
+        XCTAssertEqual(MemoryPolicy.evidenceWeight(for: .regenerated), 0)
     }
 
-    // MARK: organizing memories
+    // MARK: dreaming
 
     private func proposal() -> ConsolidationProposal {
         ConsolidationProposal(
@@ -451,7 +451,7 @@ final class MemoryLifecycleTests: XCTestCase {
         let now = DreamFixtures.now
         let halfLives: [(MemoryLevel, Double)] = [(.specific, 90), (.generalized, 180), (.core, 365)]
         for (level, halfLife) in halfLives {
-            XCTAssertEqual(LearningPolicy.halfLifeDays(for: level), halfLife)
+            XCTAssertEqual(MemoryPolicy.halfLifeDays(for: level), halfLife)
             XCTAssertEqual(aged(level, days: 0).evidence(at: now), 1, accuracy: 1e-12, "\(level)")
             XCTAssertEqual(aged(level, days: 30).evidence(at: now), 1, accuracy: 1e-12, "\(level): grace")
             XCTAssertLessThan(aged(level, days: 31).evidence(at: now), 1, "\(level): it starts to fade after the grace")
@@ -548,7 +548,7 @@ final class MemoryLifecycleTests: XCTestCase {
 
     // MARK: remembering and forgetting
 
-    private let shortTerm = LearningPolicy.shortTermDays
+    private let shortTerm = MemoryPolicy.shortTermDays
 
     /// A memory as the extractor would write it, seen `count` times, last on `day1`.
     private func learned(
@@ -570,7 +570,7 @@ final class MemoryLifecycleTests: XCTestCase {
     }
 
     func testAShortTermMemoryIsForgottenOnceItHasGoneSevenDaysWithoutProvingItself() {
-        XCTAssertEqual(LearningPolicy.shortTermDays, 7)
+        XCTAssertEqual(MemoryPolicy.shortTermDays, 7)
         let memory = fold([0.35])
         XCTAssertEqual(MemoryLifecycle.settled(memory, at: later(shortTerm)).state, .candidate, "the seventh day is still in")
         let after = later(shortTerm).addingTimeInterval(1)
@@ -591,7 +591,7 @@ final class MemoryLifecycleTests: XCTestCase {
             XCTAssertTrue(MemoryLifecycle.isProven(memory))
             let longTerm = MemoryLifecycle.settled(memory, at: later(shortTerm + 10))
             XCTAssertEqual(longTerm.state, .active, "proved, so it outlasts the short-term days")
-            XCTAssertEqual(longTerm.evidenceScore, LearningPolicy.activeThreshold, accuracy: 1e-12, "what a long-term memory starts from")
+            XCTAssertEqual(longTerm.evidenceScore, MemoryPolicy.activeThreshold, accuracy: 1e-12, "what a long-term memory starts from")
         }
 
         cameBack.evidenceScore = 2

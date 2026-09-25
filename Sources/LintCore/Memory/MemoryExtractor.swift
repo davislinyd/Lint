@@ -69,7 +69,7 @@ struct MemoryExtractor: Sendable {
 
     /// The patterns in a piece of feedback.
     func candidates(
-        from feedback: LearningFeedback,
+        from feedback: MemoryFeedback,
         action: FeedbackAction,
         injected: Set<String> = []
     ) -> [MemoryCandidate] {
@@ -81,7 +81,7 @@ struct MemoryExtractor: Sendable {
     /// new evidence: counting it would let a memory keep confirming itself. An edit by the user is
     /// still their own choice, so it counts either way.
     func extraction(
-        from feedback: LearningFeedback,
+        from feedback: MemoryFeedback,
         action: FeedbackAction,
         injected: Set<String> = []
     ) -> Extraction {
@@ -151,7 +151,7 @@ struct MemoryExtractor: Sendable {
     // MARK: choosing what to compare
 
     private func comparison(
-        for feedback: LearningFeedback, action: FeedbackAction
+        for feedback: MemoryFeedback, action: FeedbackAction
     ) -> (old: String, new: String, userChoice: Bool)? {
         guard let generated = feedback.generatedText else { return nil }
         let original = trimmed(feedback.originalText)

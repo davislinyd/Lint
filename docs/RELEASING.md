@@ -139,7 +139,7 @@ git push origin v0.2.0
 
    tag 必須是 `vMAJOR.MINOR.PATCH`、與 Info.plist 版本相同、指向 `main` 上的 commit，否則 workflow 會在載入任何金鑰之前就失敗。沒有 `v` 前綴的 tag（例如早期本機的 `0.2.0`）不會觸發 workflow。
 3. Actions → **Release** 跑完後（Apple 沒在時間內處理完則是 PENDING，見下節），Releases 頁會出現 **Draft**，內含 `Lint-<版本>-macOS-arm64.dmg` 與 `.sha256`。`CFBundleVersion` 會是這次 run 的編號。
-4. 在**另一台 Mac** 下載並測試：開啟 DMG、拖進 Applications、啟動、輔助功能授權、LLM、Learning 資料庫。
+4. 在**另一台 Mac** 下載並測試：開啟 DMG、拖進 Applications、啟動、輔助功能授權、LLM、記憶資料庫（檔名仍是 `LintLearning.sqlite`）。
 5. 沒問題就在 GitHub 上按 **Publish release**。等流程穩定幾次之後，才考慮把 workflow 的 `--draft` 拿掉。
 
 重跑：Actions → Release → *Run workflow* → 輸入既有的 tag。同一個 tag 若已有 Draft，先刪掉它（`gh release create` 不會覆蓋）。**公證 PENDING 時不要重跑 Release**：workflow 會先檢查這個 tag 有沒有未過期的 `pending-release-<tag>` artifact，有就拒絕建置，請改用 Resume Release。

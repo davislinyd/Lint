@@ -17,8 +17,8 @@ final class FeedbackCollectorTests: XCTestCase {
         final: String = "I think we need to discuss this issue.",
         mode: WritingMode = .proofread,
         tone: WritingTone = .preserve
-    ) -> LearningFeedback {
-        LearningFeedback(
+    ) -> MemoryFeedback {
+        MemoryFeedback(
             gesture: gesture, mode: mode, tone: tone, originalText: original, generatedText: generated,
             finalText: final, provider: "localLlama", model: "qwen"
         )
@@ -57,12 +57,12 @@ final class FeedbackCollectorTests: XCTestCase {
         XCTAssertNil(event.finalHMAC)
     }
 
-    func testNothingIsLearnedWithoutAFinishedSuggestion() {
+    func testNothingIsRememberedWithoutAFinishedSuggestion() {
         XCTAssertNil(collector().event(for: feedback(generated: nil), now: now))
         XCTAssertNil(collector().event(for: feedback(generated: "  \n"), now: now))
     }
 
-    func testNothingIsLearnedWithoutSourceText() {
+    func testNothingIsRememberedWithoutSourceText() {
         XCTAssertNil(collector().event(for: feedback(original: " "), now: now))
     }
 

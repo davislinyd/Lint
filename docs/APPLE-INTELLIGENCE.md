@@ -75,7 +75,7 @@ do is unchanged and not covered by this statement.
 - **Cancellation:** a new selection, a new request, closing the panel or Cancel cancels the task;
   the provider cancels its framework call, and a request ticket (`WritingRequestTickets`) keeps a
   late answer from ever replacing a newer one.
-- **Background work:** Learning, Dreaming, status checks and the prefetch gloss never call the
+- **Background work:** Memory, Dreaming, status checks and the prefetch gloss never call the
   on-device model. Availability is a property read and never loads the model.
 - **Memory:** a request routed to Apple Intelligence stops a llama-server Lint started, since it is
   not needed. Seen once under memory pressure: while Lint's server held Gemma 4 E4B, the system model
@@ -83,8 +83,8 @@ do is unchanged and not covered by this statement.
   second attempt did not reproduce it. A reported context size of 0 is never used to split text.
 - **Errors** map to `AppleIntelligenceError` with a user message; the framework's own description is
   logged (`app.lint.assistant` / `AppleIntelligence`) and never shown.
-- **Learning:** a proofread that fell back to the source is not recorded as a suggestion. An English
-  prompt gets the learned reminders in English (`MemoryWording`, `PromptComposer.englishHeader`); the
+- **Memory:** a proofread that fell back to the source is not recorded as a suggestion. An English
+  prompt gets the remembered reminders in English (`MemoryWording`, `PromptComposer.englishHeader`); the
   stored memories, and what Settings shows, keep their Chinese wording, and a reminder the user wrote
   is sent as written. A proofread is never reminded of a Chinese term or habit (such as 軟件 → 軟體);
   a translation still is. See the fifth round below.
@@ -273,9 +273,9 @@ English error and a Chinese slip that must survive.
   output check. Apple's guard catches a translation and keeps the source, so it rarely fixes mixed
   text either.
 
-## Fifth round (2026-09-24): learned reminders in English
+## Fifth round (2026-09-24): remembered reminders in English
 
-With learning on, a prompt ends with the user's learned reminders. They were Chinese (a Chinese header
+With memory on, a prompt ends with the user's remembered reminders. They were Chinese (a Chinese header
 and Chinese sentences), appended to the English prompts too, and a proofread could be reminded of a
 Chinese term (軟件 → 軟體), asking for the Chinese of a mixed text to change. Now an English prompt gets
 them in English, from the same fixed wordings (`MemoryWording`); the stored text and Settings keep
@@ -296,7 +296,7 @@ picks them.
 
 English reminders remove Apple's failure outright; Gemma, which never drifted with Chinese ones,
 leaves one to three more errors with English ones. English is used for both: no Chinese goes into an English prompt,
-and the reminders are only there for a user with learning on and habits learned.
+and the reminders are only there for a user with memory on and habits remembered.
 
 ## Re-running after a macOS or Foundation Models update
 

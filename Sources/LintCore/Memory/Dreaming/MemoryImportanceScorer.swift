@@ -4,7 +4,7 @@ import Foundation
 /// Deterministic, and never read from the memory's text or identity. It is not the reason a pinned
 /// or hand-edited memory is left alone: those are excluded before any score is looked at.
 enum MemoryImportanceScorer {
-    typealias Weights = LearningPolicy.Importance
+    typealias Weights = MemoryPolicy.Importance
 
     static func score(_ memory: WritingMemory, at now: Date) -> Double {
         let value = Weights.confidenceWeight * memory.confidence(at: now)

@@ -10,7 +10,7 @@ final class AppModel: NSObject, NSWindowDelegate {
     let settings: SettingsStore
     let capture = TextCaptureService()
     let llm = LLMService()
-    let learning = LearningCoordinator()
+    let memory = MemoryCoordinator()
     let localAI: LocalAISetupCoordinator
     let appleIntelligence = SystemAppleIntelligence()
     let panel: FloatingPanelController
@@ -30,7 +30,7 @@ final class AppModel: NSObject, NSWindowDelegate {
         )
         self.localAI = localAI
         let viewModel = FloatingPanelViewModel(
-            settings: settings, capture: capture, llm: llm, learning: learning, localAI: localAI,
+            settings: settings, capture: capture, llm: llm, memory: memory, localAI: localAI,
             appleIntelligence: appleIntelligence
         )
         self.panel = FloatingPanelController(viewModel: viewModel)
@@ -65,7 +65,7 @@ final class AppModel: NSObject, NSWindowDelegate {
             }
         }
         monitor.start()
-        Task { await self.learning.prepare(config: self.settings.learningConfig) }
+        Task { await self.memory.prepare(config: self.settings.memoryConfig) }
         Task { await self.ensureLocalServerIfNeeded() }
     }
 

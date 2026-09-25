@@ -39,7 +39,7 @@ final class MemoryConsolidatorTests: XCTestCase {
 
     /// What the extractor and the lifecycle make of one piece of accepted feedback.
     private func learned(_ original: String, _ suggestion: String, at date: Date? = nil) -> [WritingMemory] {
-        let feedback = LearningFeedback(
+        let feedback = MemoryFeedback(
             gesture: .replaced, mode: .proofread, originalText: original, generatedText: suggestion,
             finalText: suggestion, provider: "p", model: "m"
         )
@@ -153,7 +153,7 @@ final class MemoryConsolidatorTests: XCTestCase {
         XCTAssertEqual(provider.requests.all.count, 1)
     }
 
-    func testTheProviderSeesTheLearnedMetadataAndNothingElse() async {
+    func testTheProviderSeesTheRememberedMetadataAndNothingElse() async {
         let provider = ScriptedSynthesis(result: .success(.noConsolidation))
         let cluster = styleCluster()
         _ = await MemoryConsolidator(synthesis: provider).proposal(for: cluster, at: now)

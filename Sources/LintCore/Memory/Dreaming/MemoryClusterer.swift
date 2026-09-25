@@ -9,8 +9,8 @@ import Foundation
 /// behind one rule.
 struct MemoryClusterer: Sendable {
     var similarity: any MemorySimilarityService
-    var threshold = LearningPolicy.dreamSimilarityThreshold
-    var minClusterSize = LearningPolicy.dreamMinClusterSize
+    var threshold = MemoryPolicy.dreamSimilarityThreshold
+    var minClusterSize = MemoryPolicy.dreamMinClusterSize
 
     private struct Partition: Hashable {
         let language: String

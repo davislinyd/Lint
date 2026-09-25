@@ -26,7 +26,7 @@ public enum MemoryState: String, Codable, CaseIterable, Sendable {
 
 /// How far a memory has been generalized.
 public enum MemoryLevel: String, Codable, CaseIterable, Sendable {
-    /// A concrete learned correction or preference.
+    /// A concrete remembered correction or preference.
     case specific
     /// A rule summarized from several compatible specific memories.
     case generalized
@@ -95,16 +95,16 @@ public enum UserGesture: Sendable {
     case regenerated
 }
 
-/// Input to learning. It carries the full texts, which live only in memory: what gets persisted
+/// Input to memory. It carries the full texts, which live only in memory: what gets persisted
 /// is an event of keyed hashes.
-public struct LearningFeedback: Sendable {
+public struct MemoryFeedback: Sendable {
     public var gesture: UserGesture
     public var mode: WritingMode
     /// How the suggestion was asked to sound. Always `preserve` for a mode that takes no tone.
     public var tone: WritingTone
     /// The text the suggestion was generated from.
     public var originalText: String
-    /// nil while the suggestion is still streaming or failed; nothing is learned from that.
+    /// nil while the suggestion is still streaming or failed; nothing is remembered from that.
     public var generatedText: String?
     /// What the user applied: the suggestion, possibly edited.
     public var finalText: String
@@ -136,7 +136,7 @@ public struct LearningFeedback: Sendable {
     }
 
     /// False when there is no finished suggestion or no source text to compare it with.
-    var isLearnable: Bool {
+    var canFormMemory: Bool {
         guard let generatedText else { return false }
         return !generatedText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && !originalText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -159,12 +159,12 @@ extension WritingMemory {
     func decayFactor(at date: Date) -> Double {
         guard state != .pinned, state != .disabled else { return 1 }
         let days = max(0, date.timeIntervalSince(lastConfirmedAt)) / 86_400
-        let fading = max(0, days - LearningPolicy.evidenceGraceDays)
-        return pow(0.5, fading / LearningPolicy.halfLifeDays(for: level))
+        let fading = max(0, days - MemoryPolicy.evidenceGraceDays)
+        return pow(0.5, fading / MemoryPolicy.halfLifeDays(for: level))
     }
 }
 
-/// A system prompt with the user's learned habits added.
+/// A system prompt with the user's remembered habits added.
 public struct PersonalizedPrompt: Sendable, Equatable {
     public var systemPrompt: String
     /// The memories whose wording went into it, so feedback can tell what the model was reminded of.
@@ -176,9 +176,9 @@ public struct PersonalizedPrompt: Sendable, Equatable {
     }
 }
 
-/// Snapshot of the user's learning settings. `SettingsStore` is bound to the main actor, so this
-/// is what crosses into `LearningCoordinator`.
-public struct LearningConfig: Sendable, Equatable {
+/// Snapshot of the user's memory settings. `SettingsStore` is bound to the main actor, so this
+/// is what crosses into `MemoryCoordinator`.
+public struct MemoryConfig: Sendable, Equatable {
     public var enabled: Bool
 
     public init(enabled: Bool) {
@@ -186,16 +186,16 @@ public struct LearningConfig: Sendable, Equatable {
     }
 }
 
-public struct LearningStats: Sendable, Equatable {
+public struct MemoryStats: Sendable, Equatable {
     public var memoriesByState: [MemoryState: Int]
     public var eventCount: Int
     public var memoriesByLevel: [MemoryLevel: Int] = [:]
     /// Specific memories that a usable generalized or core memory currently stands in for.
     public var supersededCount = 0
-    /// When memories were last organized; nil if that never finished.
-    public var lastOrganizedAt: Date?
+    /// When memories were last dreamed; nil if that never finished.
+    public var lastDreamAt: Date?
 
-    public static let empty = LearningStats(memoriesByState: [:], eventCount: 0)
+    public static let empty = MemoryStats(memoriesByState: [:], eventCount: 0)
 
     public func count(_ state: MemoryState) -> Int {
         memoriesByState[state] ?? 0
@@ -207,12 +207,12 @@ public struct LearningStats: Sendable, Equatable {
 }
 
 /// Tunables in one place so tests can pin them down.
-enum LearningPolicy {
+enum MemoryPolicy {
     static let eventRetentionCount = 5_000
     static let eventRetentionDays = 180
     /// The same source, action and final text within this window counts once.
     static let eventDedupeWindow: TimeInterval = 24 * 60 * 60
-    /// A memory is used as soon as it is learned (short-term, `candidate`). One that has not proved
+    /// A memory is used as soon as it is remembered (short-term, `candidate`). One that has not proved
     /// itself (see `MemoryLifecycle.isProven`) within this many days of last showing up is forgotten.
     static let shortTermDays = 7.0
     /// The evidence a memory has at least once it has proved itself and is long-term (`active`); one
@@ -240,7 +240,7 @@ enum LearningPolicy {
         }
     }
     /// A forgotten memory is kept as a trace, so that its pattern is recognised if it comes back;
-    /// once the trace has faded below this, it is erased the next time memories are organized.
+    /// once the trace has faded below this, it is erased the next time a dream runs.
     static let archiveThreshold = 0.1
     /// Memories keep fading, and short-term ones run out, so a retriever this old is built again
     /// even if nothing has changed.

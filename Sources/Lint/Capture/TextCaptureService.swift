@@ -49,12 +49,9 @@ final class TextCaptureService {
     /// field to read it. The full panel keeps its old behaviour of never touching the source app's selection.
     func capture(allowSelectAll: Bool = false) async -> CaptureResult? {
         let bundle = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+        if LiveCheckPolicy.isDenylisted(bundle) { return nil }
         let focused = AccessibilityPermission.isTrusted ? Self.focusedElement() : nil
-        if LiveCheckPolicy.blocksReading(
-            bundleID: bundle, isSecure: focused.map(Self.isSecureElement) ?? false
-        ) {
-            return nil
-        }
+        if focused.map(Self.isSecureElement) == true { return nil }
         if AccessibilityPermission.isTrusted { Self.ensureWebAccessibility() }
         if AccessibilityPermission.isTrusted, let ax = Self.readAXSelectedText() {
             let result = CaptureResult(

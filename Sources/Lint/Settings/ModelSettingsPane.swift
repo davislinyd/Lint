@@ -228,6 +228,15 @@ struct ModelSettingsPane: View {
                         ProgressView()
                             .controlSize(.small)
                     }
+                    if !viewModel.testOutput.isEmpty {
+                        Text(viewModel.testOutput)
+                            .font(.body.monospaced())
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                            .textSelection(.enabled)
+                            .help(viewModel.testOutput)
+                    }
                     Button("測試連線") {
                         viewModel.testConnection()
                     }
@@ -235,13 +244,6 @@ struct ModelSettingsPane: View {
                 }
             } label: {
                 Text("送出 ping 確認模型可回應")
-            }
-            if !viewModel.testOutput.isEmpty {
-                LabeledContent("模型回覆") {
-                    Text(viewModel.testOutput)
-                        .font(.body.monospaced())
-                        .textSelection(.enabled)
-                }
             }
             if let error = viewModel.errorMessage {
                 Text(error)

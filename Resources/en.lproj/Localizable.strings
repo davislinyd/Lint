@@ -167,7 +167,6 @@
 "登出" = "Sign Out";
 "ChatGPT 已登入" = "Signed in to ChatGPT";
 "已登出 ChatGPT" = "Signed out of ChatGPT";
-"模型回覆" = "Model reply";
 "測試連線" = "Test Connection";
 "送出 ping 確認模型可回應" = "Sends a ping to confirm the model responds";
 "連線測試" = "Connection Test";

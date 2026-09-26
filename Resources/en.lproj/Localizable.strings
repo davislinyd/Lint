@@ -186,6 +186,8 @@
 "授權輔助功能…" = "Authorize Accessibility…";
 "結束 Lint" = "Quit Lint";
 "沒有可覆蓋的選取" = "No selection to overwrite";
+"沒有寫入。" = "Nothing was written.";
+"無法確認已寫入。若不對請還原（⌘Z）。" = "Could not confirm the text was written. If it looks wrong, undo (⌘Z).";
 "文法校對與潤飾" = "Proofread & polish";
 "自訂 Prompt" = "Custom prompt";
 "語氣" = "Tone";

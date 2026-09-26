@@ -186,6 +186,8 @@
 "授權輔助功能…" = "Cấp quyền Trợ năng…";
 "結束 Lint" = "Thoát Lint";
 "沒有可覆蓋的選取" = "Không có vùng chọn để ghi đè";
+"沒有寫入。" = "Không ghi gì cả.";
+"無法確認已寫入。若不對請還原（⌘Z）。" = "Không xác nhận được là đã ghi. Nếu sai, hãy hoàn tác (⌘Z).";
 "文法校對與潤飾" = "Sửa ngữ pháp và trau chuốt";
 "自訂 Prompt" = "Prompt tùy chỉnh";
 "語氣" = "Giọng văn";

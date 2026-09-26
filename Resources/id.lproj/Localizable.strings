@@ -186,6 +186,8 @@
 "授權輔助功能…" = "Izinkan Aksesibilitas…";
 "結束 Lint" = "Keluar Lint";
 "沒有可覆蓋的選取" = "Tidak ada pilihan untuk ditimpa";
+"沒有寫入。" = "Tidak ada yang ditulis.";
+"無法確認已寫入。若不對請還原（⌘Z）。" = "Tidak dapat memastikan teks sudah tertulis. Jika salah, urungkan (⌘Z).";
 "文法校對與潤飾" = "Periksa tata bahasa & perhalus";
 "自訂 Prompt" = "Prompt kustom";
 "語氣" = "Nada";

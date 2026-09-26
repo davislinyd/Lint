@@ -7,14 +7,19 @@ final class FakeServer: LocalServerControlling {
     var status: LocalServerStatus = .stopped
     var logTail = ""
     var healthy = false
+    var sleeping: Bool?
     var startError: Error?
+    var onStart: (() -> Void)?
     private(set) var startedPlans: [LlamaServerLaunchPlan] = []
     private(set) var stopCalls = 0
 
     func isHealthy(port: Int) async -> Bool { healthy }
 
+    func isSleeping(port: Int) async -> Bool? { sleeping }
+
     func start(plan: LlamaServerLaunchPlan, port: Int) async throws -> Bool {
         if healthy { return false }
+        onStart?()
         startedPlans.append(plan)
         if let startError {
             status = .failed(startError.localizedDescription)
@@ -489,5 +494,88 @@ final class AppleIntelligenceReleaseTests: XCTestCase {
         await coordinator.refresh()
         coordinator.releaseForAppleIntelligence()
         XCTAssertEqual(server.stopCalls, 0)
+    }
+}
+
+/// What the menu bar says about the local model: the server's status, `is_sleeping` from `/props`,
+/// and a restart in progress.
+@MainActor
+final class LocalModelActivityTests: XCTestCase {
+    private func coordinator(_ server: FakeServer) -> LocalAISetupCoordinator {
+        LocalAISetupCoordinator(
+            configuration: { LocalAIConfiguration(modelSource: .custom, extraArguments: "") },
+            resolver: FakeResolver(.ready(LlamaRuntimeLocation(binaryURL: URL(fileURLWithPath: "/llama-server"), origin: .bundled))),
+            server: server, settleDelay: .zero
+        )
+    }
+
+    private func runningServer() -> FakeServer {
+        let server = FakeServer()
+        server.status = .running(pid: 1234, managedByLint: true)
+        server.healthy = true
+        return server
+    }
+
+    func testEachServerStatusHasItsActivity() {
+        func resolve(_ status: LocalServerStatus, _ sleep: LocalModelSleepState, restarting: Bool = false) -> LocalModelActivity {
+            .resolve(serverStatus: status, sleep: sleep, isRestarting: restarting)
+        }
+        let running = LocalServerStatus.running(pid: 1, managedByLint: true)
+        XCTAssertEqual(resolve(.stopped, .unknown), .notLoaded)
+        XCTAssertEqual(resolve(.starting, .unknown), .loading)
+        XCTAssertEqual(resolve(.failed("no model"), .unknown), .failed("no model"))
+        XCTAssertEqual(resolve(running, .awake), .running)
+        XCTAssertEqual(resolve(running, .unknown), .running, "a server that does not say whether it sleeps is running")
+        XCTAssertEqual(resolve(running, .asleep), .idle)
+        XCTAssertEqual(resolve(running, .waking), .loading)
+        XCTAssertEqual(resolve(.stopped, .unknown, restarting: true), .restarting)
+        XCTAssertEqual(resolve(.starting, .unknown, restarting: true), .restarting)
+    }
+
+    func testNoAnswerFromPropsMeansWakingOnlyAfterSleep() {
+        XCTAssertEqual(LocalModelSleepState.unknown.updated(isSleeping: nil), .unknown)
+        XCTAssertEqual(LocalModelSleepState.awake.updated(isSleeping: nil), .unknown)
+        XCTAssertEqual(LocalModelSleepState.asleep.updated(isSleeping: nil), .waking)
+        XCTAssertEqual(LocalModelSleepState.waking.updated(isSleeping: nil), .waking)
+        XCTAssertEqual(LocalModelSleepState.waking.updated(isSleeping: false), .awake)
+        XCTAssertEqual(LocalModelSleepState.awake.updated(isSleeping: true), .asleep)
+    }
+
+    func testRefreshingFollowsSleepWakeAndStop() async {
+        let server = runningServer()
+        let coordinator = coordinator(server)
+        server.sleeping = false
+        await coordinator.refreshServerActivity()
+        XCTAssertEqual(coordinator.activity, .running)
+        server.sleeping = true
+        await coordinator.refreshServerActivity()
+        XCTAssertEqual(coordinator.activity, .idle)
+        server.sleeping = nil
+        await coordinator.refreshServerActivity()
+        XCTAssertEqual(coordinator.activity, .loading)
+        server.sleeping = false
+        await coordinator.refreshServerActivity()
+        XCTAssertEqual(coordinator.activity, .running)
+
+        server.healthy = false
+        server.status = .stopped
+        await coordinator.refreshServerActivity()
+        XCTAssertEqual(coordinator.activity, .notLoaded)
+        XCTAssertEqual(coordinator.modelSleep, .unknown)
+    }
+
+    func testRestartIsShownUntilTheServerIsBack() async throws {
+        let server = runningServer()
+        let coordinator = coordinator(server)
+        server.sleeping = true
+        await coordinator.refreshServerActivity()
+        XCTAssertEqual(coordinator.activity, .idle)
+
+        var duringStart: [LocalModelActivity] = []
+        server.onStart = { duringStart.append(coordinator.activity) }
+        try await coordinator.restartServer()
+        XCTAssertEqual(duringStart, [.restarting])
+        XCTAssertFalse(coordinator.isRestarting)
+        XCTAssertEqual(coordinator.activity, .running, "a restarted server holds its model")
     }
 }

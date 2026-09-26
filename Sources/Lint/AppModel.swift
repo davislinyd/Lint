@@ -84,6 +84,15 @@ final class AppModel: NSObject, NSWindowDelegate {
         ) == .appleIntelligence
     }
 
+    /// The local model's state for the menu bar, or nil when the requests do not go to it.
+    var localModelActivity: LocalModelActivity? {
+        let route = WritingEngineRouter.route(
+            selected: settings.providerKind, apple: appleIntelligence.currentStatus(),
+            localAIReady: localAI.runtimeReady && localAI.modelReady
+        )
+        return route == .provider(.localLlama) ? localAI.activity : nil
+    }
+
     /// Whether to offer Lint's local AI setup (menu item, first launch). Never downloads anything.
     var offersLocalAISetup: Bool {
         guard !usesAppleIntelligence else { return false }

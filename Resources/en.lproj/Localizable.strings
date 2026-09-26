@@ -448,3 +448,10 @@
 "上次檢查" = "Last check";
 "到時間會檢查 GitHub 上的正式版。自動更新會在建議視窗關閉後換上新版並重新啟動；手動更新要按「下載並安裝」；只檢查只顯示結果。" = "Lint checks the published GitHub release on this schedule. Automatic replaces the app and restarts after the suggestion window closes. Manual waits for Download and Install. Only check never downloads.";
 "選單的「檢查更新…」不受頻率限制。" = "Check for Updates… in the menu ignores this schedule.";
+"未載入" = "Not loaded";
+"載入中" = "Loading";
+"運作中" = "Running";
+"閒置中" = "Idle";
+"重啟中" = "Restarting";
+"失敗" = "Failed";
+"本機模型：%@" = "Local model: %@";

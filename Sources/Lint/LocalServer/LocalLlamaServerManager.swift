@@ -37,6 +37,20 @@ final class LocalLlamaServerManager: LocalServerControlling {
         }
     }
 
+    /// `is_sleeping` from `/props`. Measured against b11046: polling `/props` every 15 s neither
+    /// reset the idle timer (the model went to sleep on schedule) nor woke a sleeping model. It answers
+    /// within milliseconds while generating, and not at all while a request loads the model back.
+    func isSleeping(port: Int) async -> Bool? {
+        guard let url = URL(string: "http://\(LlamaServerLaunchPlan.host):\(port)/props") else { return nil }
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 1.5
+        guard let (data, response) = try? await URLSession.shared.data(for: request),
+              (response as? HTTPURLResponse)?.statusCode == 200,
+              let props = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else { return nil }
+        return props["is_sleeping"] as? Bool
+    }
+
     /// Launches `plan` and waits until it answers, unless something already does on `port`.
     /// - Returns: `true` if a new process was launched; `false` if something was already healthy on the port.
     @discardableResult

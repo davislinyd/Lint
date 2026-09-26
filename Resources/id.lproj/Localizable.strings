@@ -448,3 +448,10 @@
 "上次檢查" = "Pemeriksaan terakhir";
 "到時間會檢查 GitHub 上的正式版。自動更新會在建議視窗關閉後換上新版並重新啟動；手動更新要按「下載並安裝」；只檢查只顯示結果。" = "Lint memeriksa rilis GitHub yang diterbitkan sesuai jadwal ini. Mode otomatis mengganti app dan memulai ulang setelah jendela saran ditutup. Mode manual menunggu Unduh dan Pasang. Hanya periksa tidak pernah mengunduh.";
 "選單的「檢查更新…」不受頻率限制。" = "Periksa Pembaruan… di menu mengabaikan jadwal ini.";
+"未載入" = "Belum dimuat";
+"載入中" = "Memuat";
+"運作中" = "Berjalan";
+"閒置中" = "Diam";
+"重啟中" = "Memulai ulang";
+"失敗" = "Gagal";
+"本機模型：%@" = "Model lokal: %@";

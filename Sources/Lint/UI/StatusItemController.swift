@@ -6,17 +6,15 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private let app: AppModel
     private let statusItem: NSStatusItem
     private let menu = NSMenu()
+    private var pollTask: Task<Void, Never>?
+    private var wasStreaming = false
 
     init(app: AppModel) {
         self.app = app
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         super.init()
         statusItem.isVisible = true
-        if let button = statusItem.button {
-            button.image = NSImage(systemSymbolName: "pencil.line", accessibilityDescription: "Lint")
-            button.image?.isTemplate = true
-            button.toolTip = "Lint"
-        }
+        observeLocalModel()
         menu.delegate = self
         // The Tone submenu is switched off while a custom prompt is the mode, and it is the only item
         // that ever is (the others are enabled, or disabled on purpose).
@@ -27,6 +25,42 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 
     func menuNeedsUpdate(_ menu: NSMenu) {
         rebuild()
+        if app.localModelActivity != nil {
+            Task { await app.localAI.refreshServerActivity() }
+        }
+    }
+
+    /// Keeps the icon and its tooltip in step with the local model. While the requests go to it, the
+    /// server is asked every 5 s (it says nothing by itself when its model falls asleep or wakes up),
+    /// and once more as soon as a request ends.
+    private func observeLocalModel() {
+        let (activity, streaming) = withObservationTracking {
+            (app.localModelActivity, app.panel.viewModel.isStreaming)
+        } onChange: { [weak self] in
+            Task { @MainActor in self?.observeLocalModel() }
+        }
+        guard let button = statusItem.button else { return }
+        button.image = StatusBarIcon.image(activity: activity)
+        button.toolTip = activity.map(\.toolTip) ?? "Lint"
+
+        guard activity != nil else {
+            pollTask?.cancel()
+            pollTask = nil
+            return
+        }
+        if wasStreaming, !streaming {
+            Task { await app.localAI.refreshServerActivity() }
+        }
+        wasStreaming = streaming
+        if pollTask == nil {
+            pollTask = Task { [weak self] in
+                while !Task.isCancelled {
+                    guard let localAI = self?.app.localAI else { return }
+                    await localAI.refreshServerActivity()
+                    try? await Task.sleep(for: .seconds(5))
+                }
+            }
+        }
     }
 
     @objc private func runCapture() {
@@ -83,6 +117,13 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 
     private func rebuild() {
         menu.removeAllItems()
+
+        if let activity = app.localModelActivity {
+            let status = NSMenuItem(title: activity.statusLine, action: nil, keyEquivalent: "")
+            status.isEnabled = false
+            menu.addItem(status)
+            menu.addItem(.separator())
+        }
 
         let run = NSMenuItem(title: String(localized: "改善選取文字"), action: #selector(runCapture), keyEquivalent: "")
         run.target = self
@@ -163,5 +204,24 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         let quitItem = NSMenuItem(title: String(localized: "結束 Lint"), action: #selector(quit), keyEquivalent: "q")
         quitItem.target = self
         menu.addItem(quitItem)
+    }
+}
+
+private extension LocalModelActivity {
+    var statusLine: String {
+        let title = switch self {
+        case .notLoaded: String(localized: "未載入")
+        case .loading: String(localized: "載入中")
+        case .running: String(localized: "運作中")
+        case .idle: String(localized: "閒置中")
+        case .restarting: String(localized: "重啟中")
+        case .failed: String(localized: "失敗")
+        }
+        return String(localized: "本機模型：\(title)")
+    }
+
+    var toolTip: String {
+        if case .failed(let reason) = self { return "Lint\n\(statusLine)\n\(reason)" }
+        return "Lint\n\(statusLine)"
     }
 }

@@ -53,6 +53,9 @@ public final class LocalAISetupCoordinator {
     /// would need a download. Switching back to one of these never downloads anything again.
     public private(set) var installedModelIDs: Set<String> = []
     public private(set) var serverStatus: LocalServerStatus = .stopped
+    /// Whether the running server holds its model; kept up to date by `refreshServerActivity()`.
+    public private(set) var modelSleep: LocalModelSleepState = .unknown
+    public private(set) var isRestarting = false
     public private(set) var serverLogTail = ""
     public private(set) var accessibilityTrusted: Bool
 
@@ -102,6 +105,10 @@ public final class LocalAISetupCoordinator {
         }
     }
 
+    public var activity: LocalModelActivity {
+        .resolve(serverStatus: serverStatus, sleep: modelSleep, isRestarting: isRestarting)
+    }
+
     public var runtimeReady: Bool { runtime.isReady }
 
     public var modelReady: Bool {
@@ -145,6 +152,19 @@ public final class LocalAISetupCoordinator {
         serverStatus = server.status
         serverLogTail = server.logTail
         hasChecked = true
+    }
+
+    /// Looks at the server only, for the menu bar: whether it runs and whether its model is asleep.
+    /// Cheaper than `refresh()` (no runtime signatures, no model files), and it never wakes the model.
+    public func refreshServerActivity() async {
+        let port = configuration.port
+        await server.refreshStatus(port: port)
+        serverStatus = server.status
+        if case .running = serverStatus {
+            modelSleep = modelSleep.updated(isSleeping: await server.isSleeping(port: port))
+        } else {
+            modelSleep = .unknown
+        }
     }
 
     // MARK: - Model
@@ -243,6 +263,8 @@ public final class LocalAISetupCoordinator {
     }
 
     public func restartServer() async throws {
+        isRestarting = true
+        defer { isRestarting = false }
         let configuration = self.configuration
         server.stop(port: configuration.port)
         // Wait for the port to free up before starting again.
@@ -286,6 +308,7 @@ public final class LocalAISetupCoordinator {
         }
         let reference = try configuration.modelReference(using: models).get()
         serverStatus = .starting
+        modelSleep = .unknown
         do {
             try await server.start(plan: configuration.launchPlan(runtime: location, model: reference), port: configuration.port)
         } catch {

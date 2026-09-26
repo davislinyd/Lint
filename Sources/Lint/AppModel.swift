@@ -58,6 +58,9 @@ final class AppModel: NSObject, NSWindowDelegate {
         settings.onUpdatePreferenceChanged = { [weak self] in
             self?.updates.preferencesChanged()
         }
+        settings.onCaptureWatchChanged = { [weak monitor] in
+            monitor?.applyWatchSettings()
+        }
         InteractionAnchor.start()
         if ProviderKind.chatgptAccount.isEnabled {
             ChatGPTBrowserBackendRegistry.shared.backend = ChatGPTWebBridge.shared
@@ -69,7 +72,7 @@ final class AppModel: NSObject, NSWindowDelegate {
                 self?.restoreAccessoryIfNeeded()
             }
         }
-        monitor.start()
+        monitor.applyWatchSettings()
         Task { await self.memory.prepare(config: self.settings.memoryConfig) }
         Task { await self.ensureLocalServerIfNeeded() }
     }

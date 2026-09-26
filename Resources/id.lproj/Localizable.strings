@@ -89,7 +89,7 @@
 "選取後顯示檢查按鈕" = "Tampilkan tombol Periksa setelah memilih";
 "反白文字後出現小顆「檢查」按鈕，點了才開始建議；快捷鍵仍可直接開啟。" = "Tombol “Periksa” kecil muncul setelah Anda memilih teks; saran baru dimulai ketika Anda mengkliknya. Pintasan tetap bisa langsung digunakan.";
 "打字時即時監看（英文為主）" = "Pantau saat mengetik (terutama bahasa Inggris)";
-"停頓約 0.5 秒後預先準備建議。僅英文為主的片段會觸發，快捷鍵不受此限。" = "Menyiapkan saran setelah jeda sekitar 0,5 detik. Hanya teks yang sebagian besar berbahasa Inggris yang memicunya; pintasan tetap berfungsi.";
+"預設關閉。開啟後會讀取焦點欄位的文字，停頓約 0.5 秒後在背景準備建議。僅英文為主的片段會觸發，快捷鍵不受此限。" = "Mati secara bawaan. Saat menyala, Lint membaca bidang yang fokus dan menyiapkan saran di latar belakang setelah sekitar 0,5 detik. Hanya teks yang sebagian besar berbahasa Inggris yang memicunya; pintasan tetap berfungsi.";
 "在輸入框旁顯示「已就緒」浮標" = "Tampilkan penanda “Siap” di samping kolom teks";
 "關閉後仍在背景預載建議，但不會浮在輸入框上擋字；準備好後用快捷鍵開啟迷你浮窗。" = "Saat nonaktif, saran tetap disiapkan di latar belakang, tetapi tidak ada yang melayang menutupi kolom teks; tekan pintasan untuk membuka gelembung mini setelah siap.";
 "改善選取文字" = "Perbaiki Teks yang Dipilih";

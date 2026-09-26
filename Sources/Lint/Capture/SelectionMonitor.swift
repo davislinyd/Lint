@@ -1,5 +1,6 @@
 import AppKit
 import ApplicationServices
+import LintCore
 
 /// Polls AX selection and/or focused field text, then shows the check chip after debounce.
 /// - Selection path: ~180ms after a stable highlight.
@@ -19,7 +20,7 @@ final class SelectionMonitor {
     private var pendingSince: ContinuousClock.Instant?
     private var pendingResult: TextCaptureService.CaptureResult?
     private var lastHandledText: String?
-    private let minLength = 8
+    private let minLength = LiveCheckPolicy.minimumCharacters
     private let selectionStableDuration: Duration = .milliseconds(180)
     private let typingIdleDuration: Duration = .milliseconds(500)
     private let pollInterval: Duration = .milliseconds(100)
@@ -40,7 +41,25 @@ final class SelectionMonitor {
         self.onTyping = onTyping
     }
 
+    func applyWatchSettings() {
+        if LiveCheckPolicy.shouldPoll(
+            watchSelection: settings.autoSuggestOnSelection,
+            watchTyping: settings.liveWatchWhileTyping
+        ) {
+            start()
+        } else {
+            let hadSuggestion = lastHandledText != nil || pendingText != nil
+            lastHandledText = nil
+            stop()
+            if hadSuggestion { onCleared() }
+        }
+    }
+
     func start() {
+        guard LiveCheckPolicy.shouldPoll(
+            watchSelection: settings.autoSuggestOnSelection,
+            watchTyping: settings.liveWatchWhileTyping
+        ) else { return }
         guard loopTask == nil else { return }
         loopTask = Task { [weak self] in
             while let self, !Task.isCancelled {
@@ -64,18 +83,21 @@ final class SelectionMonitor {
         guard !isPaused else { return }
         let watchSelection = settings.autoSuggestOnSelection
         let watchTyping = settings.liveWatchWhileTyping
-        guard watchSelection || watchTyping else {
-            pendingText = nil
-            pendingSince = nil
-            pendingResult = nil
-            clearTask?.cancel()
-            clearTask = nil
+        guard LiveCheckPolicy.shouldPoll(watchSelection: watchSelection, watchTyping: watchTyping) else {
+            let hadSuggestion = lastHandledText != nil || pendingText != nil
+            lastHandledText = nil
+            stop()
+            if hadSuggestion { onCleared() }
             return
         }
         guard AccessibilityPermission.isTrusted else { return }
 
         let frontBundle = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
         if frontBundle == Bundle.main.bundleIdentifier {
+            return
+        }
+        if LiveCheckPolicy.isDenylisted(frontBundle) {
+            scheduleClearIfNeeded()
             return
         }
 

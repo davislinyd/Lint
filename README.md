@@ -10,19 +10,40 @@ A macOS menu-bar AI writing assistant. Press a global hotkey to capture the sele
 
 ### Install
 
-#### Recommended: the official DMG (no Homebrew)
-
 Get the latest `Lint-<version>-macOS-arm64.dmg` from [GitHub Releases](https://github.com/davislinyd/Lint/releases). Official releases are signed with a Developer ID certificate and notarized by Apple. They need macOS 14+ on an Apple Silicon Mac.
 
-> **Preview builds:** until the first notarized release, Releases carries unsigned previews (`Lint-<version>-macOS-arm64-preview.dmg`, marked Pre-release). macOS blocks a preview the first time you open it: go to System Settings → Privacy & Security and click **Open Anyway**, or run `xattr -dr com.apple.quarantine /Applications/Lint.app`. Allow Accessibility again after installing each new preview.
-
 1. Open the DMG and drag **Lint** into **Applications**.
-2. Launch Lint from Applications. A pencil icon appears in the menu bar and the **Set Up Local AI** window opens.
-3. It reports the Local AI runtime as ready, because llama.cpp is already inside Lint. The AI model is the one thing still missing: Lint shows its size (about 5.2 GB for the default Gemma 4 E4B) and where it is stored, and starts downloading only after you click **Download and Install**. It shows progress, verifies the download, then starts the local server.
-4. Allow **Lint** under System Settings → Privacy & Security → Accessibility (the setup window guides you and updates when it is on).
-5. Optional: verify the download with `shasum -a 256 -c Lint-<version>-macOS-arm64.dmg.sha256`, run in the folder that holds both files.
+2. Launch Lint from Applications. A pencil icon appears in the menu bar.
+3. Allow **Lint** under System Settings → Privacy & Security → Accessibility.
+
+Optional: verify the download with `shasum -a 256 -c Lint-<version>-macOS-arm64.dmg.sha256`, run in the folder that holds both files. A local model downloads only after you click **Download and Install**. See [Local AI notes](#local-ai-notes).
+
+### Hotkeys
+
+| Hotkey | Action |
+|--------|--------|
+| `⌥⌘K` | Compact suggestion bubble |
+| `⌥⌘L` | Full two-column panel |
+
+Hotkeys can be rebound in Settings.
+
+Live check — watching the focused field and preparing a suggestion while you type — is optional and **off by default**. Turn it on in Settings → General.
+
+### Permissions
+
+System Settings → Privacy & Security → Accessibility → enable **Lint**. Accessibility can read text in the app you are using, including the focused field. Live check is off by default, so Lint does not watch that field until you turn it on.
+
+Without permission the app still works, but falls back to simulated ⌘C / ⌘V through the clipboard. Run the signed `dist/Lint.app`; a bare binary does not reliably show up in the Accessibility list. If the system treats a rebuilt app as new, grant the permission again. Use a stable code-signing identity (e.g. Apple Development) to avoid this.
 
 While replacing text, macOS may ask whether Lint may control "System Events". Allow it: Lint uses it only to bring your previous app back to the front, which makes Replace reliable in browsers and Electron apps.
+
+What Lint can read, and how to report a vulnerability, is in [SECURITY.md](SECURITY.md).
+
+### Install details
+
+#### Preview builds
+
+> **Preview builds:** until the first notarized release, Releases carries unsigned previews (`Lint-<version>-macOS-arm64-preview.dmg`, marked Pre-release). macOS blocks a preview the first time you open it: go to System Settings → Privacy & Security and click **Open Anyway**, or run `xattr -dr com.apple.quarantine /Applications/Lint.app`. Allow Accessibility again after installing each new preview.
 
 What is inside the app and what is downloaded:
 
@@ -63,25 +84,12 @@ chmod +x Scripts/*.sh
 
 A pencil icon appears in the menu bar. Packaging fetches the pinned llama.cpp runtime on first use (`Scripts/fetch-llama-runtime.sh`, hash-verified, cached under `.build/`); to try a development build without touching your real models, set `LINT_APP_SUPPORT_DIR` to another folder.
 
-| Hotkey | Action |
-|--------|--------|
-| `⌥⌘K` | Compact suggestion bubble |
-| `⌥⌘L` | Full two-column panel |
-
-Hotkeys can be rebound in Settings.
-
 ### How it reads text
 
 - **Live check:** optional, and off by default. When it is on, Lint watches the focused field while you type (English-leaning text) and prepares a suggestion in the background, so `⌥⌘K` shows it right away. With a local model, it is also warmed up as soon as you start typing.
 - **Any app:** native apps are read through Accessibility. For Chromium / Electron apps (browsers, Slack, SeaTalk, ChatGPT, …) Lint switches on their accessibility tree automatically.
 - **Fallback:** if a field exposes no text, `⌥⌘K` selects the field (⌘A), copies it, then restores the clipboard and the caret.
 - **Fullscreen:** the bubble opens on the Space you are working in, including fullscreen apps.
-
-### Permissions
-
-System Settings → Privacy & Security → Accessibility → enable **Lint**.
-
-Without permission the app still works, but falls back to simulated ⌘C / ⌘V through the clipboard. Run the signed `dist/Lint.app`; a bare binary does not reliably show up in the Accessibility list. If the system treats a rebuilt app as new, grant the permission again. Use a stable code-signing identity (e.g. Apple Development) to avoid this.
 
 ### Settings
 
@@ -137,19 +145,40 @@ macOS 選單列 AI 寫作助手：全域快捷鍵擷取選取文字，送到 LLM
 
 ### 安裝
 
-#### 建議：官方 DMG（不需要 Homebrew）
-
 到 [GitHub Releases](https://github.com/davislinyd/Lint/releases) 下載最新的 `Lint-<版本>-macOS-arm64.dmg`。正式版以 Developer ID 憑證簽署並通過 Apple 公證，需要 macOS 14+ 與 Apple Silicon Mac。
 
-> **預覽版：** 第一個公證版發佈之前，Releases 提供未簽章的預覽版（`Lint-<版本>-macOS-arm64-preview.dmg`，標示為 Pre-release）。第一次開啟時 macOS 會擋下：到 系統設定 → 隱私權與安全性 按「仍要打開」，或執行 `xattr -dr com.apple.quarantine /Applications/Lint.app`。每安裝一個新的預覽版，輔助功能都要重新允許。
-
 1. 開啟 DMG，把 **Lint** 拖進 **Applications**。
-2. 從「應用程式」開啟 Lint，選單列會出現鉛筆圖示，並開啟「設定本機 AI」視窗。
-3. 視窗會顯示本機 AI 執行環境已就緒，因為 llama.cpp 已經在 Lint 裡面。還缺的只有 AI 模型：Lint 會列出大小（預設的 Gemma 4 E4B 約 5.2 GB）與存放位置，按下**下載並安裝**之後才開始下載，並顯示進度、驗證檔案，再啟動本機服務。
-4. 到 系統設定 → 隱私權與安全性 → 輔助功能，勾選 **Lint**（設定視窗會引導，開啟後自動更新）。
-5. 選用：在放有 DMG 與 `.sha256` 的資料夾執行 `shasum -a 256 -c Lint-<版本>-macOS-arm64.dmg.sha256` 驗證下載。
+2. 從「應用程式」開啟 Lint，選單列會出現鉛筆圖示。
+3. 到 系統設定 → 隱私權與安全性 → 輔助功能，勾選 **Lint**。
+
+選用：在放有 DMG 與 `.sha256` 的資料夾執行 `shasum -a 256 -c Lint-<版本>-macOS-arm64.dmg.sha256` 驗證下載。本機模型要等你按下**下載並安裝**才會下載。詳見下方〈本機 AI 補充說明〉。
+
+### 快捷鍵
+
+| 快捷鍵 | 行為 |
+|--------|------|
+| `⌥⌘K` | 迷你建議浮窗 |
+| `⌥⌘L` | 雙欄全面板 |
+
+快捷鍵可在設定中重新綁定。
+
+即時檢查（打字時監看焦點欄位並在背景準備建議）是選用的，**預設關閉**。可在「設定 → 一般」打開。
+
+### 權限
+
+系統設定 → 隱私權與安全性 → 輔助功能 → 勾選 **Lint**。輔助功能可以讀取你正在使用的 App 裡的文字，包含焦點欄位。即時檢查預設關閉，所以在你打開它之前，Lint 不會監看那個欄位。
+
+未授權時仍可運作，但改走模擬 ⌘C／⌘V 的剪貼簿備援。必須執行簽名過的 `dist/Lint.app`，裸 binary 不會穩定出現在輔助功能列表。重新組包後若系統視為新 App，需再勾選一次；使用固定的程式碼簽署憑證（如 Apple Development）可避免。
 
 取代文字時，macOS 可能會詢問是否允許 Lint 控制「系統事件」。請允許：Lint 只用它把你原本使用的 App 帶回最前面，這樣在瀏覽器與 Electron App 裡取代才會穩定。
+
+Lint 能讀到什麼，以及如何回報漏洞，寫在 [SECURITY.md](SECURITY.md)。
+
+### 安裝補充
+
+#### 預覽版
+
+> **預覽版：** 第一個公證版發佈之前，Releases 提供未簽章的預覽版（`Lint-<版本>-macOS-arm64-preview.dmg`，標示為 Pre-release）。第一次開啟時 macOS 會擋下：到 系統設定 → 隱私權與安全性 按「仍要打開」，或執行 `xattr -dr com.apple.quarantine /Applications/Lint.app`。每安裝一個新的預覽版，輔助功能都要重新允許。
 
 App 裡有什麼、之後才下載什麼：
 
@@ -190,25 +219,12 @@ chmod +x Scripts/*.sh
 
 選單列會出現鉛筆圖示。組包時第一次會下載固定版本的 llama.cpp 執行環境（`Scripts/fetch-llama-runtime.sh`，驗證雜湊後快取在 `.build/`）；想試用開發版又不動到真正的模型，可把 `LINT_APP_SUPPORT_DIR` 設成別的資料夾。
 
-| 快捷鍵 | 行為 |
-|--------|------|
-| `⌥⌘K` | 迷你建議浮窗 |
-| `⌥⌘L` | 雙欄全面板 |
-
-快捷鍵可在設定中重新綁定。
-
 ### 如何讀取文字
 
 - **即時檢查：** 選用，預設關閉。開啟後，打字時 Lint 會監看目前輸入框（以英文為主的文字），在背景先準備好建議，按 `⌥⌘K` 即可立刻顯示；使用本機模型時，開始打字就會先暖機。
 - **任何 App：** 原生 App 透過輔助功能讀取；Chromium／Electron 系 App（瀏覽器、Slack、SeaTalk、ChatGPT 等）由 Lint 自動開啟其輔助功能樹。
 - **後備：** 輸入框讀不到文字時，`⌥⌘K` 會全選（⌘A）並複製，再還原剪貼簿與游標位置。
 - **全螢幕：** 浮窗會出現在你正在使用的 Space，包含全螢幕 App。
-
-### 權限
-
-系統設定 → 隱私權與安全性 → 輔助功能 → 勾選 **Lint**。
-
-未授權時仍可運作，但改走模擬 ⌘C／⌘V 的剪貼簿備援。必須執行簽名過的 `dist/Lint.app`，裸 binary 不會穩定出現在輔助功能列表。重新組包後若系統視為新 App，需再勾選一次；使用固定的程式碼簽署憑證（如 Apple Development）可避免。
 
 ### 設定
 
@@ -220,6 +236,7 @@ chmod +x Scripts/*.sh
 
 ### 本機 AI 補充說明
 
+- **預設模型：** 本機 AI 執行環境已在 Lint 裡。還缺的是模型：預設的 Gemma 4 E4B 約 5.2 GB，按下**下載並安裝**之後才會下載，並顯示進度、驗證檔案，再啟動本機服務。
 - **尚未設定：**還沒安裝模型就要求建議時，Lint 會顯示「本機 AI 尚未設定」與「設定本機 AI」按鈕（以及改用其他模型來源的捷徑），而不是連線錯誤。選單列的「設定本機 AI…」可隨時重新開啟設定視窗；首次畫面按「稍後」只是不再自動彈出。
 - **下載可以安全中斷：**取消、斷線甚至結束 Lint，已下載的部分都會留在 `~/Library/Application Support/Lint/Downloads`，再次下載會從中斷處接續。大小、GGUF 標頭或 SHA-256 任一項驗證失敗的檔案會被刪除、絕不使用；所有檔案都通過之後，模型才會一次出現在 `Models/`。
 - **磁碟空間：**下載前會檢查是否有「還缺的部分 ×1.2」的可用空間，並告訴你需要多少、這台 Mac 有多少。

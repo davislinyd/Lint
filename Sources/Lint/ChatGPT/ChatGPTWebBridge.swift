@@ -35,6 +35,7 @@ final class ChatGPTWebBridge: NSObject, ChatGPTBrowserBackend, WKNavigationDeleg
     }
 
     func warmUp() {
+        guard ChatGPTWebAccess.requestsAllowed else { return }
         Task { try? await ensureReady() }
     }
 
@@ -82,6 +83,9 @@ final class ChatGPTWebBridge: NSObject, ChatGPTBrowserBackend, WKNavigationDeleg
     }
 
     func complete(_ request: ChatGPTCompletionRequest) async throws -> String {
+        guard ChatGPTWebAccess.requestsAllowed else {
+            throw LLMError.unresolvedProvider
+        }
         try await ensureReady()
 
         let prompt: String
@@ -100,6 +104,7 @@ final class ChatGPTWebBridge: NSObject, ChatGPTBrowserBackend, WKNavigationDeleg
             "argFast": request.fastMode
         ]
 
+        // Unsupported unofficial chatgpt.com session. Do not extend the sentinel / soft proof workaround.
         // Raw string: keep JS escapes like \\n intact (plain """ would turn \\n into a real newline).
         let js = #"""
         try {

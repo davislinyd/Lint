@@ -89,7 +89,7 @@
 "選取後顯示檢查按鈕" = "Show Check button after selecting";
 "反白文字後出現小顆「檢查」按鈕，點了才開始建議；快捷鍵仍可直接開啟。" = "A small “Check” button appears after you select text; suggestions start when you click it. The shortcut still works directly.";
 "打字時即時監看（英文為主）" = "Watch while typing (mainly English)";
-"停頓約 0.5 秒後預先準備建議。僅英文為主的片段會觸發，快捷鍵不受此限。" = "Prepares a suggestion after a pause of about 0.5 seconds. Only mostly-English text triggers it; the shortcut works regardless.";
+"預設關閉。開啟後會讀取焦點欄位的文字，停頓約 0.5 秒後在背景準備建議。僅英文為主的片段會觸發，快捷鍵不受此限。" = "Off by default. When on, Lint reads the focused field and prepares a suggestion in the background after about 0.5 seconds. Only mostly-English text triggers it; the shortcut works regardless.";
 "在輸入框旁顯示「已就緒」浮標" = "Show a “Ready” chip next to the text field";
 "關閉後仍在背景預載建議，但不會浮在輸入框上擋字；準備好後用快捷鍵開啟迷你浮窗。" = "When off, suggestions are still prepared in the background but nothing floats over the text field; press the shortcut to open the mini bubble once ready.";
 "改善選取文字" = "Improve Selected Text";

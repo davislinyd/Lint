@@ -48,6 +48,13 @@ final class TextCaptureService {
     /// `allowSelectAll` (⌥⌘K only): when nothing is selected and AX exposes no text, select the whole
     /// field to read it. The full panel keeps its old behaviour of never touching the source app's selection.
     func capture(allowSelectAll: Bool = false) async -> CaptureResult? {
+        let bundle = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+        let focused = AccessibilityPermission.isTrusted ? Self.focusedElement() : nil
+        if LiveCheckPolicy.blocksReading(
+            bundleID: bundle, isSecure: focused.map(Self.isSecureElement) ?? false
+        ) {
+            return nil
+        }
         if AccessibilityPermission.isTrusted { Self.ensureWebAccessibility() }
         if AccessibilityPermission.isTrusted, let ax = Self.readAXSelectedText() {
             let result = CaptureResult(
@@ -74,6 +81,10 @@ final class TextCaptureService {
 
     func peekAXSelection() -> CaptureResult? {
         guard AccessibilityPermission.isTrusted else { return nil }
+        if LiveCheckPolicy.isDenylisted(NSWorkspace.shared.frontmostApplication?.bundleIdentifier) {
+            return nil
+        }
+        guard let focused = Self.focusedElement(), !Self.isSecureElement(focused) else { return nil }
         Self.ensureWebAccessibility()
         guard let ax = Self.readAXSelectedText() else { return nil }
         if Self.isSecureElement(ax.element) { return nil }
@@ -91,9 +102,11 @@ final class TextCaptureService {
     /// `selectedRange` is the snippet's UTF-16 range in the full field so Replace still works.
     func peekAXFocusedSnippet(maxUTF16Length: Int = 1000) -> CaptureResult? {
         guard AccessibilityPermission.isTrusted else { return nil }
+        if LiveCheckPolicy.isDenylisted(NSWorkspace.shared.frontmostApplication?.bundleIdentifier) {
+            return nil
+        }
+        guard let focused = Self.focusedElement(), !Self.isSecureElement(focused) else { return nil }
         Self.ensureWebAccessibility()
-        guard let focused = Self.focusedElement() else { return nil }
-        if Self.isSecureElement(focused) { return nil }
 
         // Prefer a real selection when present.
         if let selected = Self.readAXSelectedText(), selected.element == focused {
@@ -183,6 +196,10 @@ final class TextCaptureService {
     /// and a paste that cannot be read back is an error.
     func replaceLast(with newText: String) async -> String? {
         guard let last = lastCapture else { return ReplaceRefusal.noCapture.message }
+        if Self.blocksReplace(last) {
+            Self.log("replace refused blocked source")
+            return ReplaceRefusal.notWholeField.message
+        }
         Self.log("replace start originalCount=\(last.text.count) newCount=\(newText.count) hasAX=\(last.axElement != nil) range=\(String(describing: last.selectedRange)) pid=\(String(describing: last.sourceAppPID))")
 
         // Always bring source app forward first — we likely stole focus for the bubble.
@@ -218,7 +235,9 @@ final class TextCaptureService {
                 return nil
             case .failure(let reason):
                 if !triedRefocus, reason == .notWholeField || reason == .ambiguous,
-                   let focused = Self.focusedElement(), !Self.sameElement(focused, element) {
+                   let focused = Self.focusedElement(),
+                   !Self.isSecureElement(focused),
+                   !Self.sameElement(focused, element) {
                     triedRefocus = true
                     element = focused
                     snapshot.hasElement = true
@@ -358,6 +377,18 @@ final class TextCaptureService {
 
     private static func frontmostPID() -> pid_t? {
         NSWorkspace.shared.frontmostApplication?.processIdentifier
+    }
+
+    private static func blocksReplace(_ last: CaptureResult) -> Bool {
+        let bundle: String?
+        if let pid = last.sourceAppPID {
+            bundle = NSRunningApplication(processIdentifier: pid)?.bundleIdentifier
+        } else {
+            bundle = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+        }
+        return LiveCheckPolicy.blocksReading(
+            bundleID: bundle, isSecure: last.axElement.map(isSecureElement) ?? false
+        )
     }
 
     private static func isSourceFrontmost(_ pid: pid_t?) -> Bool {

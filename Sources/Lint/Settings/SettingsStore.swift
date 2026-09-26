@@ -137,10 +137,16 @@ final class SettingsStore {
         didSet { defaults.set(reasoningEffort.rawValue, forKey: Keys.reasoningEffort) }
     }
     var autoSuggestOnSelection: Bool {
-        didSet { defaults.set(autoSuggestOnSelection, forKey: Keys.autoSuggestOnSelection) }
+        didSet {
+            defaults.set(autoSuggestOnSelection, forKey: Keys.autoSuggestOnSelection)
+            onCaptureWatchChanged?()
+        }
     }
     var liveWatchWhileTyping: Bool {
-        didSet { defaults.set(liveWatchWhileTyping, forKey: Keys.liveWatchWhileTyping) }
+        didSet {
+            defaults.set(liveWatchWhileTyping, forKey: Keys.liveWatchWhileTyping)
+            onCaptureWatchChanged?()
+        }
     }
     /// When false, live-watch still prefetches but does not float a chip over the editor.
     var showReadyChipNearField: Bool {
@@ -204,6 +210,8 @@ final class SettingsStore {
     }
     /// Set by the app after init. `didSet` above does not run while this store is being created.
     var onUpdatePreferenceChanged: (() -> Void)?
+    /// Start or stop background Accessibility polling when a watch toggle changes.
+    var onCaptureWatchChanged: (() -> Void)?
 
     static let defaultLocalHFModel = ModelCatalog.recommended.huggingFaceSpec
     var apiKeyDraft: String = ""
@@ -269,11 +277,13 @@ final class SettingsStore {
         } else {
             autoSuggestOnSelection = defaults.bool(forKey: Keys.autoSuggestOnSelection)
         }
-        if defaults.object(forKey: Keys.liveWatchWhileTyping) == nil {
-            liveWatchWhileTyping = true
-        } else {
-            liveWatchWhileTyping = defaults.bool(forKey: Keys.liveWatchWhileTyping)
-        }
+        // The observer does not run in init, so a missing key was never toggled. Off.
+        // A stored bool is the user's choice and stays.
+        liveWatchWhileTyping = LiveCheckPolicy.enabledValue(
+            stored: defaults.object(forKey: Keys.liveWatchWhileTyping) == nil
+                ? nil
+                : defaults.bool(forKey: Keys.liveWatchWhileTyping)
+        )
         if defaults.object(forKey: Keys.showReadyChipNearField) == nil {
             // Default off: floating chip over composers kept covering text on paste.
             showReadyChipNearField = false

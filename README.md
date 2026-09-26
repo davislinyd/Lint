@@ -72,7 +72,7 @@ Hotkeys can be rebound in Settings.
 
 ### How it reads text
 
-- **Live check:** while you type, Lint watches the focused field (English-leaning text) and prepares a suggestion in the background, so `⌥⌘K` shows it right away. With a local model, it is also warmed up as soon as you start typing.
+- **Live check:** optional, and off by default. When it is on, Lint watches the focused field while you type (English-leaning text) and prepares a suggestion in the background, so `⌥⌘K` shows it right away. With a local model, it is also warmed up as soon as you start typing.
 - **Any app:** native apps are read through Accessibility. For Chromium / Electron apps (browsers, Slack, SeaTalk, ChatGPT, …) Lint switches on their accessibility tree automatically.
 - **Fallback:** if a field exposes no text, `⌥⌘K` selects the field (⌘A), copies it, then restores the clipboard and the caret.
 - **Fullscreen:** the bubble opens on the Space you are working in, including fullscreen apps.
@@ -199,7 +199,7 @@ chmod +x Scripts/*.sh
 
 ### 如何讀取文字
 
-- **即時檢查：** 打字時 Lint 會監看目前輸入框（以英文為主的文字），在背景先準備好建議，按 `⌥⌘K` 即可立刻顯示；使用本機模型時，開始打字就會先暖機。
+- **即時檢查：** 選用，預設關閉。開啟後，打字時 Lint 會監看目前輸入框（以英文為主的文字），在背景先準備好建議，按 `⌥⌘K` 即可立刻顯示；使用本機模型時，開始打字就會先暖機。
 - **任何 App：** 原生 App 透過輔助功能讀取；Chromium／Electron 系 App（瀏覽器、Slack、SeaTalk、ChatGPT 等）由 Lint 自動開啟其輔助功能樹。
 - **後備：** 輸入框讀不到文字時，`⌥⌘K` 會全選（⌘A）並複製，再還原剪貼簿與游標位置。
 - **全螢幕：** 浮窗會出現在你正在使用的 Space，包含全螢幕 App。

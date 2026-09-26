@@ -186,6 +186,8 @@
 "授權輔助功能…" = "Autorizar Acessibilidade…";
 "結束 Lint" = "Encerrar o Lint";
 "沒有可覆蓋的選取" = "Nenhuma seleção para substituir";
+"沒有寫入。" = "Nada foi escrito.";
+"無法確認已寫入。若不對請還原（⌘Z）。" = "Não foi possível confirmar que o texto foi escrito. Se estiver errado, desfaça (⌘Z).";
 "文法校對與潤飾" = "Revisar gramática e aprimorar";
 "自訂 Prompt" = "Prompt personalizado";
 "語氣" = "Tom";

@@ -1,5 +1,6 @@
 import AppKit
 import ApplicationServices
+import LintCore
 
 @MainActor
 final class TextCaptureService {
@@ -178,102 +179,135 @@ final class TextCaptureService {
     }
 
     /// Replace previously captured selection. Returns error message or nil on success.
+    /// Every write comes from `ReplaceDecision`: no select-all unless the field is the snippet,
+    /// and a paste that cannot be read back is an error.
     func replaceLast(with newText: String) async -> String? {
-        guard let last = lastCapture else { return String(localized: "沒有可覆蓋的選取") }
+        guard let last = lastCapture else { return ReplaceRefusal.noCapture.message }
         Self.log("replace start originalCount=\(last.text.count) newCount=\(newText.count) hasAX=\(last.axElement != nil) range=\(String(describing: last.selectedRange)) pid=\(String(describing: last.sourceAppPID))")
 
         // Always bring source app forward first — we likely stole focus for the bubble.
         await activateSourceAppIfNeeded()
+        guard Self.isSourceFrontmost(last.sourceAppPID) else {
+            Self.log("replace refused source not frontmost")
+            return ReplaceRefusal.sourceNotFrontmost.message
+        }
 
-        if let element = last.axElement {
-            // A) Best: rewrite the whole field value by substituting the original snippet.
-            if Self.replaceInValue(element: element, original: last.text, newText: newText) {
-                Self.log("replace via AXValue OK")
+        let live = Self.readAXSelectedText()
+        var element = last.axElement
+        if element == nil, ReplaceDecision.liveMatches(live?.text, original: last.text) {
+            element = live?.element
+        }
+        var snapshot = ReplaceSnapshot(
+            hasCapture: true,
+            sourceFrontmost: true,
+            hasElement: element != nil,
+            fieldValue: element.flatMap { Self.readStringAttribute($0, kAXValueAttribute as String) },
+            original: last.text,
+            newText: newText,
+            rangeRestored: false,
+            liveSelectedText: live?.text
+        )
+        var directive = ReplaceDecision.first(snapshot)
+        directive = restoreRangeIfRefused(&snapshot, element: element, range: last.selectedRange, directive: directive)
+
+        var triedRefocus = false
+        for _ in 0..<8 {
+            switch directive {
+            case .success:
+                Self.log("replace confirmed")
                 return nil
-            }
-
-            // B) Restore selection range, then set selected text.
-            if let range = last.selectedRange, Self.setSelectedRange(element, range) {
-                let err = AXUIElementSetAttributeValue(
-                    element,
-                    kAXSelectedTextAttribute as CFString,
-                    newText as CFTypeRef
+            case .failure(let reason):
+                if !triedRefocus, reason == .notWholeField || reason == .ambiguous,
+                   let focused = Self.focusedElement(), !Self.sameElement(focused, element) {
+                    triedRefocus = true
+                    element = focused
+                    snapshot.hasElement = true
+                    snapshot.fieldValue = Self.readStringAttribute(focused, kAXValueAttribute as String)
+                    snapshot.rangeRestored = false
+                    snapshot.liveSelectedText = Self.readAXSelectedText()?.text
+                    directive = ReplaceDecision.first(snapshot)
+                    directive = restoreRangeIfRefused(
+                        &snapshot, element: element, range: last.selectedRange, directive: directive
+                    )
+                    continue
+                }
+                Self.log("replace refused \(reason)")
+                return reason.message
+            case .perform(let attempt):
+                Self.log("replace attempt \(Self.attemptName(attempt))")
+                directive = await perform(
+                    attempt, element: element, snapshot: &snapshot, range: last.selectedRange
                 )
-                Self.log("replace via restored range selectedText err=\(err.rawValue)")
-                if err == .success {
-                    return nil
-                }
-                // C) With range restored, try paste.
-                await pasteViaClipboard(newText)
-                if Self.verifyReplacement(element: element, original: last.text, newText: newText) {
-                    Self.log("replace via paste after range OK")
-                    return nil
-                }
-            }
-
-            // D) Try selectedText directly anyway.
-            let err = AXUIElementSetAttributeValue(
-                element,
-                kAXSelectedTextAttribute as CFString,
-                newText as CFTypeRef
-            )
-            Self.log("replace via selectedText direct err=\(err.rawValue)")
-            if err == .success, Self.verifyReplacement(element: element, original: last.text, newText: newText) {
-                return nil
             }
         }
+        Self.log("replace stopped after too many steps")
+        return ReplaceRefusal.unverified.message
+    }
 
-        // E) Live focused selection
-        if let live = Self.readAXSelectedText() {
+    private func restoreRangeIfRefused(
+        _ snapshot: inout ReplaceSnapshot,
+        element: AXUIElement?,
+        range: CFRange?,
+        directive: ReplaceDirective
+    ) -> ReplaceDirective {
+        guard case .failure(let reason) = directive, reason == .notWholeField || reason == .ambiguous else {
+            return directive
+        }
+        guard !snapshot.rangeRestored, let element, let range, Self.setSelectedRange(element, range) else {
+            return directive
+        }
+        snapshot.rangeRestored = true
+        return ReplaceDecision.first(snapshot)
+    }
+
+    private func perform(
+        _ attempt: ReplaceAttempt,
+        element: AXUIElement?,
+        snapshot: inout ReplaceSnapshot,
+        range: CFRange?
+    ) async -> ReplaceDirective {
+        switch attempt {
+        case .setFieldValue(let updated):
+            guard let element else { return ReplaceDecision.afterAXWriteFailed(attempt, snapshot) }
             let err = AXUIElementSetAttributeValue(
-                live.element,
-                kAXSelectedTextAttribute as CFString,
-                newText as CFTypeRef
+                element, kAXValueAttribute as CFString, updated as CFTypeRef
             )
-            Self.log("replace via live selection err=\(err.rawValue)")
+            let after = Self.readStringAttribute(element, kAXValueAttribute as String)
+            Self.log("replace AXValue err=\(err.rawValue)")
             if err == .success {
-                return nil
+                return ReplaceDecision.afterAXWriteSucceeded(fieldAfter: after, newText: snapshot.newText)
             }
-            await pasteViaClipboard(newText)
-            return nil
+            if !snapshot.rangeRestored, let range, Self.setSelectedRange(element, range) {
+                snapshot.rangeRestored = true
+            }
+            return ReplaceDecision.afterAXWriteFailed(attempt, snapshot)
+        case .setSelectedText:
+            guard let element else { return ReplaceDecision.afterAXWriteFailed(attempt, snapshot) }
+            let err = AXUIElementSetAttributeValue(
+                element, kAXSelectedTextAttribute as CFString, snapshot.newText as CFTypeRef
+            )
+            let after = Self.readStringAttribute(element, kAXValueAttribute as String)
+            Self.log("replace selectedText err=\(err.rawValue)")
+            if err == .success {
+                return ReplaceDecision.afterAXWriteSucceeded(fieldAfter: after, newText: snapshot.newText)
+            }
+            return ReplaceDecision.afterAXWriteFailed(attempt, snapshot)
+        case .pasteIntoRestoredSelection:
+            await pasteViaClipboard(snapshot.newText)
+            let after = element.flatMap { Self.readStringAttribute($0, kAXValueAttribute as String) }
+            return ReplaceDecision.afterPaste(fieldAfter: after, newText: snapshot.newText)
+        case .selectAllAndPaste:
+            guard let field = snapshot.fieldValue,
+                  ReplaceDecision.allowsSelectAll(field: field, original: snapshot.original) else {
+                return .failure(.notWholeField)
+            }
+            Self.log("replace select-all: field equals original")
+            Self.postHotkey(keyCode: 0, to: lastCapture?.sourceAppPID)
+            try? await Task.sleep(for: .milliseconds(80))
+            await pasteViaClipboard(snapshot.newText)
+            let after = element.flatMap { Self.readStringAttribute($0, kAXValueAttribute as String) }
+            return ReplaceDecision.afterPaste(fieldAfter: after, newText: snapshot.newText)
         }
-
-        // F) Re-resolve focused element in the source app (AX refs go stale after focus hops).
-        if let focused = Self.focusedElement() {
-            if let range = last.selectedRange, Self.setSelectedRange(focused, range) {
-                Self.log("replace F: restored snippet range on focused element")
-                await pasteViaClipboard(newText)
-                if Self.verifyReplacement(element: focused, original: last.text, newText: newText) {
-                    Self.log("replace F paste after range OK")
-                    return nil
-                }
-            }
-            // Whole-field case (⌥⌘K on a short composer): select all then paste.
-            if let full = Self.readStringAttribute(focused, kAXValueAttribute as String),
-               full == last.text || full.trimmingCharacters(in: .whitespacesAndNewlines) == last.text.trimmingCharacters(in: .whitespacesAndNewlines) {
-                Self.log("replace F: field equals original — Cmd+A then paste")
-                Self.postHotkey(keyCode: 0, to: last.sourceAppPID) // A
-                try? await Task.sleep(for: .milliseconds(80))
-                await pasteViaClipboard(newText)
-                if Self.verifyReplacement(element: focused, original: last.text, newText: newText) {
-                    return nil
-                }
-                // Web views often cannot verify via AXValue — assume paste landed.
-                return nil
-            }
-            // Last ditch: paste at current caret (better than failing silently after beep).
-            Self.log("replace F: caret paste fallback")
-            await pasteViaClipboard(newText)
-            return nil
-        }
-
-        // G) No AX focus (common in browsers after focus hop). App should be frontmost now —
-        // for single-field chat composers, Select All + Paste is the reliable writeback.
-        Self.log("replace G: no focused AX — Cmd+A then paste fallback")
-        Self.postHotkey(keyCode: 0, to: last.sourceAppPID) // A
-        try? await Task.sleep(for: .milliseconds(100))
-        await pasteViaClipboard(newText)
-        return nil
     }
 
             private func activateSourceAppIfNeeded() async {
@@ -324,6 +358,29 @@ final class TextCaptureService {
 
     private static func frontmostPID() -> pid_t? {
         NSWorkspace.shared.frontmostApplication?.processIdentifier
+    }
+
+    private static func isSourceFrontmost(_ pid: pid_t?) -> Bool {
+        guard let pid,
+              let app = NSRunningApplication(processIdentifier: pid),
+              !app.isTerminated,
+              app.processIdentifier != NSRunningApplication.current.processIdentifier
+        else { return false }
+        return NSWorkspace.shared.frontmostApplication?.processIdentifier == pid
+    }
+
+    private static func sameElement(_ lhs: AXUIElement, _ rhs: AXUIElement?) -> Bool {
+        guard let rhs else { return false }
+        return CFEqual(lhs, rhs)
+    }
+
+    private static func attemptName(_ attempt: ReplaceAttempt) -> String {
+        switch attempt {
+        case .setFieldValue: "setFieldValue"
+        case .setSelectedText: "setSelectedText"
+        case .pasteIntoRestoredSelection: "pasteIntoRestoredSelection"
+        case .selectAllAndPaste: "selectAllAndPaste"
+        }
     }
 
     private static func focusedElement() -> AXUIElement? {
@@ -390,38 +447,6 @@ final class TextCaptureService {
             axRange
         )
         return err == .success
-    }
-
-    /// Replace `original` inside the element's full string value.
-    private static func replaceInValue(element: AXUIElement, original: String, newText: String) -> Bool {
-        var ref: AnyObject?
-        let err = AXUIElementCopyAttributeValue(element, kAXValueAttribute as CFString, &ref)
-        guard err == .success, let full = ref as? String, !full.isEmpty else {
-            log("AXValue unavailable")
-            return false
-        }
-        guard let range = full.range(of: original) else {
-            log("AXValue does not contain original snippet")
-            return false
-        }
-        let updated = full.replacingCharacters(in: range, with: newText)
-        let setErr = AXUIElementSetAttributeValue(
-            element,
-            kAXValueAttribute as CFString,
-            updated as CFTypeRef
-        )
-        log("AXValue set err=\(setErr.rawValue)")
-        return setErr == .success
-    }
-
-    private static func verifyReplacement(element: AXUIElement, original: String, newText: String) -> Bool {
-        var ref: AnyObject?
-        if AXUIElementCopyAttributeValue(element, kAXValueAttribute as CFString, &ref) == .success,
-           let full = ref as? String {
-            if full.contains(newText) { return true }
-            if !full.contains(original) { return true } // original gone — likely replaced
-        }
-        return false
     }
 
     /// Screen rect (AppKit / bottom-left) used to park the check chip.

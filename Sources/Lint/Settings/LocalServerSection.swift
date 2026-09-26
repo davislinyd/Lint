@@ -299,12 +299,9 @@ struct LocalServerSection: View {
                         }
                         .disabled(!canStart)
                     }
-                    Button {
+                    Button("重新檢查") {
                         Task { await refreshNow() }
-                    } label: {
-                        Image(systemName: "arrow.clockwise")
                     }
-                    .help("重新檢查")
                 }
                 .disabled(localServerBusy)
             } label: {

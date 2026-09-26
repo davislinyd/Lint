@@ -326,13 +326,13 @@
         </article>
         <article>
           <h3><span class="en">Careful English editing</span><span class="zh">細心的英文潤飾</span></h3>
-          <p class="en"><strong>Proofread &amp; polish</strong> fixes grammar, wrong words and spelling, and tries to keep correct wording, names, numbers and your layout as they are. Pick a tone (Preserve Tone, Formal, Concise or Professional), use <strong>Translate to Chinese</strong> to read English text, or write a <strong>Custom prompt</strong>.</p>
-          <p class="zh"><strong>「文法校對與潤飾」</strong>修正文法、用錯的字與拼字，並盡量保留正確的用字、人名、數字與版面。可以選語氣（保留原語氣、正式、簡潔或專業），用<strong>「翻譯成中文」</strong>讀懂英文，或寫<strong>「自訂 Prompt」</strong>。</p>
+          <p class="en"><strong>Proofread &amp; polish</strong> fixes grammar, wrong words and spelling, and tries to keep correct wording, names, numbers and your layout as they are. Pick a tone (Preserve Tone, Formal, Concise or Professional), use <strong>Translate</strong> to read English text in the translation language you choose (Traditional Chinese by default), or write a <strong>Custom prompt</strong>.</p>
+          <p class="zh"><strong>「文法校對與潤飾」</strong>修正文法、用錯的字與拼字，並盡量保留正確的用字、人名、數字與版面。可以選語氣（保留原語氣、正式、簡潔或專業），用<strong>「翻譯」</strong>把英文翻成你選的翻譯語言來閱讀（預設繁體中文），或寫<strong>「自訂 Prompt」</strong>。</p>
         </article>
         <article>
           <h3><span class="en">Your text stays on your Mac</span><span class="zh">文字留在你的 Mac 上</span></h3>
-          <p class="en">Lint's local AI (a bundled llama.cpp running Gemma 4 E4B) and Apple Intelligence both run on the device; the network is only used to download the model. If you prefer, point Lint at Ollama or LM Studio, or at OpenAI, Anthropic or Google Gemini with your own API key, kept in the Keychain.</p>
-          <p class="zh">Lint 的本機 AI（內建 llama.cpp 執行 Gemma 4 E4B）和 Apple Intelligence 都在這台 Mac 上執行，只有下載模型時需要網路。也可以改接 Ollama、LM Studio，或用你自己的 API Key 連 OpenAI、Anthropic、Google Gemini，Key 存在鑰匙圈。</p>
+          <p class="en">Lint's local AI (a bundled llama.cpp running Gemma 4 E4B) and Apple Intelligence both run on the device; the network is only used to download the model and to check GitHub for Lint updates. If you prefer, point Lint at an OpenAI-compatible endpoint such as Ollama or LM Studio; an API key, if it needs one, is kept in the Keychain.</p>
+          <p class="zh">Lint 的本機 AI（內建 llama.cpp 執行 Gemma 4 E4B）和 Apple Intelligence 都在這台 Mac 上執行，只有下載模型和到 GitHub 檢查 Lint 更新時需要網路。也可以改接 Ollama、LM Studio 等 OpenAI 相容端點；需要 API Key 的話，Key 存在鑰匙圈。</p>
         </article>
         <article>
           <h3><span class="en">Memory and dreaming (optional)</span><span class="zh">記憶與作夢（選用）</span></h3>
@@ -341,8 +341,8 @@
         </article>
         <article>
           <h3><span class="en">Made to fit you</span><span class="zh">依你的習慣調整</span></h3>
-          <p class="en">Change both shortcuts, switch the interface between English and 繁體中文, and edit the instructions for each mode and tone.</p>
-          <p class="zh">兩組快捷鍵都能更改，介面可以在 English 與繁體中文之間切換，每個模式與語氣的指示也都能修改。</p>
+          <p class="en">Change both shortcuts, switch the interface to one of nine languages, and edit the instructions for each mode and tone.</p>
+          <p class="zh">兩組快捷鍵都能更改，介面可以切換成九種語言之一，每個模式與語氣的指示也都能修改。</p>
         </article>
       </div>
     </section>
@@ -496,8 +496,8 @@
     <!-- ============================================================ -->
     <section class="part" id="use">
       <h2><span class="en">Use Lint</span><span class="zh">開始使用</span></h2>
-      <p class="part-lead en">Lint works in any app where you can select text: Mail, Notes, browsers, Slack and more. It edits English; <strong>Translate to Chinese</strong> helps you read English text in Chinese.</p>
-      <p class="part-lead zh">只要能選取文字的 App 都能用 Lint：郵件、備忘錄、瀏覽器、Slack 等。Lint 修改英文；<strong>「翻譯成中文」</strong>則幫你用中文讀懂英文。</p>
+      <p class="part-lead en">Lint works in any app where you can select text: Mail, Notes, browsers, Slack and more. It edits English; <strong>Translate</strong> helps you read English text in the translation language you choose.</p>
+      <p class="part-lead zh">只要能選取文字的 App 都能用 Lint：郵件、備忘錄、瀏覽器、Slack 等。Lint 修改英文；<strong>「翻譯」</strong>則把英文翻成你選的翻譯語言，幫你讀懂。</p>
 
       <article class="step">
         <div class="step-head"><span class="step-num">7</span><h3><span class="en">Quick check: <span class="kbd-inline">⌥⌘K</span></span><span class="zh">快速檢查：<span class="kbd-inline">⌥⌘K</span></span></h3></div>
@@ -517,12 +517,12 @@
         <p class="en">Select text and press <span class="kbd-inline">⌥⌘L</span>. The full panel shows your original on the left (you can edit it) and the result on the right, with the changes marked.</p>
         <p class="zh">選取文字後按 <span class="kbd-inline">⌥⌘L</span>。全面板左邊是原文（可以直接修改），右邊是標出修改處的結果。</p>
         <ul class="en">
-          <li><strong>Mode</strong>: Proofread &amp; polish, Translate to Chinese, or Custom prompt.</li>
+          <li><strong>Mode</strong>: Proofread &amp; polish, Translate, or Custom prompt.</li>
           <li><strong>Tone</strong>: Preserve Tone, Formal, Concise or Professional.</li>
           <li><strong>Replace Original</strong> <span class="kbd-inline">⌘⏎</span>, <strong>Copy</strong> <span class="kbd-inline">⌥⌘C</span>, <strong>Retry</strong> <span class="kbd-inline">⌥⌘⏎</span>. Tick <strong>Edit</strong> to change the result before you use it.</li>
         </ul>
         <ul class="zh">
-          <li><strong>模式</strong>：文法校對與潤飾、翻譯成中文，或自訂 Prompt。</li>
+          <li><strong>模式</strong>：文法校對與潤飾、翻譯，或自訂 Prompt。</li>
           <li><strong>語氣</strong>：保留原語氣、正式、簡潔或專業。</li>
           <li><strong>覆蓋取代</strong> <span class="kbd-inline">⌘⏎</span>、<strong>複製</strong> <span class="kbd-inline">⌥⌘C</span>、<strong>重試</strong> <span class="kbd-inline">⌥⌘⏎</span>。勾選<strong>「編輯」</strong>可以先修改結果再使用。</li>
         </ul>
@@ -532,16 +532,16 @@
           <figcaption><span class="en"><span class="kbd-inline">⌥⌘L</span>: the changes are marked in the result.</span><span class="zh"><span class="kbd-inline">⌥⌘L</span>：結果裡會標出修改處。</span></figcaption>
         </figure>
         <figure>
-          <a class="shot en" href="assets/guide/en/panel-translate.png" target="_blank" rel="noopener"><img src="assets/guide/en/panel-translate.png" alt="The full panel in Translate to Chinese mode" width="872" height="600" loading="lazy"></a>
-          <a class="shot zh" href="assets/guide/zh/panel-translate.png" target="_blank" rel="noopener"><img src="assets/guide/zh/panel-translate.png" alt="全面板的「翻譯成中文」模式" width="872" height="600" loading="lazy"></a>
-          <figcaption><span class="en">Translate to Chinese, to help you read English text.</span><span class="zh">翻譯成中文，幫你讀懂英文。</span></figcaption>
+          <a class="shot en" href="assets/guide/en/panel-translate.png" target="_blank" rel="noopener"><img src="assets/guide/en/panel-translate.png" alt="The full panel in Translate mode" width="872" height="600" loading="lazy"></a>
+          <a class="shot zh" href="assets/guide/zh/panel-translate.png" target="_blank" rel="noopener"><img src="assets/guide/zh/panel-translate.png" alt="全面板的「翻譯」模式" width="872" height="600" loading="lazy"></a>
+          <figcaption><span class="en">Translate, here into Traditional Chinese, to help you read English text.</span><span class="zh">「翻譯」模式，這裡翻成繁體中文，幫你讀懂英文。</span></figcaption>
         </figure>
       </article>
 
       <article class="step">
         <div class="step-head"><span class="step-num">9</span><h3><span class="en">The menu bar menu</span><span class="zh">選單列選單</span></h3></div>
-        <p class="en">Click the pencil icon for <strong>Improve Selected Text</strong>, the <strong>Mode</strong> and <strong>Tone</strong>, whether Accessibility is on, <strong>Settings…</strong> and <strong>Quit Lint</strong>.</p>
-        <p class="zh">點選單列的鉛筆圖示，可以使用<strong>「改善選取文字」</strong>、切換<strong>「模式」</strong>與<strong>「語氣」</strong>、查看輔助功能是否已開啟，以及<strong>「設定…」</strong>與<strong>「結束 Lint」</strong>。</p>
+        <p class="en">Click the pencil icon for <strong>Improve Selected Text</strong>, the <strong>Mode</strong> and <strong>Tone</strong>, whether Accessibility is on, <strong>Set Up Local AI…</strong> (until the local AI is set up), <strong>Check for Updates…</strong>, the version, <strong>Settings…</strong> and <strong>Quit Lint</strong>. When a newer release is found, the menu also offers to download and install it.</p>
+        <p class="zh">點選單列的鉛筆圖示，可以使用<strong>「改善選取文字」</strong>、切換<strong>「模式」</strong>與<strong>「語氣」</strong>、查看輔助功能是否已開啟、<strong>「設定本機 AI…」</strong>（本機 AI 設定好之前才有）、<strong>「檢查更新…」</strong>、版本號，以及<strong>「設定…」</strong>與<strong>「結束 Lint」</strong>。找到較新的正式版時，選單也會提供下載並安裝。</p>
         <figure>
           <a class="shot en" href="assets/guide/en/menu.png" target="_blank" rel="noopener"><img src="assets/guide/en/menu.png" alt="The Lint menu in the menu bar" width="294" height="246" loading="lazy"></a>
           <a class="shot zh" href="assets/guide/zh/menu.png" target="_blank" rel="noopener"><img src="assets/guide/zh/menu.png" alt="選單列中的 Lint 選單" width="249" height="246" loading="lazy"></a>
@@ -558,8 +558,8 @@
 
       <article class="step">
         <div class="step-head"><span class="step-num">10</span><h3><span class="en">General</span><span class="zh">一般</span></h3></div>
-        <p class="en">Accessibility status, <strong>Check Behavior</strong> (the Check button, watching while you type, the “Ready” chip), <strong>Shortcuts</strong> (change <span class="kbd-inline">⌥⌘L</span> and <span class="kbd-inline">⌥⌘K</span>) and the <strong>Interface language</strong> (English or 繁體中文, after a restart).</p>
-        <p class="zh">輔助功能狀態、<strong>「檢查行為」</strong>（「檢查」按鈕、打字時即時監看、「已就緒」浮標）、<strong>「快捷鍵」</strong>（可更改 <span class="kbd-inline">⌥⌘L</span> 與 <span class="kbd-inline">⌥⌘K</span>）與<strong>「介面語言」</strong>（English 或繁體中文，重新啟動後套用）。</p>
+        <p class="en">Accessibility status, <strong>Check Behavior</strong> (the Check button, watching while you type, the “Ready” chip), <strong>Shortcuts</strong> (change <span class="kbd-inline">⌥⌘L</span> and <span class="kbd-inline">⌥⌘K</span>), <strong>Language</strong> (the interface language, one of nine or the system's, after a restart; and the translation language, Traditional Chinese by default) and <strong>Updates</strong> (ask before installing, install automatically or only check, every launch, day, week or month).</p>
+        <p class="zh">輔助功能狀態、<strong>「檢查行為」</strong>（「檢查」按鈕、打字時即時監看、「已就緒」浮標）、<strong>「快捷鍵」</strong>（可更改 <span class="kbd-inline">⌥⌘L</span> 與 <span class="kbd-inline">⌥⌘K</span>）、<strong>「語言」</strong>（介面語言可選九種語言或跟隨系統，重新啟動後套用；翻譯語言預設繁體中文），以及<strong>「更新」</strong>（手動更新、自動更新或只檢查；每次啟動、每天、每週或每月）。</p>
         <figure>
           <a class="shot en" href="assets/guide/en/settings-general.png" target="_blank" rel="noopener"><img src="assets/guide/en/settings-general.png" alt="Settings, General pane" width="872" height="700" loading="lazy"></a>
           <a class="shot zh" href="assets/guide/zh/settings-general.png" target="_blank" rel="noopener"><img src="assets/guide/zh/settings-general.png" alt="設定的「一般」頁" width="872" height="700" loading="lazy"></a>
@@ -569,8 +569,8 @@
 
       <article class="step">
         <div class="step-head"><span class="step-num">11</span><h3><span class="en">Model</span><span class="zh">模型</span></h3></div>
-        <p class="en">Under <strong>Model Source</strong>, pick where suggestions come from: Automatic, Apple Intelligence, Local llama.cpp (managed by Lint), an OpenAI-compatible endpoint (Ollama, LM Studio), or OpenAI, Anthropic or Google Gemini with your own API key, which is kept in the Keychain. For the local AI you can pick the model (Gemma 4 E4B is recommended; Qwen3 4B and Gemma 4 12B are optional), start or stop the server, and remove a model.</p>
-        <p class="zh">在<strong>「模型來源」</strong>選擇建議的來源：自動、Apple Intelligence、本機 llama.cpp（由 Lint 管理）、OpenAI 相容端點（Ollama、LM Studio），或用你自己的 API Key 連 OpenAI、Anthropic、Google Gemini（Key 存在鑰匙圈）。使用本機 AI 時，可以選模型（建議 Gemma 4 E4B，也可以改用 Qwen3 4B 或 Gemma 4 12B）、啟動或停止服務，以及移除模型。</p>
+        <p class="en">Under <strong>Model Source</strong>, pick where suggestions come from: Automatic, Apple Intelligence, Local llama.cpp (managed by Lint), or an OpenAI-compatible endpoint (Ollama, LM Studio); an API key, if the endpoint needs one, is kept in the Keychain. OpenAI, Anthropic and Google Gemini are listed but greyed out until they have been tested. For the local AI you can pick the model (Gemma 4 E4B is recommended; Qwen3 4B and Gemma 4 12B are optional), start or stop the server, and remove a model.</p>
+        <p class="zh">在<strong>「模型來源」</strong>選擇建議的來源：自動、Apple Intelligence、本機 llama.cpp（由 Lint 管理），或 OpenAI 相容端點（Ollama、LM Studio）；端點需要 API Key 的話，Key 存在鑰匙圈。OpenAI、Anthropic、Google Gemini 會列出，但在測試過之前是灰色、不能選。使用本機 AI 時，可以選模型（建議 Gemma 4 E4B，也可以改用 Qwen3 4B 或 Gemma 4 12B）、啟動或停止服務，以及移除模型。</p>
         <figure>
           <a class="shot en" href="assets/guide/en/settings-model.png" target="_blank" rel="noopener"><img src="assets/guide/en/settings-model.png" alt="Settings, Model pane" width="872" height="700" loading="lazy"></a>
           <a class="shot zh" href="assets/guide/zh/settings-model.png" target="_blank" rel="noopener"><img src="assets/guide/zh/settings-model.png" alt="設定的「模型」頁" width="872" height="700" loading="lazy"></a>
@@ -667,6 +667,16 @@
           <p class="zh">檢查「設定 → 一般 → 輔助功能」。更新後 macOS 可能把 Lint 當成新的 App：到「系統設定 → 隱私權與安全性 → 輔助功能」刪除舊的 Lint 項目，按 ＋ 重新加入 /Applications/Lint.app。</p>
         </article>
         <article>
+          <h3><span class="en">Replace says “Nothing was written.”</span><span class="zh">取代時顯示「沒有寫入。」</span></h3>
+          <p class="en">Lint only writes over the exact text it checked. If that text has changed, moved or is no longer selected, Lint leaves the field as it is. Select the text again and check it once more.</p>
+          <p class="zh">Lint 只會寫在它檢查過的那段原文上。原文如果改過、移動了，或已經不在選取範圍內，Lint 就不動輸入框。重新選取文字，再檢查一次。</p>
+        </article>
+        <article>
+          <h3><span class="en">Replace says it could not confirm the text was written</span><span class="zh">取代時顯示「無法確認已寫入」</span></h3>
+          <p class="en">The field could be read before the replace but did not show the new text afterwards. Look at the field, and undo with ⌘Z if it is wrong.</p>
+          <p class="zh">取代前讀得到輸入框，取代後卻看不到新文字。請看一下輸入框，不對的話按 ⌘Z 還原。</p>
+        </article>
+        <article>
           <h3><span class="en">macOS asks to let Lint control “System Events”</span><span class="zh">macOS 詢問是否允許 Lint 控制「系統事件」</span></h3>
           <p class="en">Allow it. Lint only uses it to bring your previous app back to the front before it replaces text, which makes Replace reliable in browsers and Electron apps.</p>
           <p class="zh">請允許。Lint 只用它在取代文字前，把你原本使用的 App 帶回最前面，這樣在瀏覽器與 Electron App 裡取代才穩定。</p>
@@ -690,6 +700,11 @@
           <h3><span class="en">Not enough disk space</span><span class="zh">磁碟空間不足</span></h3>
           <p class="en">Before downloading, Lint checks for about 1.2 times what is still missing and tells you how much it needs and how much your Mac has.</p>
           <p class="zh">下載前，Lint 會檢查是否有「還缺的部分 ×1.2」的空間，並告訴你需要多少、這台 Mac 有多少。</p>
+        </article>
+        <article>
+          <h3><span class="en">A new version is found but not installed</span><span class="zh">找到新版卻沒有安裝</span></h3>
+          <p class="en">With <strong>Ask before installing</strong> (the default), choose <strong>Download and Install</strong> in Settings → General → Updates or in the menu bar menu. Lint only replaces a copy in /Applications or ~/Applications that is signed with Lint's Developer ID; otherwise it offers <strong>Open Release Page</strong>, where you can download the DMG yourself.</p>
+          <p class="zh">在<strong>「手動更新」</strong>（預設）下，到「設定 → 一般 → 更新」或選單列選單按<strong>「下載並安裝」</strong>。Lint 只會取代放在 /Applications 或 ~/Applications、並以 Lint 的 Developer ID 簽署的那一份；其他情況會提供<strong>「打開釋出頁面」</strong>，讓你自己下載 DMG。</p>
         </article>
       </div>
     </section>

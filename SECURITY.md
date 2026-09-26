@@ -23,3 +23,9 @@ Lint 用輔助功能讀取你正在使用的 App 裡的文字。預設設定下�
 - `⌥⌘K` 會讀焦點欄位，檢查其中的選取或游標所在的段落。欄位讀不到文字時，會全選並複製整個欄位。`⌥⌘L` 讀取選取範圍，輔助功能讀不到時用 ⌘C 複製。
 
 兩種背景監看都可以在「設定 → 一般」關閉，快捷鍵照常可用。安全輸入框會略過。密碼管理器（1Password、Bitwarden、KeePassXC）以及系統的「密碼」與「鑰匙圈存取」不會被讀取。開在瀏覽器裡的網頁銀行不在這份名單上。被檢查的文字，包含在背景準備的，會送到你選的模型。本機模型讓文字留在這台 Mac；在其他地方執行的模型會收到這些文字。
+
+## Update checks
+
+Lint asks the GitHub API for the latest release, every week by default or when you choose **Check for Updates…**; none of your text is sent. An update is installed only if the downloaded DMG matches the published SHA-256 and the app inside it is Lint (`app.lint.assistant`) signed with Lint's Developer ID (team `N964GDJY6A`) and Hardened Runtime. Settings → General → Updates can be set to only check.
+
+Lint 會向 GitHub API 查詢最新的正式版，預設每週一次，或在你按「檢查更新…」時查詢，不會送出你的任何文字。只有在下載的 DMG 符合公布的 SHA-256，而且裡面的 App 是以 Lint 的 Developer ID（team `N964GDJY6A`）簽署、啟用 Hardened Runtime 的 Lint（`app.lint.assistant`）時，才會安裝更新。「設定 → 一般 → 更新」可以設成只檢查。

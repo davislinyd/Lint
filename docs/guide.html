@@ -13,36 +13,12 @@
 <meta property="og:url" content="https://davislinyd.github.io/Lint/guide.html">
 <meta property="og:image" content="https://davislinyd.github.io/Lint/assets/icon.png">
 <link rel="icon" type="image/png" href="assets/favicon.png">
+<link rel="stylesheet" href="assets/site.css">
 <style>
-  :root {
-    --bg: #0b0a1a;
-    --bg-elev: rgba(255,255,255,0.045);
-    --border: rgba(255,255,255,0.10);
-    --text: #f5f3ff;
-    --text-dim: #b7b2d6;
-    --indigo: #241c58;
-    --violet: #7c3aed;
-    --violet-light: #a78bfa;
-    --violet-glow: #8b5cf6;
-    --green: #86efac;
-    --amber: #fcd34d;
-    --radius: 16px;
-    --maxw: 880px;
-  }
-
-  * { box-sizing: border-box; }
-  html, body { margin: 0; padding: 0; }
-  html { scroll-padding-top: 76px; }
-  body {
-    background: var(--bg);
-    color: var(--text);
-    font-family: -apple-system, BlinkMacSystemFont, "PingFang TC", "Segoe UI", "Microsoft JhengHei", Helvetica, Arial, sans-serif;
-    line-height: 1.6;
-    -webkit-font-smoothing: antialiased;
-  }
-  img { max-width: 100%; height: auto; display: block; }
+  /* Guide page */
+  :root { --maxw: 880px; }
+  body { line-height: 1.6; }
   a { color: var(--violet-light); }
-  h1, h2, h3, p { margin: 0; }
   code {
     font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
     font-size: 0.9em;
@@ -51,176 +27,38 @@
     border-radius: 6px;
     overflow-wrap: anywhere;
   }
+  .wrap { padding: 0 20px; }
 
-  .wrap { max-width: var(--maxw); margin: 0 auto; padding: 0 20px; }
-
-  /* language toggle: pure CSS, same as the landing page */
-  .zh { display: none !important; }
-  body:has(#lang-toggle:checked) .en { display: none !important; }
-  body:has(#lang-toggle:checked) span.zh { display: inline !important; }
-  body:has(#lang-toggle:checked) p.zh,
-  body:has(#lang-toggle:checked) div.zh,
-  body:has(#lang-toggle:checked) ul.zh,
-  body:has(#lang-toggle:checked) ol.zh,
-  body:has(#lang-toggle:checked) a.shot.zh,
-  body:has(#lang-toggle:checked) h1.zh,
-  body:has(#lang-toggle:checked) h2.zh,
-  body:has(#lang-toggle:checked) h3.zh { display: block !important; }
-
-  a:focus-visible, button:focus-visible {
-    outline: 2px solid var(--violet-light);
-    outline-offset: 3px;
-    border-radius: 4px;
-  }
-
-  /* Top bar (as on the landing page) */
-  .topbar {
-    position: sticky;
-    top: 0;
-    z-index: 10;
-    background: rgba(11,10,26,0.8);
-    backdrop-filter: blur(10px);
-    border-bottom: 1px solid var(--border);
-  }
-  .topbar-inner { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; gap: 16px; }
-  .brand { display: flex; align-items: center; gap: 10px; text-decoration: none; color: var(--text); }
-  .brand-mark { width: 28px; height: 28px; border-radius: 8px; }
-  .brand-name { font-weight: 700; font-size: 16px; letter-spacing: 0.2px; }
-  .topnav { display: flex; align-items: center; gap: 18px; }
-
-  .lang-toggle { position: absolute; opacity: 0; width: 1px; height: 1px; }
-  .lang-switch {
-    position: relative;
-    display: inline-flex;
-    align-items: center;
-    justify-content: space-between;
-    width: 62px;
-    height: 30px;
-    padding: 0 3px;
-    background: rgba(255,255,255,0.08);
-    border: 1px solid var(--border);
-    border-radius: 999px;
-    cursor: pointer;
-    user-select: none;
-  }
-  .lang-switch::before {
-    content: "";
-    position: absolute;
-    top: 2px;
-    left: 2px;
-    width: 27px;
-    height: 24px;
-    border-radius: 999px;
-    background: var(--violet-glow);
-    transition: transform 0.2s ease;
-  }
-  body:has(#lang-toggle:checked) .lang-switch::before { transform: translateX(29px); }
-  .lang-switch span { position: relative; z-index: 1; width: 27px; text-align: center; font-size: 11px; font-weight: 700; color: var(--text); }
-  .lang-toggle:focus-visible + .lang-switch { outline: 2px solid var(--violet-light); outline-offset: 3px; }
-
-  .nav-link { display: flex; align-items: center; gap: 6px; text-decoration: none; color: var(--text-dim); font-size: 14px; }
-  .nav-link:hover { color: var(--text); }
-
-  .btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    padding: 12px 22px;
-    border-radius: 12px;
-    font-weight: 600;
-    font-size: 15px;
-    text-decoration: none;
-    transition: transform 0.15s ease, background 0.15s ease;
-    white-space: nowrap;
-  }
-  .btn-primary { background: var(--violet); color: #fff; }
-  .btn-primary:hover { background: #6d28d9; transform: translateY(-1px); }
-  .btn-small { padding: 8px 16px; font-size: 13px; border-radius: 10px; }
-
-  .kbd-inline {
-    display: inline-block;
-    padding: 1px 7px;
-    border-radius: 6px;
-    background: rgba(255,255,255,0.1);
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    font-size: 0.92em;
-    white-space: nowrap;
-  }
-
-  /* Hero */
-  .hero {
-    background: linear-gradient(180deg, var(--indigo) 0%, var(--bg) 100%);
-    text-align: center;
-    padding: 64px 0 40px;
-  }
+  .hero { background: linear-gradient(180deg, var(--indigo) 0%, var(--bg) 100%); text-align: center; padding: 64px 0 40px; }
   .hero-icon { width: 72px; height: 72px; border-radius: 18px; margin: 0 auto 22px; box-shadow: 0 20px 50px -18px rgba(139,92,246,0.65); }
   .hero h1 { font-size: clamp(30px, 6vw, 44px); font-weight: 800; letter-spacing: -0.02em; margin-bottom: 12px; }
   .hero-sub { font-size: 16px; color: var(--text-dim); max-width: 600px; margin: 0 auto; }
   .chips { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 22px; padding: 0; list-style: none; }
   .chips li { padding: 5px 13px; border-radius: 999px; background: rgba(255,255,255,0.06); border: 1px solid var(--border); font-size: 13px; color: var(--text-dim); }
 
-  /* Contents */
   .toc { margin: 8px 0 0; }
   .toc ol { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; padding: 0; list-style: none; counter-reset: part; }
   .toc li { counter-increment: part; }
-  .toc a {
-    display: flex;
-    gap: 10px;
-    align-items: baseline;
-    padding: 12px 14px;
-    border-radius: 12px;
-    background: var(--bg-elev);
-    border: 1px solid var(--border);
-    color: var(--text);
-    text-decoration: none;
-    font-size: 14.5px;
-  }
+  .toc a { display: flex; gap: 10px; align-items: baseline; padding: 12px 14px; border-radius: 12px; background: var(--bg-elev); border: 1px solid var(--border); color: var(--text); text-decoration: none; font-size: 14.5px; }
   .toc a::before { content: counter(part); color: var(--violet-light); font-weight: 700; }
   .toc a:hover { border-color: var(--violet-light); }
 
-  /* Parts and steps */
   .part { padding: 56px 0 8px; }
   .part > h2 { font-size: clamp(24px, 4vw, 30px); font-weight: 800; letter-spacing: -0.01em; margin-bottom: 8px; }
   .part-lead { color: var(--text-dim); font-size: 15.5px; }
 
   .step { margin-top: 26px; background: var(--bg-elev); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px; }
   .step-head { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
-  .step-num {
-    flex: none;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 32px;
-    height: 32px;
-    border-radius: 50%;
-    background: var(--violet);
-    color: #fff;
-    font-weight: 700;
-    font-size: 14px;
-  }
+  .step-num { flex: none; display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 50%; background: var(--violet); color: #fff; font-weight: 700; font-size: 14px; }
   .step h3 { font-size: 19px; font-weight: 700; }
   .step p { margin-top: 10px; font-size: 15.5px; }
   .step ul, .step ol { margin: 10px 0 0; padding-left: 22px; font-size: 15.5px; }
   .step li { margin-top: 6px; }
   .check { color: var(--green); }
   .check::before { content: "✓ "; font-weight: 700; }
-  .note {
-    margin-top: 14px;
-    padding: 12px 14px;
-    border-radius: 12px;
-    background: rgba(252,211,77,0.07);
-    border: 1px solid rgba(252,211,77,0.25);
-    font-size: 14.5px;
-    color: var(--text-dim);
-  }
+  .note { margin-top: 14px; padding: 12px 14px; border-radius: 12px; background: rgba(252,211,77,0.07); border: 1px solid rgba(252,211,77,0.25); font-size: 14.5px; color: var(--text-dim); }
   .note strong { color: var(--amber); }
   .step .note p { margin-top: 0; font-size: 14.5px; }
-
-  figure { margin: 18px 0 0; }
-  .shot { display: block; margin: 0 auto; width: fit-content; max-width: 100%; }
-  .shot img { border-radius: 10px; }
-  .shot.flat img { border: 1px solid var(--border); }
-  figcaption { margin-top: 8px; text-align: center; font-size: 13px; color: var(--text-dim); }
 
   .reqs { margin: 14px 0 0; padding-left: 22px; }
   .reqs li { margin-top: 6px; }
@@ -233,19 +71,11 @@
   .info-grid ul { margin: 6px 0 0; padding-left: 20px; color: var(--text-dim); font-size: 15px; }
   .info-grid li { margin-top: 5px; }
 
-  /* Footer (as on the landing page) */
-  .site-footer { border-top: 1px solid var(--border); padding: 30px 0; margin-top: 72px; }
-  .footer-inner { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
-  .footer-inner p { color: var(--text-dim); font-size: 13px; }
-  .footer-nav { display: flex; gap: 18px; }
-  .footer-nav a { color: var(--text-dim); text-decoration: none; font-size: 13px; }
-  .footer-nav a:hover { color: var(--text); }
+  .site-footer { margin-top: 72px; }
 
   @media (max-width: 560px) {
     .hero { padding: 48px 0 28px; }
     .step { padding: 18px 16px; }
-    .nav-link span { display: none; }
-    .topnav { gap: 12px; }
   }
 </style>
 </head>
@@ -258,14 +88,18 @@
       <span class="brand-name">Lint</span>
     </a>
     <nav class="topnav">
+      <div class="page-links">
+        <a class="nav-link" href="index.html"><span class="en">Overview</span><span class="zh">總覽</span></a>
+        <a class="nav-link" href="guide.html" aria-current="page"><span class="en">Guide</span><span class="zh">使用教學</span></a>
+        <a class="nav-link github" href="https://github.com/davislinyd/Lint" target="_blank" rel="noopener noreferrer">
+          <svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
+          <span>GitHub</span>
+        </a>
+      </div>
       <input type="checkbox" id="lang-toggle" class="lang-toggle">
       <label for="lang-toggle" class="lang-switch" aria-label="Switch language / 切換語言">
         <span>EN</span><span>中</span>
       </label>
-      <a class="nav-link" href="https://github.com/davislinyd/Lint" target="_blank" rel="noopener noreferrer">
-        <svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
-        <span>GitHub</span>
-      </a>
       <a class="btn btn-primary btn-small" href="https://github.com/davislinyd/Lint/releases/latest" target="_blank" rel="noopener noreferrer">
         <span class="en">Download</span><span class="zh">下載</span>
       </a>
@@ -284,7 +118,7 @@
         <span class="zh">從下載到第一個建議，一步一步來。每一步都會告訴你，繼續之前應該看到什麼。</span>
       </p>
       <ul class="chips">
-        <li>Lint 0.3.4</li>
+        <li>Lint 0.5.3</li>
         <li>macOS 14+</li>
         <li>Apple Silicon</li>
       </ul>
@@ -368,16 +202,16 @@
 
       <article class="step">
         <div class="step-head"><span class="step-num">1</span><h3><span class="en">Download the DMG</span><span class="zh">下載 DMG</span></h3></div>
-        <p class="en">Open <a href="https://github.com/davislinyd/Lint/releases/latest" target="_blank" rel="noopener noreferrer">the latest release on GitHub</a> and click <code>Lint-0.3.4-macOS-arm64.dmg</code> under <strong>Assets</strong>. A newer release has a newer number in the name.</p>
-        <p class="zh">打開 <a href="https://github.com/davislinyd/Lint/releases/latest" target="_blank" rel="noopener noreferrer">GitHub 上的最新版本</a>，在 <strong>Assets</strong> 下點 <code>Lint-0.3.4-macOS-arm64.dmg</code>。之後的版本檔名裡的版本號會不同。</p>
+        <p class="en">Open <a href="https://github.com/davislinyd/Lint/releases/latest" target="_blank" rel="noopener noreferrer">the latest release on GitHub</a> and click <code>Lint-0.5.3-macOS-arm64.dmg</code> under <strong>Assets</strong>. A newer release has a newer number in the name.</p>
+        <p class="zh">打開 <a href="https://github.com/davislinyd/Lint/releases/latest" target="_blank" rel="noopener noreferrer">GitHub 上的最新版本</a>，在 <strong>Assets</strong> 下點 <code>Lint-0.5.3-macOS-arm64.dmg</code>。之後的版本檔名裡的版本號會不同。</p>
         <p class="check en">The DMG is in your Downloads folder.</p>
         <p class="check zh">「下載項目」資料夾裡有這個 DMG。</p>
         <figure>
-          <a class="shot flat" href="assets/guide/shared/github-release.png" target="_blank" rel="noopener"><img src="assets/guide/shared/github-release.png" alt="The Lint v0.3.4 release on GitHub with the DMG under Assets" width="1036" height="466" loading="lazy"></a>
+          <a class="shot flat" href="assets/guide/shared/github-release.png" target="_blank" rel="noopener"><img src="assets/guide/shared/github-release.png" alt="The Lint v0.5.3 release on GitHub with the DMG under Assets" width="1038" height="411" loading="lazy"></a>
           <figcaption><span class="en">Click the <code>.dmg</code> file under Assets.</span><span class="zh">在 Assets 下點 <code>.dmg</code> 檔。</span></figcaption>
         </figure>
-        <div class="note en"><p><strong>Optional:</strong> to check the download, also get <code>Lint-0.3.4-macOS-arm64.dmg.sha256</code>, then run <code>shasum -a 256 -c Lint-0.3.4-macOS-arm64.dmg.sha256</code> in Terminal, in the folder that holds both files. It prints <code>OK</code>.</p></div>
-        <div class="note zh"><p><strong>選用：</strong>想確認下載無誤，可以一併下載 <code>Lint-0.3.4-macOS-arm64.dmg.sha256</code>，在放著這兩個檔案的資料夾打開「終端機」，執行 <code>shasum -a 256 -c Lint-0.3.4-macOS-arm64.dmg.sha256</code>，會印出 <code>OK</code>。</p></div>
+        <div class="note en"><p><strong>Optional:</strong> to check the download, also get <code>Lint-0.5.3-macOS-arm64.dmg.sha256</code>, then run <code>shasum -a 256 -c Lint-0.5.3-macOS-arm64.dmg.sha256</code> in Terminal, in the folder that holds both files. It prints <code>OK</code>.</p></div>
+        <div class="note zh"><p><strong>選用：</strong>想確認下載無誤，可以一併下載 <code>Lint-0.5.3-macOS-arm64.dmg.sha256</code>，在放著這兩個檔案的資料夾打開「終端機」，執行 <code>shasum -a 256 -c Lint-0.5.3-macOS-arm64.dmg.sha256</code>，會印出 <code>OK</code>。</p></div>
       </article>
     </section>
 
@@ -503,12 +337,12 @@
         <div class="step-head"><span class="step-num">7</span><h3><span class="en">Quick check: <span class="kbd-inline">⌥⌘K</span></span><span class="zh">快速檢查：<span class="kbd-inline">⌥⌘K</span></span></h3></div>
         <p class="en">Select some English text, or just put the cursor in a text field, and press <span class="kbd-inline">⌥⌘K</span>. Lint starts preparing a suggestion as soon as you select text, so it usually appears at once.</p>
         <p class="zh">選取一段英文，或只把游標放在輸入框裡，按 <span class="kbd-inline">⌥⌘K</span>。Lint 在你選取文字時就開始準備建議，所以通常會立刻出現。</p>
-        <p class="en">A bubble shows the suggestion, with a Chinese translation underneath to help you check the meaning. Press <span class="kbd-inline">⏎</span> to replace your text, <span class="kbd-inline">R</span> to rewrite, <span class="kbd-inline">esc</span> to close, or click <strong>Edit in Full Panel</strong>.</p>
-        <p class="zh">浮窗會顯示建議，下方附中文翻譯，方便你核對意思。按 <span class="kbd-inline">⏎</span> 取代原文、<span class="kbd-inline">R</span> 重寫、<span class="kbd-inline">esc</span> 關閉，或點<strong>「在全面板編輯」</strong>。</p>
+        <p class="en">A bubble shows the suggestion, with a reference translation underneath (in your translation language, Traditional Chinese by default) to help you check the meaning. Press <span class="kbd-inline">⏎</span> to replace your text, <span class="kbd-inline">R</span> to rewrite, <span class="kbd-inline">esc</span> to close, or click <strong>Edit in Full Panel</strong>.</p>
+        <p class="zh">浮窗會顯示建議，下方附參考譯文（用你設定的翻譯語言，預設繁體中文），方便你核對意思。按 <span class="kbd-inline">⏎</span> 取代原文、<span class="kbd-inline">R</span> 重寫、<span class="kbd-inline">esc</span> 關閉，或點<strong>「在全面板編輯」</strong>。</p>
         <figure>
-          <a class="shot en flat" href="assets/guide/en/bubble.png" target="_blank" rel="noopener"><img src="assets/guide/en/bubble.png" alt="The suggestion bubble next to the selected sentence in TextEdit" width="760" height="460" loading="lazy"></a>
-          <a class="shot zh flat" href="assets/guide/zh/bubble.png" target="_blank" rel="noopener"><img src="assets/guide/zh/bubble.png" alt="TextEdit 中選取句子旁的建議浮窗" width="760" height="460" loading="lazy"></a>
-          <figcaption><span class="en"><span class="kbd-inline">⌥⌘K</span>: the suggestion, with a Chinese translation underneath.</span><span class="zh"><span class="kbd-inline">⌥⌘K</span>：建議，下方附中文翻譯。</span></figcaption>
+          <a class="shot en" href="assets/guide/en/bubble.png" target="_blank" rel="noopener"><img src="assets/guide/en/bubble.png" alt="The suggestion bubble next to the selected sentence" width="872" height="604" loading="lazy"></a>
+          <a class="shot zh" href="assets/guide/zh/bubble.png" target="_blank" rel="noopener"><img src="assets/guide/zh/bubble.png" alt="選取的句子旁的建議浮窗" width="872" height="604" loading="lazy"></a>
+          <figcaption><span class="en"><span class="kbd-inline">⌥⌘K</span>: the suggestion, with a reference translation underneath.</span><span class="zh"><span class="kbd-inline">⌥⌘K</span>：建議，下方附參考譯文。</span></figcaption>
         </figure>
       </article>
 
@@ -543,8 +377,8 @@
         <p class="en">Click the pencil icon for <strong>Improve Selected Text</strong>, the <strong>Mode</strong> and <strong>Tone</strong>, whether Accessibility is on, <strong>Set Up Local AI…</strong> (until the local AI is set up), <strong>Check for Updates…</strong>, the version, <strong>Settings…</strong> and <strong>Quit Lint</strong>. When a newer release is found, the menu also offers to download and install it.</p>
         <p class="zh">點選單列的鉛筆圖示，可以使用<strong>「改善選取文字」</strong>、切換<strong>「模式」</strong>與<strong>「語氣」</strong>、查看輔助功能是否已開啟、<strong>「設定本機 AI…」</strong>（本機 AI 設定好之前才有）、<strong>「檢查更新…」</strong>、版本號，以及<strong>「設定…」</strong>與<strong>「結束 Lint」</strong>。找到較新的正式版時，選單也會提供下載並安裝。</p>
         <figure>
-          <a class="shot en" href="assets/guide/en/menu.png" target="_blank" rel="noopener"><img src="assets/guide/en/menu.png" alt="The Lint menu in the menu bar" width="294" height="246" loading="lazy"></a>
-          <a class="shot zh" href="assets/guide/zh/menu.png" target="_blank" rel="noopener"><img src="assets/guide/zh/menu.png" alt="選單列中的 Lint 選單" width="249" height="246" loading="lazy"></a>
+          <a class="shot en" href="assets/guide/en/menu.png" target="_blank" rel="noopener"><img src="assets/guide/en/menu.png" alt="The Lint menu in the menu bar" width="294" height="270" loading="lazy"></a>
+          <a class="shot zh" href="assets/guide/zh/menu.png" target="_blank" rel="noopener"><img src="assets/guide/zh/menu.png" alt="選單列中的 Lint 選單" width="249" height="270" loading="lazy"></a>
           <figcaption><span class="en">The menu under the pencil icon.</span><span class="zh">鉛筆圖示下的選單。</span></figcaption>
         </figure>
       </article>
@@ -561,9 +395,14 @@
         <p class="en">Accessibility status, <strong>Check Behavior</strong> (the Check button, watching while you type, the “Ready” chip), <strong>Shortcuts</strong> (change <span class="kbd-inline">⌥⌘L</span> and <span class="kbd-inline">⌥⌘K</span>), <strong>Language</strong> (the interface language, one of nine or the system's, after a restart; and the translation language, Traditional Chinese by default) and <strong>Updates</strong> (ask before installing, install automatically or only check, every launch, day, week or month).</p>
         <p class="zh">輔助功能狀態、<strong>「檢查行為」</strong>（「檢查」按鈕、打字時即時監看、「已就緒」浮標）、<strong>「快捷鍵」</strong>（可更改 <span class="kbd-inline">⌥⌘L</span> 與 <span class="kbd-inline">⌥⌘K</span>）、<strong>「語言」</strong>（介面語言可選九種語言或跟隨系統，重新啟動後套用；翻譯語言預設繁體中文），以及<strong>「更新」</strong>（手動更新、自動更新或只檢查；每次啟動、每天、每週或每月）。</p>
         <figure>
-          <a class="shot en" href="assets/guide/en/settings-general.png" target="_blank" rel="noopener"><img src="assets/guide/en/settings-general.png" alt="Settings, General pane" width="872" height="700" loading="lazy"></a>
-          <a class="shot zh" href="assets/guide/zh/settings-general.png" target="_blank" rel="noopener"><img src="assets/guide/zh/settings-general.png" alt="設定的「一般」頁" width="872" height="700" loading="lazy"></a>
+          <a class="shot en" href="assets/guide/en/settings-general.png" target="_blank" rel="noopener"><img src="assets/guide/en/settings-general.png" alt="Settings, General pane" width="984" height="812" loading="lazy"></a>
+          <a class="shot zh" href="assets/guide/zh/settings-general.png" target="_blank" rel="noopener"><img src="assets/guide/zh/settings-general.png" alt="設定的「一般」頁" width="984" height="812" loading="lazy"></a>
           <figcaption><span class="en">General.</span><span class="zh">一般。</span></figcaption>
+        </figure>
+        <figure>
+          <a class="shot en" href="assets/guide/en/settings-updates.png" target="_blank" rel="noopener"><img src="assets/guide/en/settings-updates.png" alt="Settings, General pane scrolled to Language and Updates" width="984" height="812" loading="lazy"></a>
+          <a class="shot zh" href="assets/guide/zh/settings-updates.png" target="_blank" rel="noopener"><img src="assets/guide/zh/settings-updates.png" alt="設定的「一般」頁，捲到語言與更新" width="984" height="812" loading="lazy"></a>
+          <figcaption><span class="en">Further down: Language and Updates.</span><span class="zh">往下捲：語言與更新。</span></figcaption>
         </figure>
       </article>
 
@@ -572,8 +411,8 @@
         <p class="en">Under <strong>Model Source</strong>, pick where suggestions come from: Automatic, Apple Intelligence, Local llama.cpp (managed by Lint), or an OpenAI-compatible endpoint (Ollama, LM Studio); an API key, if the endpoint needs one, is kept in the Keychain. OpenAI, Anthropic and Google Gemini are listed but greyed out until they have been tested. For the local AI you can pick the model (Gemma 4 E4B is recommended; Qwen3 4B and Gemma 4 12B are optional), start or stop the server, and remove a model.</p>
         <p class="zh">在<strong>「模型來源」</strong>選擇建議的來源：自動、Apple Intelligence、本機 llama.cpp（由 Lint 管理），或 OpenAI 相容端點（Ollama、LM Studio）；端點需要 API Key 的話，Key 存在鑰匙圈。OpenAI、Anthropic、Google Gemini 會列出，但在測試過之前是灰色、不能選。使用本機 AI 時，可以選模型（建議 Gemma 4 E4B，也可以改用 Qwen3 4B 或 Gemma 4 12B）、啟動或停止服務，以及移除模型。</p>
         <figure>
-          <a class="shot en" href="assets/guide/en/settings-model.png" target="_blank" rel="noopener"><img src="assets/guide/en/settings-model.png" alt="Settings, Model pane" width="872" height="700" loading="lazy"></a>
-          <a class="shot zh" href="assets/guide/zh/settings-model.png" target="_blank" rel="noopener"><img src="assets/guide/zh/settings-model.png" alt="設定的「模型」頁" width="872" height="700" loading="lazy"></a>
+          <a class="shot en" href="assets/guide/en/settings-model.png" target="_blank" rel="noopener"><img src="assets/guide/en/settings-model.png" alt="Settings, Model pane" width="984" height="812" loading="lazy"></a>
+          <a class="shot zh" href="assets/guide/zh/settings-model.png" target="_blank" rel="noopener"><img src="assets/guide/zh/settings-model.png" alt="設定的「模型」頁" width="984" height="812" loading="lazy"></a>
           <figcaption><span class="en">Model.</span><span class="zh">模型。</span></figcaption>
         </figure>
         <div class="note en"><p><strong>Memory:</strong> Gemma 4 12B needs much more memory. On a 16 GB Mac it can make the system very slow.</p></div>
@@ -585,8 +424,8 @@
         <p class="en"><strong>Prompts</strong>: change the instructions for each mode and tone, or go back to the built-in ones.</p>
         <p class="zh"><strong>提示詞</strong>：可以分別修改每個模式與語氣的指示，也能恢復內建預設。</p>
         <figure>
-          <a class="shot en" href="assets/guide/en/settings-prompts.png" target="_blank" rel="noopener"><img src="assets/guide/en/settings-prompts.png" alt="Settings, Prompts pane" width="872" height="700" loading="lazy"></a>
-          <a class="shot zh" href="assets/guide/zh/settings-prompts.png" target="_blank" rel="noopener"><img src="assets/guide/zh/settings-prompts.png" alt="設定的「提示詞」頁" width="872" height="700" loading="lazy"></a>
+          <a class="shot en" href="assets/guide/en/settings-prompts.png" target="_blank" rel="noopener"><img src="assets/guide/en/settings-prompts.png" alt="Settings, Prompts pane" width="984" height="812" loading="lazy"></a>
+          <a class="shot zh" href="assets/guide/zh/settings-prompts.png" target="_blank" rel="noopener"><img src="assets/guide/zh/settings-prompts.png" alt="設定的「提示詞」頁" width="984" height="812" loading="lazy"></a>
           <figcaption><span class="en">Prompts.</span><span class="zh">提示詞。</span></figcaption>
         </figure>
         <p class="en">The <strong>Memory</strong> pane has its own section below: <a href="#learning">Memory and dreaming</a>.</p>
@@ -605,8 +444,8 @@
         <p class="en">Open <strong>Settings… → Memory</strong> and turn on <strong>Enable Memory</strong>. The counts start at 0 and grow as you use Lint.</p>
         <p class="zh">打開<strong>「設定… → 記憶」</strong>，開啟<strong>「啟用記憶」</strong>。記憶數從 0 開始，會隨著你使用 Lint 增加。</p>
         <figure>
-          <a class="shot en" href="assets/guide/en/settings-learning.png" target="_blank" rel="noopener"><img src="assets/guide/en/settings-learning.png" alt="Settings, Memory pane with Enable Memory turned on and a Dreaming section" width="872" height="700" loading="lazy"></a>
-          <a class="shot zh" href="assets/guide/zh/settings-learning.png" target="_blank" rel="noopener"><img src="assets/guide/zh/settings-learning.png" alt="設定的「記憶」頁，已開啟「啟用記憶」，下方是「作夢」" width="872" height="700" loading="lazy"></a>
+          <a class="shot en" href="assets/guide/en/settings-memory.png" target="_blank" rel="noopener"><img src="assets/guide/en/settings-memory.png" alt="Settings, Memory pane with Enable Memory turned on and a Dreaming section" width="984" height="812" loading="lazy"></a>
+          <a class="shot zh" href="assets/guide/zh/settings-memory.png" target="_blank" rel="noopener"><img src="assets/guide/zh/settings-memory.png" alt="設定的「記憶」頁，已開啟「啟用記憶」，下方是「作夢」" width="984" height="812" loading="lazy"></a>
           <figcaption><span class="en">Memory, just turned on.</span><span class="zh">剛開啟的「記憶」頁。</span></figcaption>
         </figure>
       </article>
@@ -716,13 +555,16 @@
   <div class="wrap footer-inner">
     <p>MIT License · © 2026 Davis Lin</p>
     <nav class="footer-nav">
-      <a href="index.html">Lint</a>
+      <a href="index.html"><span class="en">Overview</span><span class="zh">總覽</span></a>
+      <a href="guide.html"><span class="en">Guide</span><span class="zh">使用教學</span></a>
       <a href="https://github.com/davislinyd/Lint" target="_blank" rel="noopener noreferrer">GitHub</a>
       <a href="https://github.com/davislinyd/Lint/releases" target="_blank" rel="noopener noreferrer">Releases</a>
+      <a href="https://github.com/davislinyd/Lint/blob/main/SECURITY.md" target="_blank" rel="noopener noreferrer">Security</a>
       <a href="https://github.com/davislinyd/Lint/issues" target="_blank" rel="noopener noreferrer">Issues</a>
     </nav>
   </div>
 </footer>
 
+<script src="assets/site.js"></script>
 </body>
 </html>

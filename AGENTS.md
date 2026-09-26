@@ -74,4 +74,8 @@ Entry points:
 - `resume-release.yml`: `workflow_dispatch` with `tag`, `run_id`, `dmg_sha256`; downloads that run's artifact,
   ties the state to the tag, commit and hash, then resumes. It never builds, signs or submits.
 - Concurrency is per tag (`release-<tag>`), shared by both workflows; other tags and CI are never blocked.
+- The in-app updater (`Sources/LintCore/Update`, since 0.5.2) reads `/releases/latest`, so publishing a release (not a
+  Draft or Pre-release) ships it to installed copies. It only accepts `Lint-X.Y.Z-macOS-<arch>.dmg` whose SHA-256
+  matches GitHub's asset digest and the `.sha256` asset, containing `app.lint.assistant` signed by team `N964GDJY6A`
+  (Developer ID, Hardened Runtime). Keep the asset names, and publish only after the DMG was checked.
 - Agents do not push release tags, publish GitHub Releases or submit to Apple unless explicitly asked.

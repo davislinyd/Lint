@@ -16,7 +16,7 @@
 
 ## 還沒有 Apple 憑證時：未簽章預覽版
 
-Apple Developer Program 核准之前發不出正式版（Developer ID + 公證），這段期間用**預覽版**：
+Apple Developer Program 核准之前發不出正式版（Developer ID + 公證），那段期間（v0.3.2 之前）用**預覽版**發佈 Pre-release。現在正式版照下面的「發版」流程；CI 仍會為每個 PR 與 `main` 組出預覽版，可以拿來測試：
 
 - [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) 在每個 pull request 與每次推送到 `main` 時跑 `swift test`，並用 `LINT_PREVIEW_BUILD=1 ./Scripts/release.sh` 組出 `Lint-<版本>-macOS-arm64-preview.dmg`（含 `.sha256`）。到該次 run 頁面的 **Artifacts** 下載（保留 14 天）。它不使用任何 secrets，只有唯讀權限。
 - 本機也能組：`LINT_PREVIEW_BUILD=1 ./Scripts/release.sh`，產物在 `dist/release/`。
@@ -141,6 +141,11 @@ git push origin v0.2.0
 3. Actions → **Release** 跑完後（Apple 沒在時間內處理完則是 PENDING，見下節），Releases 頁會出現 **Draft**，內含 `Lint-<版本>-macOS-arm64.dmg` 與 `.sha256`。`CFBundleVersion` 會是這次 run 的編號。
 4. 在**另一台 Mac** 下載並測試：開啟 DMG、拖進 Applications、啟動、輔助功能授權、LLM、記憶資料庫（檔名仍是 `LintLearning.sqlite`）。
 5. 沒問題就在 GitHub 上按 **Publish release**。等流程穩定幾次之後，才考慮把 workflow 的 `--draft` 拿掉。
+
+   發佈之後它就是 Latest。0.5.2 起的 App 內更新只讀 `/releases/latest`（Draft 與 Pre-release 不算），所以按下 Publish 就等於把這一版推給已安裝的使用者。更新程式只接受以下條件的 DMG，所以**不要改資產檔名**：
+   - 檔名是 `Lint-<版本>-macOS-<arch>.dmg`。
+   - SHA-256 要符合 GitHub 的 asset digest 與 `.sha256`；兩者都有時必須一致。
+   - 裡面的 App 是 `app.lint.assistant`，以 team `N964GDJY6A` 的 Developer ID 簽署，並啟用 Hardened Runtime。
 
 重跑：Actions → Release → *Run workflow* → 輸入既有的 tag。同一個 tag 若已有 Draft，先刪掉它（`gh release create` 不會覆蓋）。**公證 PENDING 時不要重跑 Release**：workflow 會先檢查這個 tag 有沒有未過期的 `pending-release-<tag>` artifact，有就拒絕建置，請改用 Resume Release。
 
@@ -293,7 +298,7 @@ LINT_SKIP_NOTARIZE=1 ./Scripts/release.sh
 
 - 只出 **arm64**；檔名由實際的執行檔架構決定（`lipo -archs`），不會標示成 universal。Universal 2 留待日後（內建的執行環境是單一架構的，`package-app.sh` 遇到 universal 執行檔會直接失敗，不會硬拼）。
 - 打包需要連到 github.com 下載固定版本的 llama.cpp（`ci.yml` 與 `release.yml` 的 runner 都可以）；下載會被快取在 `.build/llama-runtime/cache`，但每次都會重驗雜湊。
-- 這台機器上 Developer ID 簽章、Hardened Runtime 下的 llama-server 只用 Apple Development 身分（同一個 Team ID）實測過能載入 dylib 並用 Metal 推論；真正的 Developer ID 簽章、公證與 Gatekeeper 驗證要等第一次正式發版才能確認。
+- v0.3.3 起的正式版已實際確認：Developer ID 簽章、公證、staple 與 Gatekeeper（`Notarized Developer ID`）都通過，DMG 裡的 llama-server 在 Hardened Runtime 下能載入 dylib 並推論。
 - 預覽版 DMG 約 15 MB（壓縮後；其中 llama.cpp 解壓縮約 24 MB，`Lint.app` 約 34 MB）。
 - 只公證並 staple **DMG**，DMG 裡的 app 本體沒有另外 staple：使用者首次啟動需要能連到 Apple 查詢票證（離線首次啟動可能被 Gatekeeper 擋下）。
 - `ci.yml`（pull request 與 `main` 的測試和預覽版）刻意不使用任何 secrets，也不用 `pull_request_target`；日後不要在裡面加任何 release secrets。

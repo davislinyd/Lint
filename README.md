@@ -43,12 +43,12 @@ What Lint can read, and how to report a vulnerability, is in [SECURITY.md](SECUR
 
 #### Preview builds
 
-> **Preview builds:** until the first notarized release, Releases carries unsigned previews (`Lint-<version>-macOS-arm64-preview.dmg`, marked Pre-release). macOS blocks a preview the first time you open it: go to System Settings → Privacy & Security and click **Open Anyway**, or run `xattr -dr com.apple.quarantine /Applications/Lint.app`. Allow Accessibility again after installing each new preview.
+> **Preview builds:** the Pre-release entries on the Releases page (`Lint-<version>-macOS-arm64-preview.dmg`) are unsigned previews from before the first notarized release; install the latest notarized release instead. If you do open a preview, macOS blocks it the first time: go to System Settings → Privacy & Security and click **Open Anyway**, or run `xattr -dr com.apple.quarantine /Applications/Lint.app`. Allow Accessibility again after installing each new preview.
 
 What is inside the app and what is downloaded:
 
 - **Bundled in the official DMG:** a pinned llama.cpp runtime (`llama-server` and its libraries, MIT-licensed, build b11046; its license notices are in the app). It is signed and notarized together with Lint, so nothing executable is downloaded after you install. Runtime updates arrive with Lint updates.
-- **Downloaded after you agree:** the GGUF model. It is not in the DMG. It is checked against a pinned SHA-256 and stored under `~/Library/Application Support/Lint/Models`; you can remove it in Settings → Model. The network is only needed for this download.
+- **Downloaded after you agree:** the GGUF model. It is not in the DMG. It is checked against a pinned SHA-256 and stored under `~/Library/Application Support/Lint/Models`; you can remove it in Settings → Model. Apart from this download, the default setup uses the network only to check GitHub for Lint updates (see [Updates](#updates)).
 - **Not needed:** Homebrew, Python, CMake, Ollama, or a llama.cpp of your own.
 
 #### Developer / source install (no Homebrew)
@@ -64,13 +64,13 @@ A source build is signed with your Apple Development identity if you have one, o
 
 #### Advanced: your own backend
 
-Settings → Model → Advanced lets you point Lint at another `llama-server` (a Homebrew or self-built one), or at a Hugging Face model that `llama-server` downloads itself (`-hf`). You can also choose an OpenAI-compatible endpoint (Ollama, LM Studio, custom) or a cloud provider as the model source. None of this is needed for the default setup.
+Settings → Model → Advanced lets you point Lint at another `llama-server` (a Homebrew or self-built one), or at a Hugging Face model that `llama-server` downloads itself (`-hf`). You can also choose an OpenAI-compatible endpoint (Ollama, LM Studio, custom) as the model source. None of this is needed for the default setup.
 
 ### Requirements
 
 - macOS 14+
 - To build from source: Apple's Command Line Tools with a Swift 6.1+ toolchain (Xcode also works)
-- An LLM backend: by default nothing extra, since Lint bundles llama.cpp and downloads its own model. Alternatively an OpenAI-compatible endpoint (default `http://127.0.0.1:8000/v1`, e.g. `llama-server`, Ollama, LM Studio), or OpenAI / Anthropic / Gemini
+- An LLM backend: by default nothing extra, since Lint bundles llama.cpp and downloads its own model. Alternatively Apple Intelligence (macOS 26 or later) or an OpenAI-compatible endpoint (default `http://127.0.0.1:8000/v1`, e.g. `llama-server`, Ollama, LM Studio)
 
 ### Run
 
@@ -93,12 +93,24 @@ A pencil icon appears in the menu bar. Packaging fetches the pinned llama.cpp ru
 
 ### Settings
 
-- Providers: local llama.cpp (managed by Lint), OpenAI, OpenAI-compatible endpoint (Ollama / LM Studio / custom), Anthropic, Gemini
+- Model source: Automatic, Apple Intelligence, local llama.cpp (managed by Lint) or an OpenAI-compatible endpoint (Ollama / LM Studio / custom). OpenAI, Anthropic and Google Gemini are listed but greyed out until they have been tested, and the ChatGPT (Plus / Pro login) source is turned off.
 - AI engine: **Automatic**, **Apple Intelligence** or **Lint Local AI**. Apple Intelligence uses the on-device model built into macOS 26 or later (no separate download; Lint uses only the on-device model, never Private Cloud Compute). Automatic uses it when it is available and otherwise Lint's local AI if that is already set up; it never starts a download on its own. Existing settings are kept on upgrade. See [docs/APPLE-INTELLIGENCE.md](docs/APPLE-INTELLIGENCE.md) for how it was evaluated against Gemma.
 - API keys are stored in Keychain (service `app.lint.assistant`)
 - Default endpoint: `http://127.0.0.1:8000/v1`
 - Ollama: `http://127.0.0.1:11434/v1`; LM Studio: `http://127.0.0.1:1234/v1`
 - Local llama.cpp: pick it as the source in Settings → Model. The same page shows the bundled runtime, the model (download / remove / show in Finder) and the server (start / stop / restart, port); Advanced holds the runtime source (automatic or a custom `llama-server`), the model source and extra arguments. The server only listens on `127.0.0.1`.
+- Interface language (Settings → General): Follow System, English, Traditional Chinese, Simplified Chinese, Japanese, Korean, Vietnamese, Indonesian, Thai or Portuguese (Brazil). It applies after Lint restarts.
+- Translation language (Settings → General): the language the **Translate** mode and the reference translation under a suggestion use, Traditional Chinese by default, from the same list (English excepted). Lint only translates from English into it; the change applies at once.
+
+### Updates
+
+Lint checks GitHub Releases for a newer official release: every week by default (Settings → General → Updates: every launch, day, week or month), and whenever you choose **Check for Updates…** in the menu bar menu.
+
+- **Ask before installing** (the default): Lint shows the new version, and **Download and Install** installs it.
+- **Install automatically**: Lint installs it once the suggestion window is closed, then restarts.
+- **Only check**: Lint only tells you about it.
+
+A check only asks the GitHub API for the latest release; none of your text is sent. Before anything is replaced, the downloaded DMG has to match the published SHA-256, and the app inside it has to be Lint (`app.lint.assistant`) signed with Lint's Developer ID and Hardened Runtime. The new copy is swapped in after Lint quits, and only at `/Applications/Lint.app` or `~/Applications/Lint.app`. A copy anywhere else, or one not signed with Lint's Developer ID (such as a source build), can check for updates but is not replaced.
 
 ### Local AI notes
 
@@ -112,7 +124,7 @@ A pencil icon appears in the menu bar. Packaging fetches the pinned llama.cpp ru
 
 ### Writing modes
 
-Proofreading and polishing, formal / concise / professional tone, translation, custom prompt.
+Proofreading and polishing, translation and a custom prompt. Proofreading and translation also take a tone: Preserve Tone (the default), Formal, Concise or Professional; each mode remembers its own tone, and the custom prompt uses none. Lint edits English: a proofread of text without any English is not sent to the model, and translation goes from English into the translation language.
 
 ### Memory and dreaming (optional, off by default)
 
@@ -178,12 +190,12 @@ Lint 能讀到什麼，以及如何回報漏洞，寫在 [SECURITY.md](SECURITY.
 
 #### 預覽版
 
-> **預覽版：** 第一個公證版發佈之前，Releases 提供未簽章的預覽版（`Lint-<版本>-macOS-arm64-preview.dmg`，標示為 Pre-release）。第一次開啟時 macOS 會擋下：到 系統設定 → 隱私權與安全性 按「仍要打開」，或執行 `xattr -dr com.apple.quarantine /Applications/Lint.app`。每安裝一個新的預覽版，輔助功能都要重新允許。
+> **預覽版：** Releases 頁上標示為 Pre-release 的項目（`Lint-<版本>-macOS-arm64-preview.dmg`）是第一個公證版發佈之前的未簽章預覽版；請改裝最新的公證版。如果還是要開預覽版，第一次開啟時 macOS 會擋下：到 系統設定 → 隱私權與安全性 按「仍要打開」，或執行 `xattr -dr com.apple.quarantine /Applications/Lint.app`。每安裝一個新的預覽版，輔助功能都要重新允許。
 
 App 裡有什麼、之後才下載什麼：
 
 - **官方 DMG 內建：**固定版本的 llama.cpp 執行環境（`llama-server` 與其函式庫，MIT 授權，build b11046；授權文件在 App 內）。它和 Lint 一起簽署並公證，所以安裝之後不會再下載任何可執行檔。執行環境隨 Lint 更新一起更新。
-- **同意後才下載：**GGUF 模型。它不在 DMG 裡，下載後會以固定的 SHA-256 驗證，存放在 `~/Library/Application Support/Lint/Models`，可在「設定 → 模型」移除。只有這一步需要網路。
+- **同意後才下載：**GGUF 模型。它不在 DMG 裡，下載後會以固定的 SHA-256 驗證，存放在 `~/Library/Application Support/Lint/Models`，可在「設定 → 模型」移除。除了這次下載，預設設定只會用網路到 GitHub 檢查 Lint 的更新（見〈更新〉）。
 - **不需要：**Homebrew、Python、CMake、Ollama，或自行安裝的 llama.cpp。
 
 #### 開發者／從原始碼安裝（不需要 Homebrew）
@@ -199,13 +211,13 @@ git clone https://github.com/davislinyd/Lint.git && cd Lint    # 或從 GitHub �
 
 #### 進階：使用自己的後端
 
-「設定 → 模型 → 進階」可以改用另一個 `llama-server`（Homebrew 或自行編譯的版本），或改用由 `llama-server` 自己下載的 Hugging Face 模型（`-hf`）。也可以把 OpenAI 相容端點（Ollama、LM Studio、自訂）或雲端 provider 當作模型來源。預設設定完全用不到這些。
+「設定 → 模型 → 進階」可以改用另一個 `llama-server`（Homebrew 或自行編譯的版本），或改用由 `llama-server` 自己下載的 Hugging Face 模型（`-hf`）。也可以把 OpenAI 相容端點（Ollama、LM Studio、自訂）當作模型來源。預設設定完全用不到這些。
 
 ### 需求
 
 - macOS 14+
 - 從原始碼建置：Apple 的 Command Line Tools，含 Swift 6.1+ 工具鏈（裝 Xcode 也可以）
-- LLM 後端：預設不需要額外安裝，Lint 內建 llama.cpp 並自行下載模型。也可以改用 OpenAI 相容 API（預設 `http://127.0.0.1:8000/v1`，例如 `llama-server`、Ollama、LM Studio），或 OpenAI / Anthropic / Gemini
+- LLM 後端：預設不需要額外安裝，Lint 內建 llama.cpp 並自行下載模型。也可以改用 Apple Intelligence（macOS 26 以上）或 OpenAI 相容 API（預設 `http://127.0.0.1:8000/v1`，例如 `llama-server`、Ollama、LM Studio）
 
 ### 啟動
 
@@ -228,11 +240,24 @@ chmod +x Scripts/*.sh
 
 ### 設定
 
-- Provider：本機 llama.cpp（由 Lint 管理）、OpenAI、OpenAI 相容端點（Ollama / LM Studio / 自訂）、Anthropic、Gemini
+- 模型來源：自動、Apple Intelligence、本機 llama.cpp（由 Lint 管理），或 OpenAI 相容端點（Ollama / LM Studio / 自訂）。OpenAI、Anthropic、Google Gemini 會列出，但在測試過之前是灰色、不能選；ChatGPT（Plus／Pro 登入）來源已關閉。
+- AI 引擎：**自動**、**Apple Intelligence** 或 **Lint 本機 AI**。Apple Intelligence 使用 macOS 26 以上內建的裝置端模型（不必另外下載；Lint 只用裝置端模型，從不使用 Private Cloud Compute）。「自動」在 Apple Intelligence 可用時使用它，否則使用已經設定好的 Lint 本機 AI；它不會自己開始下載。升級時保留原有設定。與 Gemma 的比較見 [docs/APPLE-INTELLIGENCE.md](docs/APPLE-INTELLIGENCE.md)。
 - API Key 存在 Keychain（service `app.lint.assistant`）
 - 預設 Endpoint：`http://127.0.0.1:8000/v1`
 - Ollama：`http://127.0.0.1:11434/v1`；LM Studio：`http://127.0.0.1:1234/v1`
 - 本機 llama.cpp：在「設定 → 模型」選擇該來源。同一頁會顯示內建的執行環境、模型（下載／移除／在 Finder 顯示）與服務（啟動／停止／重啟、埠）；「進階」有執行環境來源（自動或自訂 `llama-server`）、模型來源與額外參數。服務只監聽 `127.0.0.1`。
+- 介面語言（「設定 → 一般」）：跟隨系統、English、繁體中文、简体中文、日本語、한국어、Tiếng Việt、Bahasa Indonesia、ไทย 或 Português (Brasil)。重新啟動 Lint 後套用。
+- 翻譯語言（「設定 → 一般」）：「翻譯」模式與建議下方的參考譯文使用的語言，預設繁體中文，可選的語言同上（英文除外）。Lint 只把英文翻成這個語言，變更立即生效。
+
+### 更新
+
+Lint 會到 GitHub Releases 檢查有沒有較新的正式版：預設每週一次（「設定 → 一般 → 更新」可選每次啟動、每天、每週或每月），在選單列選單按**「檢查更新…」**也會立即檢查。
+
+- **手動更新**（預設）：Lint 顯示新版本，按**「下載並安裝」**才安裝。
+- **自動更新**：建議視窗關閉後就安裝，並重新啟動 Lint。
+- **只檢查**：只告訴你有新版本。
+
+檢查時只向 GitHub API 查詢最新的正式版，不會送出你的任何文字。換上新版之前，下載的 DMG 必須符合公布的 SHA-256，裡面的 App 必須是 Lint（`app.lint.assistant`），並以 Lint 的 Developer ID 簽署、啟用 Hardened Runtime。新版在 Lint 結束後才換上，而且只會取代 `/Applications/Lint.app` 或 `~/Applications/Lint.app`。放在其他位置、或不是以 Lint 的 Developer ID 簽署的 Lint（例如從原始碼建置的版本），可以檢查更新，但不會被取代。
 
 ### 本機 AI 補充說明
 
@@ -240,11 +265,13 @@ chmod +x Scripts/*.sh
 - **下載可以安全中斷：**取消、斷線甚至結束 Lint，已下載的部分都會留在 `~/Library/Application Support/Lint/Downloads`，再次下載會從中斷處接續。大小、GGUF 標頭或 SHA-256 任一項驗證失敗的檔案會被刪除、絕不使用；所有檔案都通過之後，模型才會一次出現在 `Models/`。
 - **磁碟空間：**下載前會檢查是否有「還缺的部分 ×1.2」的可用空間，並告訴你需要多少、這台 Mac 有多少。
 - **第一次啟動較慢：**在記憶體吃緊的 Mac 上，載入 4–5 GB 的模型可能要數分鐘。Lint 最多等 10 分鐘，若伺服器仍在載入，會讓它繼續跑而不是重來。失敗時，「設定 → 模型 → 詳細資訊」會顯示它最後印出的幾行。
+- **模型：**可在「設定 → 模型」選擇 Gemma 4 E4B（預設，約 5.2 GB）、Qwen3 4B（選用，2.5 GB）或 Gemma 4 12B（選用，7 GB）。Gemma 4 12B 標示為有記憶體風險：在 16 GB 的 Mac 上可能讓系統變得非常慢或沒有回應。切換模型不會刪除任何模型，已經有的模型也不會重新下載。升級會保留你已安裝的模型；只把 12B 存成舊預設、卻從未下載過的安裝會改用 E4B。
+- **調校與閒置釋放：**Lint 給每個由它管理的模型各自的 llama-server 參數（context 3072、q8_0 KV cache，Gemma 4 另加 `--reasoning off`）；進階的「額外參數」欄位預設是空的，只會覆蓋它寫到的選項。5 分鐘沒有要求建議時（「設定 → 模型 → 記憶體」），llama-server 會釋放模型佔用的記憶體，下一次要求時再重新載入，約需幾秒。升級時會清掉舊版內建預設參數字串的存檔；你自己輸入的內容會保留。
 - **升級：**已在 Hugging Face 快取（`llama-server -hf` 下載的）裡的模型會繼續使用，不會重複下載。設定裡舊的 Homebrew `llama-server` 路徑會改為使用內建執行環境；你自己選的路徑則保留為自訂執行環境。
 
 ### 寫作模式
 
-任務有文法校對與潤飾、翻譯、自訂 Prompt；校對與翻譯都可以再選語氣：保留原語氣（預設）、正式、簡潔、專業。每個任務各自記住自己的語氣，自訂 Prompt 不套用語氣。
+任務有文法校對與潤飾、翻譯、自訂 Prompt；校對與翻譯都可以再選語氣：保留原語氣（預設）、正式、簡潔、專業。每個任務各自記住自己的語氣，自訂 Prompt 不套用語氣。Lint 只處理英文：完全沒有英文的文字不會送去校對，翻譯則是把英文翻成翻譯語言。
 
 ### 記憶與作夢（選用，預設關閉）
 

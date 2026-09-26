@@ -22,9 +22,9 @@ public enum LiveCheckPolicy {
         "com.apple.keychainaccess",
     ]
 
-    /// Missing means off. A value already stored was set by the toggle and is kept.
+    /// Missing means the toggle was never turned off: on, as it always was. A stored value is kept.
     public static func enabledValue(stored: Bool?) -> Bool {
-        stored ?? false
+        stored ?? true
     }
 
     public static func shouldPoll(watchSelection: Bool, watchTyping: Bool) -> Bool {

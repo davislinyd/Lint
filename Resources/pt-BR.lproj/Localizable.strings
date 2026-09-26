@@ -89,7 +89,7 @@
 "選取後顯示檢查按鈕" = "Mostrar botão Verificar após selecionar";
 "反白文字後出現小顆「檢查」按鈕，點了才開始建議；快捷鍵仍可直接開啟。" = "Um pequeno botão “Verificar” aparece depois que você seleciona um texto; as sugestões começam quando você clica nele. O atalho continua funcionando diretamente.";
 "打字時即時監看（英文為主）" = "Acompanhar enquanto digita (principalmente inglês)";
-"預設關閉。開啟後會讀取焦點欄位的文字，停頓約 0.5 秒後在背景準備建議。僅英文為主的片段會觸發，快捷鍵不受此限。" = "Desligado por padrão. Quando ligado, o Lint lê o campo em foco e prepara uma sugestão em segundo plano após cerca de 0,5 segundo. Só texto majoritariamente em inglês dispara isso; o atalho funciona de qualquer forma.";
+"停頓約 0.5 秒後預先準備建議。僅英文為主的片段會觸發，快捷鍵不受此限。" = "Prepara uma sugestão após uma pausa de cerca de 0,5 segundo. Só textos principalmente em inglês acionam isso; o atalho funciona de qualquer forma.";
 "在輸入框旁顯示「已就緒」浮標" = "Mostrar um selo “Pronto” ao lado do campo de texto";
 "關閉後仍在背景預載建議，但不會浮在輸入框上擋字；準備好後用快捷鍵開啟迷你浮窗。" = "Quando desativado, as sugestões continuam sendo preparadas em segundo plano, mas nada flutua sobre o campo de texto; pressione o atalho para abrir o balão quando estiver pronto.";
 "改善選取文字" = "Melhorar Texto Selecionado";

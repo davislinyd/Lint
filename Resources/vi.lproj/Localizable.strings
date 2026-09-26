@@ -89,7 +89,7 @@
 "選取後顯示檢查按鈕" = "Hiện nút Kiểm tra sau khi chọn";
 "反白文字後出現小顆「檢查」按鈕，點了才開始建議；快捷鍵仍可直接開啟。" = "Một nút “Kiểm tra” nhỏ sẽ xuất hiện sau khi bạn chọn văn bản; gợi ý chỉ bắt đầu khi bạn bấm vào nút. Phím tắt vẫn dùng được trực tiếp.";
 "打字時即時監看（英文為主）" = "Theo dõi khi đang gõ (chủ yếu tiếng Anh)";
-"預設關閉。開啟後會讀取焦點欄位的文字，停頓約 0.5 秒後在背景準備建議。僅英文為主的片段會觸發，快捷鍵不受此限。" = "Tắt theo mặc định. Khi bật, Lint đọc ô đang focus và chuẩn bị gợi ý ở nền sau khoảng 0,5 giây. Chỉ đoạn chủ yếu là tiếng Anh mới kích hoạt; phím tắt không bị giới hạn này.";
+"停頓約 0.5 秒後預先準備建議。僅英文為主的片段會觸發，快捷鍵不受此限。" = "Chuẩn bị sẵn gợi ý sau khi bạn ngừng gõ khoảng 0,5 giây. Chỉ văn bản chủ yếu là tiếng Anh mới kích hoạt; phím tắt thì luôn dùng được.";
 "在輸入框旁顯示「已就緒」浮標" = "Hiện nhãn “Sẵn sàng” cạnh ô nhập liệu";
 "關閉後仍在背景預載建議，但不會浮在輸入框上擋字；準備好後用快捷鍵開啟迷你浮窗。" = "Khi tắt, gợi ý vẫn được chuẩn bị ở chế độ nền nhưng không có gì nổi lên che ô nhập liệu; khi đã sẵn sàng, nhấn phím tắt để mở bong bóng nhỏ.";
 "改善選取文字" = "Cải thiện văn bản đã chọn";

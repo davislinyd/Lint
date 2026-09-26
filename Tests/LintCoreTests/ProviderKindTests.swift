@@ -12,4 +12,9 @@ final class ProviderKindTests: XCTestCase {
         )
         XCTAssertEqual(try LLMService().provider(for: config).id, .localLlama)
     }
+
+    func testChatGPTWebRequestsStayOff() {
+        XCTAssertFalse(ProviderKind.chatgptAccount.isEnabled)
+        XCTAssertFalse(ChatGPTWebAccess.requestsAllowed)
+    }
 }

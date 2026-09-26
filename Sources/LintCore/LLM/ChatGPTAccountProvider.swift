@@ -18,6 +18,9 @@ public struct ChatGPTAccountProvider: LLMProvider {
         AsyncThrowingStream { continuation in
             let work = Task {
                 do {
+                    guard ChatGPTWebAccess.requestsAllowed else {
+                        throw LLMError.unresolvedProvider
+                    }
                     let answer: String
                     if let backend = ChatGPTBrowserBackendRegistry.shared.backend {
                         answer = try await backend.complete(
@@ -231,6 +234,7 @@ public struct ChatGPTAccountProvider: LLMProvider {
         return "gAAAAAC" + data.base64EncodedString()
     }
 
+    /// Unsupported unofficial proof. Do not extend it; requests are gated by `ChatGPTWebAccess`.
     private static func solveProof(seed: String, difficulty: String) throws -> String {
         guard let context = JSContext() else { throw LLMError.decoding }
         context.exceptionHandler = { _, exc in

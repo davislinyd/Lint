@@ -30,6 +30,14 @@ public protocol ChatGPTBrowserBackend: AnyObject {
     func complete(_ request: ChatGPTCompletionRequest) async throws -> String
 }
 
+/// Unofficial chatgpt.com session. Unsupported: do not extend the sentinel or proof-of-work workaround.
+/// Requests stay off while `ProviderKind.chatgptAccount` is disabled.
+public enum ChatGPTWebAccess {
+    public static var requestsAllowed: Bool {
+        ProviderKind.chatgptAccount.isEnabled
+    }
+}
+
 /// Registered by the app at launch. Provider prefers this over raw URLSession.
 public final class ChatGPTBrowserBackendRegistry: @unchecked Sendable {
     public static let shared = ChatGPTBrowserBackendRegistry()

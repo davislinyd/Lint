@@ -2,8 +2,8 @@ import XCTest
 @testable import LintCore
 
 final class LiveCheckPolicyTests: XCTestCase {
-    func testAMissingSettingIsOffAndAStoredChoiceIsKept() {
-        XCTAssertFalse(LiveCheckPolicy.enabledValue(stored: nil))
+    func testAMissingSettingIsOnAndAStoredChoiceIsKept() {
+        XCTAssertTrue(LiveCheckPolicy.enabledValue(stored: nil))
         XCTAssertTrue(LiveCheckPolicy.enabledValue(stored: true))
         XCTAssertFalse(LiveCheckPolicy.enabledValue(stored: false))
         XCTAssertEqual(

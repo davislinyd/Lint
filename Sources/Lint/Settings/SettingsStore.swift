@@ -277,7 +277,7 @@ final class SettingsStore {
         } else {
             autoSuggestOnSelection = defaults.bool(forKey: Keys.autoSuggestOnSelection)
         }
-        // The observer does not run in init, so a missing key was never toggled. Off.
+        // The observer does not run in init, so a missing key was never toggled. On.
         // A stored bool is the user's choice and stays.
         liveWatchWhileTyping = LiveCheckPolicy.enabledValue(
             stored: defaults.object(forKey: Keys.liveWatchWhileTyping) == nil

@@ -68,7 +68,7 @@ struct GeneralSettingsPane: View {
             )
             SettingsToggle(
                 title: "打字時即時監看（英文為主）",
-                detail: "預設關閉。開啟後會讀取焦點欄位的文字，停頓約 0.5 秒後在背景準備建議。僅英文為主的片段會觸發，快捷鍵不受此限。",
+                detail: "停頓約 0.5 秒後預先準備建議。僅英文為主的片段會觸發，快捷鍵不受此限。",
                 isOn: Bindable(app.settings).liveWatchWhileTyping
             )
             SettingsToggle(

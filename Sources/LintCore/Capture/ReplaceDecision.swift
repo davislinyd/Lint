@@ -2,7 +2,9 @@ import Foundation
 
 /// What a replace is allowed to do to the captured field.
 /// Select-all exists only when that field's whole value is the captured snippet.
-/// A write that cannot be read back is a failure, including when the original text is merely gone.
+/// A write goes only over the checked text. A field that can be read has to show the new text afterwards,
+/// and the original merely being gone is not enough; a field that cannot be read at all proves nothing,
+/// so the replace counts as done.
 public enum ReplaceAttempt: Equatable, Sendable {
     /// Replace the one occurrence of the original snippet in the field value.
     case setFieldValue(String)
@@ -44,6 +46,7 @@ public struct ReplaceSnapshot: Equatable, Sendable {
     public var fieldValue: String?
     public var original: String
     public var newText: String
+    /// `true` only when the captured range was selected again and that selection reads as the original.
     public var rangeRestored: Bool
     public var liveSelectedText: String?
 
@@ -94,16 +97,32 @@ public enum ReplaceDecision {
             }
             return .failure(.notWholeField)
         case .pasteIntoRestoredSelection, .selectAllAndPaste:
-            return afterPaste(fieldAfter: nil, newText: snapshot.newText)
+            return .failure(.unverified)
         }
     }
 
-    public static func afterAXWriteSucceeded(fieldAfter: String?, newText: String) -> ReplaceDirective {
-        confirmed(fieldAfter: fieldAfter, newText: newText) ? .success : .failure(.unverified)
+    public static func afterAXWriteSucceeded(
+        fieldBefore: String?, fieldAfter: String?, newText: String
+    ) -> ReplaceDirective {
+        afterWrite(fieldBefore: fieldBefore, fieldAfter: fieldAfter, newText: newText)
     }
 
-    public static func afterPaste(fieldAfter: String?, newText: String) -> ReplaceDirective {
-        confirmed(fieldAfter: fieldAfter, newText: newText) ? .success : .failure(.unverified)
+    public static func afterPaste(fieldBefore: String?, fieldAfter: String?, newText: String) -> ReplaceDirective {
+        afterWrite(fieldBefore: fieldBefore, fieldAfter: fieldAfter, newText: newText)
+    }
+
+    /// A field that can be read after the write has to show the new text. One that could not be read
+    /// before it and cannot be read after it (web views and Electron often hide their value) proves
+    /// nothing either way; the write went only over the checked text, so the replace counts as done.
+    private static func afterWrite(fieldBefore: String?, fieldAfter: String?, newText: String) -> ReplaceDirective {
+        if isReadable(fieldAfter) {
+            return confirmed(fieldAfter: fieldAfter, newText: newText) ? .success : .failure(.unverified)
+        }
+        return isReadable(fieldBefore) ? .failure(.unverified) : .success
+    }
+
+    private static func isReadable(_ field: String?) -> Bool {
+        !(field ?? "").isEmpty
     }
 
     /// True only when the captured snippet is the entire field, ignoring surrounding whitespace.

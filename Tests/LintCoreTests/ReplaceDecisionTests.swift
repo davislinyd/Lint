@@ -9,13 +9,13 @@ final class ReplaceDecisionTests: XCTestCase {
         }
         XCTAssertEqual(updated, "Hello fixed tail")
         XCTAssertEqual(
-            ReplaceDecision.afterAXWriteSucceeded(fieldAfter: updated, newText: "fixed"),
+            ReplaceDecision.afterAXWriteSucceeded(fieldBefore: "Hello snippet tail", fieldAfter: updated, newText: "fixed"),
             .success
         )
     }
 
     func testSnippetSmallerThanTheFieldNeverSelectsAll() {
-        var snapshot = snapshot(field: "prefix snippet suffix", original: "snippet", newText: "fixed")
+        let snapshot = snapshot(field: "prefix snippet suffix", original: "snippet", newText: "fixed")
         var directive = ReplaceDecision.first(snapshot)
         for _ in 0..<6 {
             switch directive {
@@ -32,9 +32,13 @@ final class ReplaceDecisionTests: XCTestCase {
             }
         }
         XCTFail("decision did not stop")
+    }
 
-        snapshot.rangeRestored = true
-        directive = ReplaceDecision.first(snapshot)
+    func testARestoredRangeInALargerFieldNeverSelectsAll() {
+        let snapshot = snapshot(
+            field: "prefix snippet suffix", original: "snippet", newText: "fixed", rangeRestored: true
+        )
+        var directive = ReplaceDecision.first(snapshot)
         for _ in 0..<6 {
             switch directive {
             case .perform(let attempt):
@@ -42,12 +46,14 @@ final class ReplaceDecisionTests: XCTestCase {
                     return XCTFail("select-all after the range was restored")
                 }
                 if case .pasteIntoRestoredSelection = attempt {
-                    directive = ReplaceDecision.afterPaste(fieldAfter: nil, newText: snapshot.newText)
+                    directive = ReplaceDecision.afterPaste(
+                        fieldBefore: snapshot.fieldValue, fieldAfter: nil, newText: snapshot.newText
+                    )
                 } else {
                     directive = ReplaceDecision.afterAXWriteFailed(attempt, snapshot)
                 }
             case .success:
-                return XCTFail("unreadable field was treated as success")
+                return XCTFail("a field that could be read and then could not was treated as success")
             case .failure(let reason):
                 XCTAssertEqual(reason, .unverified)
                 return
@@ -66,31 +72,79 @@ final class ReplaceDecisionTests: XCTestCase {
                     return XCTFail("select-all without a readable field")
                 }
                 if case .pasteIntoRestoredSelection = attempt {
-                    directive = ReplaceDecision.afterPaste(fieldAfter: nil, newText: snapshot.newText)
+                    directive = ReplaceDecision.afterPaste(
+                        fieldBefore: snapshot.fieldValue, fieldAfter: nil, newText: snapshot.newText
+                    )
                 } else {
                     directive = ReplaceDecision.afterAXWriteFailed(attempt, snapshot)
                 }
             case .failure(let reason):
-                XCTAssertEqual(reason, .unverified)
-                XCTAssertEqual(reason.message, "無法確認已寫入。若不對請還原（⌘Z）。")
-                return
+                return XCTFail("a paste over the checked selection of an unreadable field failed: \(reason)")
             case .success:
-                return XCTFail("unreadable paste was treated as success")
+                // Nothing can be read before or after, and the paste went only over the checked selection.
+                return
             }
         }
         XCTFail("decision did not stop")
     }
 
     func testUnverifiedPasteIsAnErrorEvenIfTheOriginalIsGone() {
+        let before = "Hello snippet tail"
         XCTAssertEqual(
-            ReplaceDecision.afterPaste(fieldAfter: nil, newText: "fixed"),
+            ReplaceDecision.afterPaste(fieldBefore: before, fieldAfter: nil, newText: "fixed"),
             .failure(.unverified)
         )
         XCTAssertEqual(
-            ReplaceDecision.afterPaste(fieldAfter: "", newText: "fixed"),
+            ReplaceDecision.afterPaste(fieldBefore: before, fieldAfter: "", newText: "fixed"),
+            .failure(.unverified)
+        )
+        XCTAssertEqual(
+            ReplaceDecision.afterAXWriteSucceeded(fieldBefore: before, fieldAfter: "Hello tail", newText: "fixed"),
             .failure(.unverified)
         )
         XCTAssertFalse(ReplaceDecision.confirmed(fieldAfter: "other text", newText: "fixed"))
+        XCTAssertEqual(ReplaceRefusal.unverified.message, "無法確認已寫入。若不對請還原（⌘Z）。")
+    }
+
+    func testAFieldThatCannotBeReadCountsATargetedWriteAsDone() {
+        for before in [nil, ""] as [String?] {
+            for after in [nil, ""] as [String?] {
+                XCTAssertEqual(
+                    ReplaceDecision.afterPaste(fieldBefore: before, fieldAfter: after, newText: "fixed"),
+                    .success
+                )
+                XCTAssertEqual(
+                    ReplaceDecision.afterAXWriteSucceeded(fieldBefore: before, fieldAfter: after, newText: "fixed"),
+                    .success
+                )
+            }
+        }
+        // Once the field can be read, it has to show the new text.
+        XCTAssertEqual(
+            ReplaceDecision.afterPaste(fieldBefore: nil, fieldAfter: "Hello snippet tail", newText: "fixed"),
+            .failure(.unverified)
+        )
+        XCTAssertEqual(
+            ReplaceDecision.afterPaste(fieldBefore: nil, fieldAfter: "Hello fixed tail", newText: "fixed"),
+            .success
+        )
+        // A paste that is reported as failed is never done.
+        XCTAssertEqual(
+            ReplaceDecision.afterAXWriteFailed(
+                .pasteIntoRestoredSelection,
+                snapshot(field: nil, original: "snippet", newText: "fixed", rangeRestored: true)
+            ),
+            .failure(.unverified)
+        )
+    }
+
+    func testOnlyTheCheckedTextMayBeWrittenOver() {
+        XCTAssertTrue(ReplaceDecision.liveMatches("snippet", original: "snippet"))
+        XCTAssertTrue(ReplaceDecision.liveMatches(" snippet\n", original: "snippet"))
+        XCTAssertFalse(ReplaceDecision.liveMatches("prefix snippet suffix", original: "snippet"))
+        XCTAssertFalse(ReplaceDecision.liveMatches("snip", original: "snippet"))
+        XCTAssertFalse(ReplaceDecision.liveMatches(nil, original: "snippet"))
+        XCTAssertFalse(ReplaceDecision.liveMatches("", original: ""))
     }
 
     func testNoCaptureUsesTheExistingMessage() {

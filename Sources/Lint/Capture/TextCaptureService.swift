@@ -13,6 +13,8 @@ final class TextCaptureService {
         var selectedRange: CFRange?
         /// Where to park the check chip (caret / text end). Falls back to selectedRange.
         var chipAnchorRange: CFRange? = nil
+        /// Read with ⌘A then ⌘C because the field exposes no text: the text is the whole field.
+        var selectedAll = false
     }
 
     private(set) var lastCapture: CaptureResult?
@@ -189,8 +191,10 @@ final class TextCaptureService {
     }
 
     /// Replace previously captured selection. Returns error message or nil on success.
-    /// Every write comes from `ReplaceDecision`: no select-all unless the field is the snippet,
-    /// and a paste that cannot be read back is an error.
+    /// Every write comes from `ReplaceDecision` and goes only over the checked text: the one occurrence in
+    /// the field value, a selection that reads as the original, or, without an Accessibility target, a
+    /// selection that ⌘C shows is still the original. No select-all unless the field is the snippet.
+    /// A field that can be read has to show the new text afterwards; one that cannot be read counts as done.
     func replaceLast(with newText: String) async -> String? {
         guard let last = lastCapture else { return ReplaceRefusal.noCapture.message }
         if Self.blocksReplace(last) {
@@ -219,7 +223,8 @@ final class TextCaptureService {
             original: last.text,
             newText: newText,
             rangeRestored: false,
-            liveSelectedText: live?.text
+            // The selection of the element that will be written, not of whatever else has focus now.
+            liveSelectedText: element.flatMap { Self.readStringAttribute($0, kAXSelectedTextAttribute as String) }
         )
         var directive = ReplaceDecision.first(snapshot)
         directive = restoreRangeIfRefused(&snapshot, element: element, range: last.selectedRange, directive: directive)
@@ -247,6 +252,10 @@ final class TextCaptureService {
                     )
                     continue
                 }
+                // Nothing has been written yet and Accessibility has no checked target.
+                if reason == .notWholeField || reason == .ambiguous {
+                    return await replaceAfterCopyCheck(last, newText: newText)
+                }
                 Self.log("replace refused \(reason)")
                 return reason.message
             case .perform(let attempt):
@@ -269,11 +278,53 @@ final class TextCaptureService {
         guard case .failure(let reason) = directive, reason == .notWholeField || reason == .ambiguous else {
             return directive
         }
-        guard !snapshot.rangeRestored, let element, let range, Self.setSelectedRange(element, range) else {
+        guard !snapshot.rangeRestored, let element, let range,
+              Self.restoreRange(range, on: element, original: snapshot.original) else {
             return directive
         }
         snapshot.rangeRestored = true
         return ReplaceDecision.first(snapshot)
+    }
+
+    /// Select the captured range again. It counts only when that selection reads as the original; if it
+    /// does not, the selection goes back where it was, so nothing is written over different text.
+    private static func restoreRange(_ range: CFRange, on element: AXUIElement, original: String) -> Bool {
+        let previous = readSelectedRange(element)
+        guard setSelectedRange(element, range) else { return false }
+        if ReplaceDecision.liveMatches(readStringAttribute(element, kAXSelectedTextAttribute as String), original: original) {
+            return true
+        }
+        if let previous { _ = setSelectedRange(element, previous) }
+        log("replace restored range does not read as the original")
+        return false
+    }
+
+    /// The field value after a write. Chromium updates its accessibility tree a moment after an AX write,
+    /// so a value that can be read but does not show the new text yet is read once more.
+    private static func readBack(_ element: AXUIElement?, newText: String) async -> String? {
+        guard let element else { return nil }
+        let value = readStringAttribute(element, kAXValueAttribute as String)
+        guard let value, !value.isEmpty, !value.contains(newText) else { return value }
+        try? await Task.sleep(for: .milliseconds(200))
+        return readStringAttribute(element, kAXValueAttribute as String)
+    }
+
+    /// No Accessibility target. Copy what is selected now (after ⌘A when the capture was the whole field)
+    /// and paste only over that same text. Anything else is left as it is.
+    private func replaceAfterCopyCheck(_ last: CaptureResult, newText: String) async -> String? {
+        if last.selectedAll {
+            Self.postHotkey(keyCode: 0) // A
+            try? await Task.sleep(for: .milliseconds(80))
+        }
+        let copied = await copySelection()
+        guard ReplaceDecision.liveMatches(copied, original: last.text) else {
+            if last.selectedAll { Self.postHotkey(keyCode: 124, flags: []) } // Right arrow: collapse, nothing written
+            Self.log("replace refused copy does not match")
+            return ReplaceRefusal.notWholeField.message
+        }
+        Self.log("replace paste after copy check selectedAll=\(last.selectedAll)")
+        await pasteViaClipboard(newText)
+        return nil
     }
 
     private func perform(
@@ -288,12 +339,15 @@ final class TextCaptureService {
             let err = AXUIElementSetAttributeValue(
                 element, kAXValueAttribute as CFString, updated as CFTypeRef
             )
-            let after = Self.readStringAttribute(element, kAXValueAttribute as String)
             Self.log("replace AXValue err=\(err.rawValue)")
             if err == .success {
-                return ReplaceDecision.afterAXWriteSucceeded(fieldAfter: after, newText: snapshot.newText)
+                let after = await Self.readBack(element, newText: snapshot.newText)
+                return ReplaceDecision.afterAXWriteSucceeded(
+                    fieldBefore: snapshot.fieldValue, fieldAfter: after, newText: snapshot.newText
+                )
             }
-            if !snapshot.rangeRestored, let range, Self.setSelectedRange(element, range) {
+            if !snapshot.rangeRestored, let range,
+               Self.restoreRange(range, on: element, original: snapshot.original) {
                 snapshot.rangeRestored = true
             }
             return ReplaceDecision.afterAXWriteFailed(attempt, snapshot)
@@ -302,16 +356,20 @@ final class TextCaptureService {
             let err = AXUIElementSetAttributeValue(
                 element, kAXSelectedTextAttribute as CFString, snapshot.newText as CFTypeRef
             )
-            let after = Self.readStringAttribute(element, kAXValueAttribute as String)
             Self.log("replace selectedText err=\(err.rawValue)")
             if err == .success {
-                return ReplaceDecision.afterAXWriteSucceeded(fieldAfter: after, newText: snapshot.newText)
+                let after = await Self.readBack(element, newText: snapshot.newText)
+                return ReplaceDecision.afterAXWriteSucceeded(
+                    fieldBefore: snapshot.fieldValue, fieldAfter: after, newText: snapshot.newText
+                )
             }
             return ReplaceDecision.afterAXWriteFailed(attempt, snapshot)
         case .pasteIntoRestoredSelection:
             await pasteViaClipboard(snapshot.newText)
-            let after = element.flatMap { Self.readStringAttribute($0, kAXValueAttribute as String) }
-            return ReplaceDecision.afterPaste(fieldAfter: after, newText: snapshot.newText)
+            let after = await Self.readBack(element, newText: snapshot.newText)
+            return ReplaceDecision.afterPaste(
+                fieldBefore: snapshot.fieldValue, fieldAfter: after, newText: snapshot.newText
+            )
         case .selectAllAndPaste:
             guard let field = snapshot.fieldValue,
                   ReplaceDecision.allowsSelectAll(field: field, original: snapshot.original) else {
@@ -321,8 +379,10 @@ final class TextCaptureService {
             Self.postHotkey(keyCode: 0, to: lastCapture?.sourceAppPID)
             try? await Task.sleep(for: .milliseconds(80))
             await pasteViaClipboard(snapshot.newText)
-            let after = element.flatMap { Self.readStringAttribute($0, kAXValueAttribute as String) }
-            return ReplaceDecision.afterPaste(fieldAfter: after, newText: snapshot.newText)
+            let after = await Self.readBack(element, newText: snapshot.newText)
+            return ReplaceDecision.afterPaste(
+                fieldBefore: snapshot.fieldValue, fieldAfter: after, newText: snapshot.newText
+            )
         }
     }
 
@@ -701,20 +761,7 @@ final class TextCaptureService {
     /// Only accepts text that Cmd+C actually put on the pasteboard (a real selection),
     /// not whatever was already there.
     private func readViaClipboard() async -> CaptureResult? {
-        let snapshot = PasteboardMemory.snapshot()
-        let before = NSPasteboard.general.changeCount
-        Self.postHotkey(keyCode: 8) // C
-        for _ in 0..<12 {
-            try? await Task.sleep(for: .milliseconds(25))
-            if NSPasteboard.general.changeCount != before { break }
-        }
-        let changed = NSPasteboard.general.changeCount != before
-        let text = NSPasteboard.general.string(forType: .string)
-        PasteboardMemory.restore(snapshot)
-        guard changed,
-              let text, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            return nil
-        }
+        guard let text = await copySelection() else { return nil }
         return CaptureResult(
             text: text,
             usedClipboardFallback: true,
@@ -737,10 +784,26 @@ final class TextCaptureService {
            !Self.selectAllRoles.contains(role) {
             return nil
         }
-        let snapshot = PasteboardMemory.snapshot()
-        let before = NSPasteboard.general.changeCount
         Self.postHotkey(keyCode: 0) // A
         try? await Task.sleep(for: .milliseconds(80))
+        let text = await copySelection()
+        Self.postHotkey(keyCode: 124, flags: []) // Right arrow
+        guard let text, text.count <= 4000 else { return nil }
+        return CaptureResult(
+            text: text,
+            usedClipboardFallback: true,
+            axElement: nil,
+            sourceAppPID: Self.frontmostPID(),
+            selectedRange: nil,
+            selectedAll: true
+        )
+    }
+
+    /// ⌘C in the front app, with the pasteboard restored afterwards. Only text that ⌘C just put on the
+    /// pasteboard counts, and only when it is not blank.
+    private func copySelection() async -> String? {
+        let snapshot = PasteboardMemory.snapshot()
+        let before = NSPasteboard.general.changeCount
         Self.postHotkey(keyCode: 8) // C
         for _ in 0..<12 {
             try? await Task.sleep(for: .milliseconds(25))
@@ -749,17 +812,11 @@ final class TextCaptureService {
         let changed = NSPasteboard.general.changeCount != before
         let text = NSPasteboard.general.string(forType: .string)
         PasteboardMemory.restore(snapshot)
-        Self.postHotkey(keyCode: 124, flags: []) // Right arrow
-        guard changed, let text,
-              !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-              text.count <= 4000 else { return nil }
-        return CaptureResult(
-            text: text,
-            usedClipboardFallback: true,
-            axElement: nil,
-            sourceAppPID: Self.frontmostPID(),
-            selectedRange: nil
-        )
+        guard changed,
+              let text, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return nil
+        }
+        return text
     }
 
     private func pasteViaClipboard(_ text: String) async {

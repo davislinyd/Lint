@@ -86,6 +86,12 @@ public struct LlamaServerLaunchPlan: Equatable, Sendable {
         // Mac short of memory a load from disk went from 12-20 s to 6-8 s (with memory to spare it
         // made no difference). Models without such tensors are unaffected.
         add(["--lazy-mode", "on"])
+        // Caps the prompt cache in RAM. b11046 lets it grow to 8 GiB and keeps it while the model
+        // sleeps, and each proofread of a longer text (from about 250 tokens) stored the previous one
+        // there, about 83 MiB with Gemma 4 E4B, never read back: 30 such texts took the server from
+        // 343 MB to 2 GB. 128 MiB still holds the prompts of the modes Lint switches between; with no
+        // cache at all, switching back to a mode made the slowest replies about 18% slower.
+        add(["--cache-ram", "128"])
         add(profile.reasoningArguments)
         if idleSleepSeconds > 0 {
             add(["--sleep-idle-seconds", "\(idleSleepSeconds)"])
@@ -112,7 +118,7 @@ public struct LlamaServerLaunchPlan: Equatable, Sendable {
     /// are listed: the point is to notice that the user set the same one.
     enum OptionFamily: Hashable {
         case context, cacheTypeK, cacheTypeV, batch, ubatch, gpuLayers, flashAttention
-        case parallel, threads, jinja, chatParsing, reasoning, idleSleep, lazyMode
+        case parallel, threads, jinja, chatParsing, reasoning, idleSleep, lazyMode, cacheRAM
 
         static func of(_ token: String) -> OptionFamily? {
             let flag = token.split(separator: "=", maxSplits: 1).first.map(String.init) ?? token
@@ -131,6 +137,7 @@ public struct LlamaServerLaunchPlan: Equatable, Sendable {
             case "-rea", "--reasoning": return .reasoning
             case "--sleep-idle-seconds": return .idleSleep
             case "-lzm", "--lazy-mode": return .lazyMode
+            case "-cram", "--cache-ram": return .cacheRAM
             default: return nil
             }
         }

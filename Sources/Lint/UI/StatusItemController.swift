@@ -108,6 +108,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 
     @objc private func checkForUpdates() {
         app.updates.checkNow()
+        app.openSettings(pane: .general, scrollToUpdateSection: true)
     }
 
     @objc private func installUpdate() {

@@ -5,16 +5,28 @@ import SwiftUI
 struct GeneralSettingsPane: View {
     var app: AppModel
     @State private var showPermissionSteps = true
+    private let updateSectionID = "updateSection"
 
     var body: some View {
-        Form {
-            accessibilitySection
-            behaviorSection
-            hotkeySection
-            languageSection
-            updateSection
+        ScrollViewReader { proxy in
+            Form {
+                accessibilitySection
+                behaviorSection
+                hotkeySection
+                languageSection
+                updateSection
+                    .id(updateSectionID)
+            }
+            .formStyle(.grouped)
+            .task(id: app.scrollToUpdateSectionRequest) {
+                guard app.scrollToUpdateSectionRequest != nil else { return }
+                try? await Task.sleep(for: .milliseconds(50))
+                withAnimation {
+                    proxy.scrollTo(updateSectionID, anchor: .top)
+                }
+                app.scrollToUpdateSectionRequest = nil
+            }
         }
-        .formStyle(.grouped)
     }
 
     @ViewBuilder

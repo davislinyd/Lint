@@ -18,6 +18,8 @@ final class AppModel: NSObject, NSWindowDelegate {
     var accessibilityTrusted = AccessibilityPermission.isTrusted
     /// The pane the settings window shows; a menu item can open it on a given pane.
     var settingsPane: SettingsPane = .general
+    /// Set to a new value to make the general pane scroll to its update section once it appears.
+    var scrollToUpdateSectionRequest: UUID?
     private var settingsWindow: NSWindow?
     private var localAISetupWindow: NSWindow?
     private var selectionMonitor: SelectionMonitor?
@@ -246,8 +248,9 @@ final class AppModel: NSObject, NSWindowDelegate {
         }
     }
 
-    func openSettings(pane: SettingsPane? = nil) {
+    func openSettings(pane: SettingsPane? = nil, scrollToUpdateSection: Bool = false) {
         if let pane { settingsPane = pane }
+        if scrollToUpdateSection { scrollToUpdateSectionRequest = UUID() }
         if settingsWindow == nil {
             let window = NSWindow(
                 contentRect: NSRect(x: 0, y: 0, width: 760, height: 560),

@@ -84,13 +84,55 @@ final class AppModel: NSObject, NSWindowDelegate {
         ) == .appleIntelligence
     }
 
-    /// The local model's state for the menu bar, or nil when the requests do not go to it.
-    var localModelActivity: LocalModelActivity? {
-        let route = WritingEngineRouter.route(
+    /// Where requests go now, for the menu bar.
+    var writingRoute: WritingEngineRoute {
+        WritingEngineRouter.route(
             selected: settings.providerKind, apple: appleIntelligence.currentStatus(),
             localAIReady: localAI.runtimeReady && localAI.modelReady
         )
-        return route == .provider(.localLlama) ? localAI.activity : nil
+    }
+
+    /// The local model's state for the menu bar, or nil when the requests do not go to it. A download
+    /// is shown whichever way they go.
+    var localModelActivity: LocalModelActivity? {
+        if localAI.downloadState.isActive { return localAI.activity }
+        return writingRoute == .provider(.localLlama) ? localAI.activity : nil
+    }
+
+    /// Apple Intelligence picked from the menu bar: requests go to it from now on, and a llama-server
+    /// Lint started is stopped at once so its memory is free.
+    func useAppleIntelligence() {
+        settings.selectProvider(.appleIntelligence)
+        localAI.releaseForAppleIntelligence()
+    }
+
+    /// A model Lint manages, picked from the menu bar, is used from now on. One that is not installed
+    /// is downloaded only after the user agreed to its size; picking the model in use does nothing,
+    /// unless it still has to be downloaded.
+    func useLocalModel(_ model: ModelDescriptor) {
+        let changed = settings.localModelSource != .managed || settings.localManagedModelID != model.id
+        let installed = localAI.isInstalled(model)
+        if !changed, settings.providerKind == .localLlama, installed || localAI.downloadState.isActive { return }
+        if !installed, !confirmDownload(of: model) { return }
+        if settings.providerKind != .localLlama { settings.selectProvider(.localLlama) }
+        settings.localModelSource = .managed
+        settings.localManagedModelID = model.id
+        Task { await localAI.useManagedModel(changed: changed) }
+    }
+
+    /// The same size and free space that Settings shows before a download.
+    private func confirmDownload(of model: ModelDescriptor) -> Bool {
+        let alert = NSAlert()
+        alert.messageText = String(localized: "下載模型？")
+        alert.informativeText = LocalServerSection.downloadConfirmation(for: model)
+        if model.memoryClass == .large {
+            alert.alertStyle = .warning
+            alert.informativeText += "\n\n" + LocalServerSection.largeModelWarning
+        }
+        alert.addButton(withTitle: String(localized: "下載並安裝"))
+        alert.addButton(withTitle: String(localized: "取消")).keyEquivalent = "\u{1b}"
+        NSApp.activate(ignoringOtherApps: true)
+        return alert.runModal() == .alertFirstButtonReturn
     }
 
     /// Whether to offer Lint's local AI setup (menu item, first launch). Never downloads anything.

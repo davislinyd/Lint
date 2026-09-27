@@ -455,3 +455,10 @@
 "重啟中" = "Reiniciando";
 "失敗" = "Falhou";
 "本機模型：%@" = "Modelo local: %@";
+"模型：%@" = "Modelo: %@";
+"尚未設定" = "Não configurado";
+"下載中 %@（%@ / %@）" = "Baixando %@ (%@ / %@)";
+"下載中 %@" = "Baixando %@";
+"啟動服務" = "Iniciar servidor";
+"停止服務" = "Parar servidor";
+"重新啟動服務" = "Reiniciar servidor";

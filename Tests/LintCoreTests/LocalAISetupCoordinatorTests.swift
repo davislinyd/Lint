@@ -579,3 +579,139 @@ final class LocalModelActivityTests: XCTestCase {
         XCTAssertEqual(coordinator.activity, .running, "a restarted server holds its model")
     }
 }
+
+/// A model picked from the menu bar: one that is not installed is downloaded (the menu asks first)
+/// and started; one that is installed is only switched to; the same one is only started.
+@MainActor
+final class MenuModelChoiceTests: XCTestCase {
+    private struct Env {
+        let coordinator: LocalAISetupCoordinator
+        let server: FakeServer
+        let transport: FakeTransport
+        let config: ConfigBox
+        let paths: LocalAIPaths
+        let first: ModelDescriptor
+        let second: ModelDescriptor
+    }
+
+    /// `first` is installed and selected; `second` is installed only when asked.
+    private func makeEnv(installSecond: Bool) async throws -> Env {
+        let (first, firstRemote) = TestModel.make(id: "first", shards: [("a.gguf", TestModel.payload("a", count: 4000))])
+        let (second, secondRemote) = TestModel.make(id: "second", shards: [("b.gguf", TestModel.payload("b", count: 5000))])
+        let paths = LocalAIPaths(root: try TestSupport.makeTempDirectory())
+        let transport = FakeTransport(remote: firstRemote.merging(secondRemote) { a, _ in a })
+        let downloader = ModelDownloadManager(paths: paths, transport: transport, diskSpace: FakeDiskSpace(bytes: 1 << 40))
+        let server = FakeServer()
+        let config = ConfigBox(LocalAIConfiguration(managedModel: first, extraArguments: ""))
+        let coordinator = LocalAISetupCoordinator(
+            configuration: { config.value },
+            resolver: FakeResolver(.ready(LlamaRuntimeLocation(binaryURL: URL(fileURLWithPath: "/llama-server"), origin: .bundled))),
+            models: LocalModelManager(paths: paths), downloader: downloader, server: server, settleDelay: .zero
+        )
+        let firstInstalled = await downloader.install(first)
+        XCTAssertEqual(firstInstalled, .installed)
+        if installSecond {
+            let secondInstalled = await downloader.install(second)
+            XCTAssertEqual(secondInstalled, .installed)
+        }
+        await coordinator.refresh()
+        return Env(coordinator: coordinator, server: server, transport: transport, config: config, paths: paths, first: first, second: second)
+    }
+
+    private func waitUntil(_ description: String, timeout: TimeInterval = 10, _ condition: () -> Bool) async throws {
+        let deadline = Date().addingTimeInterval(timeout)
+        while !condition() {
+            if Date() > deadline { return XCTFail("timed out waiting for \(description)") }
+            try await Task.sleep(for: .milliseconds(5))
+        }
+    }
+
+    private func modelPath(_ env: Env, _ model: ModelDescriptor, _ file: String) -> String {
+        env.paths.installDirectory(for: model).appendingPathComponent(file).path
+    }
+
+    func testAMissingModelIsDownloadedAndThenStarted() async throws {
+        let env = try await makeEnv(installSecond: false)
+        try await env.coordinator.startServer()
+        XCTAssertFalse(env.coordinator.isInstalled(env.second))
+        let downloadsBefore = env.transport.calls.count
+
+        env.config.value.managedModel = env.second
+        await env.coordinator.useManagedModel(changed: true)
+        try await waitUntil("the new model to run") {
+            env.coordinator.state == .serverReady && env.server.startedPlans.count == 2
+        }
+
+        XCTAssertEqual(env.server.stopCalls, 1, "the old model's process is stopped first")
+        XCTAssertTrue(env.server.startedPlans[1].arguments.contains(modelPath(env, env.second, "b.gguf")))
+        XCTAssertEqual(env.transport.calls.dropFirst(downloadsBefore).map(\.fileName), ["b.gguf"])
+        XCTAssertTrue(env.coordinator.isInstalled(env.second))
+        XCTAssertEqual(env.coordinator.activity, .running)
+    }
+
+    func testAnInstalledModelIsSwitchedToWithoutADownload() async throws {
+        let env = try await makeEnv(installSecond: true)
+        try await env.coordinator.startServer()
+        let downloadsBefore = env.transport.calls.count
+
+        env.config.value.managedModel = env.second
+        await env.coordinator.useManagedModel(changed: true)
+
+        XCTAssertEqual(env.server.startedPlans.count, 2)
+        XCTAssertTrue(env.server.startedPlans[1].arguments.contains(modelPath(env, env.second, "b.gguf")))
+        XCTAssertEqual(env.transport.calls.count, downloadsBefore)
+        XCTAssertEqual(env.coordinator.state, .serverReady)
+    }
+
+    func testTheSameModelIsOnlyStartedAndNeverRestarted() async throws {
+        let env = try await makeEnv(installSecond: false)
+        XCTAssertEqual(env.coordinator.state, .serverStopped)
+
+        await env.coordinator.useManagedModel(changed: false)
+        XCTAssertEqual(env.server.startedPlans.count, 1)
+        XCTAssertEqual(env.coordinator.state, .serverReady)
+
+        await env.coordinator.useManagedModel(changed: false)
+        XCTAssertEqual(env.server.startedPlans.count, 1, "a running server with this model is left alone")
+        XCTAssertEqual(env.server.stopCalls, 0)
+    }
+
+    func testAFailedDownloadIsForgottenWhenAnotherModelIsChosen() async throws {
+        let env = try await makeEnv(installSecond: false)
+        env.transport.failure = { _ in ModelInstallError.network("offline") }
+        env.config.value.managedModel = env.second
+        await env.coordinator.useManagedModel(changed: true)
+        try await waitUntil("the failure") { if case .failed = env.coordinator.downloadState { true } else { false } }
+        XCTAssertEqual(env.coordinator.activity, .failed(ModelInstallError.network("offline").localizedDescription))
+
+        env.config.value.managedModel = env.first
+        await env.coordinator.useManagedModel(changed: true)
+        XCTAssertEqual(env.coordinator.downloadState, .idle)
+        XCTAssertEqual(env.coordinator.activity, .running)
+    }
+
+    func testADownloadIsShownAheadOfTheServer() {
+        let running = LocalServerStatus.running(pid: 1, managedByLint: true)
+        let downloading = ModelDownloadState.downloading(bytesReceived: 1, totalBytes: 4)
+        XCTAssertEqual(
+            LocalModelActivity.resolve(serverStatus: .stopped, sleep: .unknown, isRestarting: false, download: downloading),
+            .downloading(downloading)
+        )
+        XCTAssertEqual(
+            LocalModelActivity.resolve(serverStatus: running, sleep: .awake, isRestarting: false, download: .verifying),
+            .downloading(.verifying)
+        )
+        XCTAssertEqual(
+            LocalModelActivity.resolve(serverStatus: running, sleep: .awake, isRestarting: true, download: downloading),
+            .restarting
+        )
+        XCTAssertEqual(
+            LocalModelActivity.resolve(serverStatus: running, sleep: .awake, isRestarting: false, download: .failed(.network("x"))),
+            .running, "a failed download does not hide a server that works"
+        )
+        XCTAssertEqual(
+            LocalModelActivity.resolve(serverStatus: .stopped, sleep: .unknown, isRestarting: false, download: .cancelled),
+            .notLoaded
+        )
+    }
+}

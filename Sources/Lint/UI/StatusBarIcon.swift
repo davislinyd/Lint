@@ -76,7 +76,7 @@ enum StatusBarIcon {
     private static func dotStyle(_ activity: LocalModelActivity) -> Dot? {
         switch activity {
         case .notLoaded: nil
-        case .loading, .restarting: .filled(.systemYellow)
+        case .loading, .restarting, .downloading: .filled(.systemYellow)
         case .running: .filled(.systemGreen)
         case .idle: .hollow(.systemGray)
         case .failed: .filled(.systemRed)

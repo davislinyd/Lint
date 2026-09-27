@@ -8,6 +8,8 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private let menu = NSMenu()
     private var pollTask: Task<Void, Never>?
     private var wasStreaming = false
+    /// The menu's first row, kept so its title follows a download while the menu is open.
+    private weak var statusRow: NSMenuItem?
 
     init(app: AppModel) {
         self.app = app
@@ -30,15 +32,16 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         }
     }
 
-    /// Keeps the icon and its tooltip in step with the local model. While the requests go to it, the
-    /// server is asked every 5 s (it says nothing by itself when its model falls asleep or wakes up),
-    /// and once more as soon as a request ends.
+    /// Keeps the icon, its tooltip and the menu's first row in step with the local model. While the
+    /// requests go to it, the server is asked every 5 s (it says nothing by itself when its model falls
+    /// asleep or wakes up), and once more as soon as a request ends.
     private func observeLocalModel() {
-        let (activity, streaming) = withObservationTracking {
-            (app.localModelActivity, app.panel.viewModel.isStreaming)
+        let (activity, rowTitle, streaming) = withObservationTracking {
+            (app.localModelActivity, statusRowTitle, app.panel.viewModel.isStreaming)
         } onChange: { [weak self] in
             Task { @MainActor in self?.observeLocalModel() }
         }
+        statusRow?.title = rowTitle
         guard let button = statusItem.button else { return }
         button.image = StatusBarIcon.image(activity: activity)
         button.toolTip = activity.map(\.toolTip) ?? "Lint"
@@ -115,15 +118,124 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         NSApp.terminate(nil)
     }
 
+    @objc private func selectLocalModel(_ sender: NSMenuItem) {
+        guard let id = sender.representedObject as? String, let model = ModelCatalog.descriptor(id: id) else { return }
+        // After the menu has closed: a download is agreed to in an alert first.
+        DispatchQueue.main.async { [weak self] in
+            self?.app.useLocalModel(model)
+        }
+    }
+
+    @objc private func selectAppleIntelligence() {
+        app.useAppleIntelligence()
+    }
+
+    @objc private func cancelDownload() {
+        app.localAI.cancelInstall()
+    }
+
+    // A failure to start shows in the icon and its tooltip.
+    @objc private func startServer() {
+        Task { try? await app.localAI.startServer() }
+    }
+
+    @objc private func stopServer() {
+        Task { await app.localAI.stopServer() }
+    }
+
+    @objc private func restartServer() {
+        Task { try? await app.localAI.restartServer() }
+    }
+
+    @objc private func recheckServer() {
+        Task {
+            await app.localAI.refresh()
+            await app.localAI.refreshServerActivity()
+        }
+    }
+
+    /// The local model's state, or which engine takes the requests.
+    private var statusRowTitle: String {
+        if let activity = app.localModelActivity { return activity.statusLine }
+        switch app.writingRoute {
+        case .appleIntelligence: return String(localized: "模型：\(ProviderKind.appleIntelligence.title)")
+        case .provider(let kind): return String(localized: "模型：\(kind.title)")
+        case .unavailable: return String(localized: "模型：\(String(localized: "尚未設定"))")
+        }
+    }
+
+    /// The models to pick from and, while the requests go to the local model, its server.
+    private func localModelMenu() -> NSMenu {
+        let submenu = NSMenu()
+        submenu.autoenablesItems = false
+        let settings = app.settings
+        let localAI = app.localAI
+        let route = app.writingRoute
+        let usesLocal = route == .provider(.localLlama)
+
+        if usesLocal, settings.localModelSource == .custom {
+            let custom = NSMenuItem(title: String(localized: "自訂（Hugging Face）"), action: nil, keyEquivalent: "")
+            custom.state = .on
+            custom.isEnabled = false
+            submenu.addItem(custom)
+        }
+        for model in ModelCatalog.all {
+            let title = LocalServerSection.pickerLabel(for: model, installed: localAI.isInstalled(model))
+            let item = NSMenuItem(title: title, action: #selector(selectLocalModel(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = model.id
+            let inUse = usesLocal && settings.localModelSource == .managed && settings.localManagedModelID == model.id
+            item.state = inUse ? .on : .off
+            submenu.addItem(item)
+        }
+        let apple = app.appleIntelligence.currentStatus()
+        if apple.isAvailable || settings.providerKind == .appleIntelligence {
+            let item = NSMenuItem(title: ProviderKind.appleIntelligence.title, action: #selector(selectAppleIntelligence), keyEquivalent: "")
+            item.target = self
+            item.state = route == .appleIntelligence ? .on : .off
+            item.isEnabled = apple.isAvailable
+            submenu.addItem(item)
+        }
+        if localAI.downloadState.isActive {
+            submenu.addItem(.separator())
+            let cancel = NSMenuItem(title: String(localized: "取消下載"), action: #selector(cancelDownload), keyEquivalent: "")
+            cancel.target = self
+            submenu.addItem(cancel)
+        }
+        guard usesLocal else { return submenu }
+
+        submenu.addItem(.separator())
+        let busy = localAI.isRestarting || localAI.downloadState.isActive
+        switch localAI.serverStatus {
+        case .stopped, .failed:
+            let start = NSMenuItem(title: String(localized: "啟動服務"), action: #selector(startServer), keyEquivalent: "")
+            start.target = self
+            start.isEnabled = !busy && localAI.runtimeReady && localAI.modelReady
+            submenu.addItem(start)
+        case .starting, .running:
+            let stop = NSMenuItem(title: String(localized: "停止服務"), action: #selector(stopServer), keyEquivalent: "")
+            stop.target = self
+            stop.isEnabled = !localAI.isRestarting
+            submenu.addItem(stop)
+        }
+        let restart = NSMenuItem(title: String(localized: "重新啟動服務"), action: #selector(restartServer), keyEquivalent: "")
+        restart.target = self
+        if case .running = localAI.serverStatus { restart.isEnabled = !busy } else { restart.isEnabled = false }
+        submenu.addItem(restart)
+        let check = NSMenuItem(title: String(localized: "重新檢查"), action: #selector(recheckServer), keyEquivalent: "")
+        check.target = self
+        submenu.addItem(check)
+        return submenu
+    }
+
     private func rebuild() {
         menu.removeAllItems()
 
-        if let activity = app.localModelActivity {
-            let status = NSMenuItem(title: activity.statusLine, action: nil, keyEquivalent: "")
-            status.isEnabled = false
-            menu.addItem(status)
-            menu.addItem(.separator())
-        }
+        let status = NSMenuItem(title: statusRowTitle, action: nil, keyEquivalent: "")
+        menu.addItem(status)
+        menu.setSubmenu(localModelMenu(), for: status)
+        statusRow = status
+        menu.addItem(.separator())
 
         let run = NSMenuItem(title: String(localized: "改善選取文字"), action: #selector(runCapture), keyEquivalent: "")
         run.target = self
@@ -216,8 +328,24 @@ private extension LocalModelActivity {
         case .idle: String(localized: "閒置中")
         case .restarting: String(localized: "重啟中")
         case .failed: String(localized: "失敗")
+        case .downloading(let state): Self.downloadTitle(state)
         }
         return String(localized: "本機模型：\(title)")
+    }
+
+    static func downloadTitle(_ state: ModelDownloadState) -> String {
+        switch state {
+        case .downloading(let received, let total?) where total > 0:
+            let percent = (Double(min(received, total)) / Double(total)).formatted(.percent.precision(.fractionLength(0)))
+            let done = ModelInstallError.formatBytes(received)
+            let size = ModelInstallError.formatBytes(total)
+            return String(localized: "下載中 \(percent)（\(done) / \(size)）")
+        case .downloading(let received, _):
+            return String(localized: "下載中 \(ModelInstallError.formatBytes(received))")
+        case .verifying: return String(localized: "正在驗證下載的檔案…")
+        case .installing: return String(localized: "正在安裝…")
+        default: return String(localized: "下載中…")
+        }
     }
 
     var toolTip: String {

@@ -50,13 +50,20 @@ public enum LocalModelActivity: Equatable, Sendable {
     case idle
     case restarting
     case failed(String)
+    /// A model download in progress, from looking at the disk to installing the verified files.
+    case downloading(ModelDownloadState)
 
     public static func resolve(
-        serverStatus: LocalServerStatus, sleep: LocalModelSleepState, isRestarting: Bool
+        serverStatus: LocalServerStatus, sleep: LocalModelSleepState, isRestarting: Bool,
+        download: ModelDownloadState = .idle
     ) -> LocalModelActivity {
         if isRestarting { return .restarting }
+        if download.isActive { return .downloading(download) }
         switch serverStatus {
-        case .stopped: return .notLoaded
+        case .stopped:
+            // A failed download is why nothing runs: say so until the next attempt.
+            if case .failed(let error) = download { return .failed(error.localizedDescription) }
+            return .notLoaded
         case .starting: return .loading
         case .failed(let reason): return .failed(reason)
         case .running:

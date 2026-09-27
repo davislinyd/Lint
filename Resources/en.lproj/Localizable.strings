@@ -455,3 +455,10 @@
 "重啟中" = "Restarting";
 "失敗" = "Failed";
 "本機模型：%@" = "Local model: %@";
+"模型：%@" = "Model: %@";
+"尚未設定" = "Not set up";
+"下載中 %@（%@ / %@）" = "Downloading %@ (%@ / %@)";
+"下載中 %@" = "Downloading %@";
+"啟動服務" = "Start Server";
+"停止服務" = "Stop Server";
+"重新啟動服務" = "Restart Server";

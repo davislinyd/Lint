@@ -106,7 +106,7 @@ public final class LocalAISetupCoordinator {
     }
 
     public var activity: LocalModelActivity {
-        .resolve(serverStatus: serverStatus, sleep: modelSleep, isRestarting: isRestarting)
+        .resolve(serverStatus: serverStatus, sleep: modelSleep, isRestarting: isRestarting, download: downloadState)
     }
 
     public var runtimeReady: Bool { runtime.isReady }
@@ -215,14 +215,39 @@ public final class LocalAISetupCoordinator {
     public func managedModelChanged() async {
         cancelInstall()
         await installTask?.value
-        if downloadState.isActive || downloadState == .cancelled || downloadState == .installed {
-            downloadState = .idle
-        }
+        // How the last download ended (a failure too) was about the other model.
+        downloadState = .idle
         server.stopIfStartedByUs()
         await refresh()
         if configuration.autoStart, state == .serverStopped {
             try? await startServer() // a failure is reflected in `state`
         }
+    }
+
+    /// A managed model picked from the menu bar is used from now on. When it replaced another one the
+    /// server is switched as in `managedModelChanged()`; otherwise it is started if it is stopped and
+    /// auto-start is on. One that is not installed is downloaded (the user agreed to its size first),
+    /// and started when it is in, as after any download.
+    public func useManagedModel(changed: Bool) async {
+        if changed {
+            await managedModelChanged()
+        } else {
+            await refresh()
+            if configuration.autoStart, state == .serverStopped {
+                try? await startServer() // a failure is reflected in `state`
+            }
+        }
+        switch model {
+        case .notInstalled, .invalid: installModel()
+        case .installed: break
+        }
+    }
+
+    /// Whether `descriptor` is completely installed. Cheap (file sizes and a GGUF header), so the menu
+    /// can ask each time it opens, also before local AI was ever checked.
+    public func isInstalled(_ descriptor: ModelDescriptor) -> Bool {
+        if case .installed = models.status(of: descriptor) { return true }
+        return false
     }
 
     /// Deletes the managed model and any unfinished download of it.

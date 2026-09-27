@@ -34,7 +34,7 @@ struct LocalServerSection: View {
             Button("下載並安裝") { coordinator.installModel() }
             Button("取消", role: .cancel) {}
         } message: {
-            Text(downloadConfirmation)
+            Text(Self.downloadConfirmation(for: coordinator.configuration.managedModel))
         }
         .alert("移除模型？", isPresented: $confirmRemove) {
             Button("移除", role: .destructive) { Task { await coordinator.removeModel() } }
@@ -118,24 +118,30 @@ struct LocalServerSection: View {
     static let largeModelWarning = String(localized: "這個模型很大，執行時會佔用大量記憶體；在 16 GB 的 Mac 上可能讓系統變得非常緩慢，甚至當機。記憶體吃緊時請改用 Gemma 4 E4B 或 Apple Intelligence。")
 
     /// The models Lint can manage, recommended first. Switching is only a choice here: nothing is
-    /// downloaded or deleted until the buttons below are used.
+    /// downloaded or deleted until the buttons below are used. Only a pick made here switches the
+    /// server: the menu bar's model choice does that itself, and may be downloading already.
     @ViewBuilder
     private var modelPicker: some View {
-        Picker("模型", selection: Bindable(app.settings).localManagedModelID) {
-            ForEach(ModelCatalog.all) { model in
-                Text(pickerLabel(for: model)).tag(model.id)
+        Picker("模型", selection: Binding(
+            get: { app.settings.localManagedModelID },
+            set: { id in
+                guard id != app.settings.localManagedModelID else { return }
+                app.settings.localManagedModelID = id
+                Task { await coordinator.managedModelChanged() }
             }
-        }
-        .onChange(of: app.settings.localManagedModelID) { _, _ in
-            Task { await coordinator.managedModelChanged() }
+        )) {
+            ForEach(ModelCatalog.all) { model in
+                Text(Self.pickerLabel(for: model, installed: coordinator.installedModelIDs.contains(model.id))).tag(model.id)
+            }
         }
     }
 
-    private func pickerLabel(for model: ModelDescriptor) -> String {
+    /// Also the label of the menu bar's model choice.
+    static func pickerLabel(for model: ModelDescriptor, installed: Bool) -> String {
         var notes: [String] = []
         if model.recommended { notes.append(String(localized: "建議")) }
         if model.memoryClass == .large { notes.append(String(localized: "記憶體用量很高，可能當機")) }
-        if coordinator.installedModelIDs.contains(model.id) {
+        if installed {
             notes.append(String(localized: "已安裝"))
         } else if let size = model.totalBytes {
             notes.append(String(localized: "需下載 \(ModelInstallError.formatBytes(size))"))
@@ -251,8 +257,8 @@ struct LocalServerSection: View {
         }
     }
 
-    private var downloadConfirmation: String {
-        let model = coordinator.configuration.managedModel
+    /// Also asked before the menu bar's model choice downloads.
+    static func downloadConfirmation(for model: ModelDescriptor) -> String {
         guard let size = model.totalBytes else {
             return String(localized: "\(model.displayName) 會下載到你的 Mac，之後在本機執行。")
         }

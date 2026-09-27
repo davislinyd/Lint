@@ -455,3 +455,10 @@
 "重啟中" = "Memulai ulang";
 "失敗" = "Gagal";
 "本機模型：%@" = "Model lokal: %@";
+"模型：%@" = "Model: %@";
+"尚未設定" = "Belum disiapkan";
+"下載中 %@（%@ / %@）" = "Mengunduh %@ (%@ / %@)";
+"下載中 %@" = "Mengunduh %@";
+"啟動服務" = "Mulai Server";
+"停止服務" = "Hentikan Server";
+"重新啟動服務" = "Mulai Ulang Server";

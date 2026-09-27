@@ -1,4 +1,5 @@
 import AppKit
+import LintCore
 import SwiftUI
 
 private final class SuggestionBubblePanel: NSPanel {
@@ -820,7 +821,7 @@ private final class BubbleKeyEventTap: @unchecked Sendable {
             },
             userInfo: userInfo
         ) else {
-            NSLog("Lint: bubble key tap failed — check Accessibility for Lint.app")
+            DiagnosticLog.shared.log("replace", "bubble key tap failed — check Accessibility for Lint.app")
             return
         }
         self.tap = tap

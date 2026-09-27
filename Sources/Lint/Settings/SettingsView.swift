@@ -1,10 +1,11 @@
 import SwiftUI
 
-private enum SettingsPane: String, CaseIterable, Identifiable {
+enum SettingsPane: String, CaseIterable, Identifiable {
     case general
     case model
     case prompts
     case memory
+    case diagnostics
     case about
 
     var id: String { rawValue }
@@ -15,6 +16,7 @@ private enum SettingsPane: String, CaseIterable, Identifiable {
         case .model: "模型"
         case .prompts: "提示詞"
         case .memory: "記憶"
+        case .diagnostics: "診斷"
         case .about: "關於"
         }
     }
@@ -25,6 +27,7 @@ private enum SettingsPane: String, CaseIterable, Identifiable {
         case .model: "cpu"
         case .prompts: "text.quote"
         case .memory: "brain"
+        case .diagnostics: "stethoscope"
         case .about: "info.circle"
         }
     }
@@ -43,12 +46,11 @@ private struct HideWindowToolbar: ViewModifier {
 }
 
 struct SettingsView: View {
-    var app: AppModel
-    @State private var selection: SettingsPane = .general
+    @Bindable var app: AppModel
 
     var body: some View {
         NavigationSplitView {
-            List(SettingsPane.allCases, selection: $selection) { pane in
+            List(SettingsPane.allCases, selection: $app.settingsPane) { pane in
                 HStack {
                     Label(pane.title, systemImage: pane.symbol)
                     Spacer()
@@ -72,11 +74,12 @@ struct SettingsView: View {
 
     @ViewBuilder
     private var detail: some View {
-        switch selection {
+        switch app.settingsPane {
         case .general: GeneralSettingsPane(app: app)
         case .model: ModelSettingsPane(app: app)
         case .prompts: PromptSettingsPane(app: app)
         case .memory: MemorySettingsPane(app: app)
+        case .diagnostics: DiagnosticsSettingsPane(app: app)
         case .about: AboutSettingsPane()
         }
     }

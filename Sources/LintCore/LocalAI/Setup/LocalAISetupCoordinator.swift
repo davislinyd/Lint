@@ -180,6 +180,7 @@ public final class LocalAISetupCoordinator {
         installGeneration += 1
         let generation = installGeneration
         downloadState = .checking
+        DiagnosticLog.shared.log("model", "download start \(descriptor.id)")
         installTask = Task { [weak self] in
             guard let coordinator = self else { return }
             let final = await coordinator.downloader.install(descriptor) { [weak coordinator] state in
@@ -208,6 +209,11 @@ public final class LocalAISetupCoordinator {
         guard generation == installGeneration else { return }
         installTask = nil
         downloadState = final
+        if case .failed(let error) = final {
+            DiagnosticLog.shared.log("model", "download failed \(DiagnosticLog.describe(error))")
+        } else {
+            DiagnosticLog.shared.log("model", "download ended \(final)")
+        }
         if case .installed = final, configuration.autoStart, state == .serverStopped {
             try? await startServer() // a failure is reflected in `state`
         }
@@ -321,6 +327,7 @@ public final class LocalAISetupCoordinator {
     /// way. A server Lint did not start is left alone.
     public func releaseForAppleIntelligence() {
         guard case .running(_, managedByLint: true) = serverStatus else { return }
+        DiagnosticLog.shared.log("server", "stopping Lint's server for Apple Intelligence")
         server.stopIfStartedByUs()
         serverStatus = server.status
     }

@@ -118,8 +118,8 @@ final class FloatingPanelViewModel {
 
     func adoptCapture(_ result: TextCaptureService.CaptureResult) {
         capture.adopt(result)
-        // Debug: confirm Replace will have an AX target.
-        print("Lint adoptCapture hasAX=\(result.axElement != nil) range=\(String(describing: result.selectedRange)) pid=\(String(describing: result.sourceAppPID)) textCount=\(result.text.count)")
+        // Whether Replace will have an AX target.
+        DiagnosticLog.shared.log("capture", "adopt \(result.diagnosticTarget) chars=\(result.text.count)")
     }
 
     /// Start (or keep) a background suggestion for the current selection chip.
@@ -521,6 +521,7 @@ final class FloatingPanelViewModel {
         } catch is CancellationError {
             return
         } catch {
+            DiagnosticLog.shared.log("write", "no engine \(DiagnosticLog.describe(error))")
             errorMessage = error.localizedDescription
             return
         }
@@ -534,9 +535,12 @@ final class FloatingPanelViewModel {
             return
         }
 
+        let started = ContinuousClock.now
+        var outcome = "streamed"
         do {
             guard let kind = route.providerKind else { return }
             let config = try settings.runtimeConfig(for: kind)
+            Self.logWriteStart(config, mode: key.mode, tone: key.tone, characters: source.count, background: true)
             prefetchProvider = kind
             let onDevice = route == .appleIntelligence
             let profile = WritingPromptProfile.for(provider: kind)
@@ -558,6 +562,7 @@ final class FloatingPanelViewModel {
                 // A newer selection replaced this prefetch while the model was answering.
                 if Task.isCancelled || prefetchKey != key { return }
                 prefetchBuffer = written.text
+                outcome = written.outcome.diagnosticName
                 prefetchNote = Self.note(for: written.outcome)
                 prefetchIsSuggestion = Self.isSuggestion(written.outcome)
             } else {
@@ -588,6 +593,7 @@ final class FloatingPanelViewModel {
                 }
             }
             if Task.isCancelled { return }
+            Self.logWriteDone(characters: prefetchBuffer.count, outcome: outcome, since: started)
             prefetchFinished = true
             lastModelActivity = Date()
             isPrefetching = false
@@ -613,6 +619,7 @@ final class FloatingPanelViewModel {
             return
         } catch {
             if Task.isCancelled { return }
+            DiagnosticLog.shared.log("write", "failed \(DiagnosticLog.describe(error))")
             prefetchError = error.localizedDescription
             prefetchFinished = true
             isPrefetching = false
@@ -652,6 +659,22 @@ final class FloatingPanelViewModel {
             }
             return answer
         }
+    }
+
+    /// A writing request in the diagnostic log: which engine and how long the text is, never the text.
+    private static func logWriteStart(
+        _ config: LLMRuntimeConfig, mode: WritingMode, tone: WritingTone, characters: Int, background: Bool
+    ) {
+        DiagnosticLog.shared.log(
+            "write",
+            "start mode=\(mode.rawValue) tone=\(tone.rawValue) engine=\(config.kind.rawValue) model=\(config.model) chars=\(characters) background=\(background)"
+        )
+    }
+
+    private static func logWriteDone(characters: Int, outcome: String, since start: ContinuousClock.Instant) {
+        let elapsed = (ContinuousClock.now - start).components
+        let seconds = Double(elapsed.seconds) + Double(elapsed.attoseconds) / 1e18
+        DiagnosticLog.shared.log("write", "done chars=\(characters) outcome=\(outcome) seconds=\(String(format: "%.1f", seconds))")
     }
 
     /// What to tell the user when the output check changed what they see.
@@ -848,6 +871,7 @@ final class FloatingPanelViewModel {
         } catch is CancellationError {
             return
         } catch {
+            DiagnosticLog.shared.log("write", "no engine \(DiagnosticLog.describe(error))")
             errorMessage = error.localizedDescription
             return
         }
@@ -873,8 +897,11 @@ final class FloatingPanelViewModel {
         var usedMemoryIDs: [UUID] = []
         var isSuggestion = true
         guard let kind = route.providerKind else { return }
+        let started = ContinuousClock.now
+        var outcome = "streamed"
         do {
             let config = try settings.runtimeConfig(for: kind)
+            Self.logWriteStart(config, mode: generationMode, tone: generationTone, characters: source.count, background: false)
             let onDevice = route == .appleIntelligence
             let profile = WritingPromptProfile.for(provider: kind)
             let effort: ReasoningEffort = forceLowReasoning ? .low : settings.reasoningEffort
@@ -905,6 +932,7 @@ final class FloatingPanelViewModel {
                 // A newer request (or a cancel) owns the screen now: this answer is dropped.
                 guard !Task.isCancelled, tickets.isCurrent(ticket) else { return }
                 resultText = written.text
+                outcome = written.outcome.diagnosticName
                 statusNote = Self.note(for: written.outcome)
                 isSuggestion = Self.isSuggestion(written.outcome)
             } else {
@@ -933,8 +961,12 @@ final class FloatingPanelViewModel {
             return
         } catch {
             guard tickets.isCurrent(ticket) else { return }
+            DiagnosticLog.shared.log("write", "failed \(DiagnosticLog.describe(error))")
             errorMessage = error.localizedDescription
             return
+        }
+        if !Task.isCancelled, tickets.isCurrent(ticket) {
+            Self.logWriteDone(characters: resultText.count, outcome: outcome, since: started)
         }
         if !Task.isCancelled, tickets.isCurrent(ticket), errorMessage == nil,
            !resultText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {

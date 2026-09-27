@@ -238,7 +238,7 @@ public struct ChatGPTAccountProvider: LLMProvider {
     private static func solveProof(seed: String, difficulty: String) throws -> String {
         guard let context = JSContext() else { throw LLMError.decoding }
         context.exceptionHandler = { _, exc in
-            if let exc { print("ChatGPT PoW JS error: \(exc)") }
+            if let exc { DiagnosticLog.shared.log("write", "ChatGPT PoW JS error: \(exc)") }
         }
         // js-sha3 attaches to window/global — map them onto the JSC global object.
         context.evaluateScript("var window = this; var global = this; var module = undefined;")

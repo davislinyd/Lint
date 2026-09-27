@@ -98,6 +98,10 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         app.openSettings()
     }
 
+    @objc private func openDiagnostics() {
+        app.openSettings(pane: .diagnostics)
+    }
+
     @objc private func openLocalAISetup() {
         app.presentLocalAISetup()
     }
@@ -310,6 +314,9 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         let version = NSMenuItem(title: "Lint \(AppVersion.display)", action: nil, keyEquivalent: "")
         version.isEnabled = false
         menu.addItem(version)
+        let diagnostics = NSMenuItem(title: String(localized: "診斷記錄…"), action: #selector(openDiagnostics), keyEquivalent: "")
+        diagnostics.target = self
+        menu.addItem(diagnostics)
         let settings = NSMenuItem(title: String(localized: "設定…"), action: #selector(openSettings), keyEquivalent: ",")
         settings.target = self
         menu.addItem(settings)

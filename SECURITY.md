@@ -29,3 +29,9 @@ Lint 用輔助功能讀取你正在使用的 App 裡的文字。預設設定下�
 Lint asks the GitHub API for the latest release, every week by default or when you choose **Check for Updates…**; none of your text is sent. An update is installed only if the downloaded DMG matches the published SHA-256 and the app inside it is Lint (`app.lint.assistant`) signed with Lint's Developer ID (team `N964GDJY6A`) and Hardened Runtime. Settings → General → Updates can be set to only check.
 
 Lint 會向 GitHub API 查詢最新的正式版，預設每週一次，或在你按「檢查更新…」時查詢，不會送出你的任何文字。只有在下載的 DMG 符合公布的 SHA-256，而且裡面的 App 是以 Lint 的 Developer ID（team `N964GDJY6A`）簽署、啟用 Hardened Runtime 的 Lint（`app.lint.assistant`）時，才會安裝更新。「設定 → 一般 → 更新」可以設成只檢查。
+
+## Diagnostic log
+
+Lint keeps a log of what it did and how it went in `~/Library/Logs/Lint/lint.log`: captures and replaces, requests to the model (engine, model, character counts, time taken, the output check's verdict), the local server and errors, with app names, error codes and counts. It never contains the text you check, the model's answers or your memories. The log stays on this Mac and Lint never sends it; you can read, copy or clear it in Settings → Diagnostics. When the file reaches 1 MB it becomes `lint.1.log` and a new one starts, so at most two files, about 2 MB, are kept.
+
+Lint 會在 `~/Library/Logs/Lint/lint.log` 記錄它做了什麼、結果如何：擷取與取代、模型請求（引擎、模型、字數、耗時、輸出檢查的結果）、本機伺服器與錯誤，內容是 App 名稱、錯誤碼與數字。記錄裡絕不會有你檢查的文字、模型的回答或你的記憶。記錄只存在這台 Mac，Lint 不會送出；可以在「設定 → 診斷」查看、拷貝或清除。檔案滿 1 MB 會改名為 `lint.1.log` 並開始新檔，所以最多保留兩個檔案，約 2 MB。

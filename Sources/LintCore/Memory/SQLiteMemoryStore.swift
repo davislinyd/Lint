@@ -177,7 +177,7 @@ struct SQLiteMemoryStore: MemoryStore {
                 db, sql: "SELECT EXISTS(SELECT 1 FROM \(table) WHERE \(keyColumn) = ?)", arguments: [new]
             ) ?? false
             if taken {
-                NSLog("Lint memory: kept a memory key of an older version, its new form is in use")
+                DiagnosticLog.shared.log("memory", "kept a memory key of an older version, its new form is in use")
                 continue
             }
             try db.execute(sql: "UPDATE \(table) SET \(keyColumn) = ? WHERE \(keyColumn) = ?", arguments: [new, old])

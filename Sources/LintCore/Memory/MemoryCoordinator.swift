@@ -65,7 +65,7 @@ public actor MemoryCoordinator {
         do {
             try await store.pruneEvents(keepingLast: MemoryPolicy.eventRetentionCount, olderThan: cutoff)
         } catch {
-            NSLog("Lint memory: prune failed: \(error.localizedDescription)")
+            DiagnosticLog.shared.log("memory", "prune failed: \(DiagnosticLog.describe(error))")
         }
         let lastPass = (try? await store.lastCompletedDreamRun())?.finishedAt
         await scheduler?.noteStartup(lastCompletedPass: lastPass)
@@ -95,7 +95,7 @@ public actor MemoryCoordinator {
                 }
             }
         } catch {
-            NSLog("Lint memory: could not record feedback: \(error.localizedDescription)")
+            DiagnosticLog.shared.log("memory", "could not record feedback: \(DiagnosticLog.describe(error))")
         }
     }
 
@@ -155,7 +155,7 @@ public actor MemoryCoordinator {
             }
             return fresh.select(for: query)
         } catch {
-            NSLog("Lint memory: could not read memories: \(error.localizedDescription)")
+            DiagnosticLog.shared.log("memory", "could not read memories: \(DiagnosticLog.describe(error))")
             return []
         }
     }
@@ -168,7 +168,7 @@ public actor MemoryCoordinator {
             let now = clock()
             return try await store.memories().map { MemoryLifecycle.settled($0, at: now) }
         } catch {
-            NSLog("Lint memory: could not read memories: \(error.localizedDescription)")
+            DiagnosticLog.shared.log("memory", "could not read memories: \(DiagnosticLog.describe(error))")
             return []
         }
     }
@@ -200,7 +200,7 @@ public actor MemoryCoordinator {
         do {
             return try await store.sourceCounts()
         } catch {
-            NSLog("Lint memory: could not read the sources: \(error.localizedDescription)")
+            DiagnosticLog.shared.log("memory", "could not read the sources: \(DiagnosticLog.describe(error))")
             return [:]
         }
     }
@@ -211,7 +211,7 @@ public actor MemoryCoordinator {
         do {
             return try await store.sources(ofParent: id)
         } catch {
-            NSLog("Lint memory: could not read the sources: \(error.localizedDescription)")
+            DiagnosticLog.shared.log("memory", "could not read the sources: \(DiagnosticLog.describe(error))")
             return []
         }
     }
@@ -256,7 +256,7 @@ public actor MemoryCoordinator {
             try await store.deleteMemory(id: id)
             invalidateMemories()
         } catch {
-            NSLog("Lint memory: could not delete a memory: \(error.localizedDescription)")
+            DiagnosticLog.shared.log("memory", "could not delete a memory: \(DiagnosticLog.describe(error))")
         }
     }
 
@@ -266,7 +266,7 @@ public actor MemoryCoordinator {
             try await store.deleteAllMemories()
             invalidateMemories()
         } catch {
-            NSLog("Lint memory: could not clear memories: \(error.localizedDescription)")
+            DiagnosticLog.shared.log("memory", "could not clear memories: \(DiagnosticLog.describe(error))")
         }
     }
 
@@ -284,7 +284,7 @@ public actor MemoryCoordinator {
             stats.supersededCount = current.filter { $0.supersededBy.map(rulesInUse.contains) ?? false }.count
             return stats
         } catch {
-            NSLog("Lint memory: stats failed: \(error.localizedDescription)")
+            DiagnosticLog.shared.log("memory", "stats failed: \(DiagnosticLog.describe(error))")
             return .empty
         }
     }
@@ -296,7 +296,7 @@ public actor MemoryCoordinator {
             try await store.resetAll()
             invalidateMemories()
         } catch {
-            NSLog("Lint memory: reset failed: \(error.localizedDescription)")
+            DiagnosticLog.shared.log("memory", "reset failed: \(DiagnosticLog.describe(error))")
         }
     }
 
@@ -331,7 +331,7 @@ public actor MemoryCoordinator {
                     changed = true
                 }
             } catch {
-                NSLog("Lint memory: could not update a memory: \(error.localizedDescription)")
+                DiagnosticLog.shared.log("memory", "could not update a memory: \(DiagnosticLog.describe(error))")
             }
             // Wanting `b` where a memory asks for `a` is evidence against that memory.
             if let opposite = MemoryExtractor.reversedKey(of: candidate.dedupKey),
@@ -353,7 +353,7 @@ public actor MemoryCoordinator {
                 }
                 changed = true
             } catch {
-                NSLog("Lint memory: could not refresh a memory: \(error.localizedDescription)")
+                DiagnosticLog.shared.log("memory", "could not refresh a memory: \(DiagnosticLog.describe(error))")
             }
             for id in injected[key] ?? [] where await creditSuccess(id, at: now, store: store) {
                 changed = true
@@ -387,7 +387,7 @@ public actor MemoryCoordinator {
                     memory.lastUsedAt = now
                 }
             } catch {
-                NSLog("Lint memory: could not count the use of a memory: \(error.localizedDescription)")
+                DiagnosticLog.shared.log("memory", "could not count the use of a memory: \(DiagnosticLog.describe(error))")
             }
         }
     }
@@ -402,7 +402,7 @@ public actor MemoryCoordinator {
             }
             return true
         } catch {
-            NSLog("Lint memory: could not count a successful use: \(error.localizedDescription)")
+            DiagnosticLog.shared.log("memory", "could not count a successful use: \(DiagnosticLog.describe(error))")
             return false
         }
     }
@@ -420,7 +420,7 @@ public actor MemoryCoordinator {
             }
             return true
         } catch {
-            NSLog("Lint memory: could not update a rule: \(error.localizedDescription)")
+            DiagnosticLog.shared.log("memory", "could not update a rule: \(DiagnosticLog.describe(error))")
             return false
         }
     }
@@ -440,7 +440,7 @@ public actor MemoryCoordinator {
             }
             return true
         } catch {
-            NSLog("Lint memory: could not weaken a memory: \(error.localizedDescription)")
+            DiagnosticLog.shared.log("memory", "could not weaken a memory: \(DiagnosticLog.describe(error))")
             return false
         }
     }
@@ -477,7 +477,7 @@ public actor MemoryCoordinator {
             }
             invalidateMemories()
         } catch {
-            NSLog("Lint memory: could not change a memory: \(error.localizedDescription)")
+            DiagnosticLog.shared.log("memory", "could not change a memory: \(DiagnosticLog.describe(error))")
         }
     }
 
@@ -488,7 +488,7 @@ public actor MemoryCoordinator {
             hmacKey = key
             return key
         } catch {
-            NSLog("Lint memory: no HMAC key: \(error)")
+            DiagnosticLog.shared.log("memory", "no HMAC key: \(DiagnosticLog.describe(error))")
             return nil
         }
     }
@@ -519,7 +519,7 @@ public actor MemoryCoordinator {
             }
             return opened
         } catch {
-            NSLog("Lint memory: cannot open store: \(error.localizedDescription)")
+            DiagnosticLog.shared.log("memory", "cannot open store: \(DiagnosticLog.describe(error))")
             return nil
         }
     }

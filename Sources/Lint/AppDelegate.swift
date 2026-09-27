@@ -1,4 +1,5 @@
 import AppKit
+import LintCore
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -26,6 +27,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        DiagnosticLog.shared.log("app", "quit")
         model.stopManagedLocalServerIfNeeded()
     }
 }

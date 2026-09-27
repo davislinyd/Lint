@@ -48,7 +48,7 @@ struct MemoryConsolidator: Sendable {
             }
         } catch {
             // A provider that fails only means there is nothing to combine this time.
-            NSLog("Lint memory: memory synthesis failed: \(error.localizedDescription)")
+            DiagnosticLog.shared.log("memory", "memory synthesis failed: \(DiagnosticLog.describe(error))")
             return nil
         }
     }

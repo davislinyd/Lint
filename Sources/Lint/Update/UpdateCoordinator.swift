@@ -319,11 +319,12 @@ final class UpdateCoordinator {
             }
             defaults.set(failure.rawValue, forKey: Record.failure)
             phase = .failed(failure)
-            NSLog("Lint update: \(failure.rawValue)")
+            DiagnosticLog.shared.log("update", "check failed \(failure.rawValue)")
         } catch {
             guard generation == token else { return }
             defaults.set(UpdateFailure.unreachable.rawValue, forKey: Record.failure)
             phase = .failed(.unreachable)
+            DiagnosticLog.shared.log("update", "check failed \(DiagnosticLog.describe(error)), shown as unreachable")
         }
     }
 
@@ -356,11 +357,12 @@ final class UpdateCoordinator {
             }
             defaults.set(failure.rawValue, forKey: Record.failure)
             phase = .failed(failure)
-            NSLog("Lint update: \(failure.rawValue)")
+            DiagnosticLog.shared.log("update", "install failed \(failure.rawValue)")
         } catch {
             guard generation == token else { return }
             pending = nil
             phase = .failed(.unreachable)
+            DiagnosticLog.shared.log("update", "install failed \(DiagnosticLog.describe(error)), shown as unreachable")
         }
     }
 

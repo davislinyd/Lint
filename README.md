@@ -102,6 +102,7 @@ Lint's icon (a pen nib with a check mark) appears in the menu bar. Packaging fet
 - Menu bar: the first row of Lint's menu shows the local model's state (not loaded, loading, running, idle, restarting or failed; the dot on the icon shows it too). It opens a list to switch models: one that Lint manages, or Apple Intelligence when this Mac has it. A model that is not downloaded yet shows its size and asks first; it then downloads with its progress in that row, and starts when it is in. The same list starts, stops, restarts or rechecks the local server.
 - Interface language (Settings → General): Follow System, English, Traditional Chinese, Simplified Chinese, Japanese, Korean, Vietnamese, Indonesian, Thai or Portuguese (Brazil). It applies after Lint restarts.
 - Translation language (Settings → General): the language the **Translate** mode and the reference translation under a suggestion use, Traditional Chinese by default, from the same list (English excepted). Lint only translates from English into it; the change applies at once.
+- Diagnostics (Settings → Diagnostics, or **Diagnostic Log…** in the menu bar menu): a log of what Lint did and how it went (captures, replaces, model requests, the local server, errors), never your text. It stays in `~/Library/Logs/Lint/`, capped at two files of 1 MB each. **Copy** adds the Lint version and your Mac's details to the last 1000 lines, for a bug report. See [SECURITY.md](SECURITY.md#diagnostic-log).
 
 ### Updates
 
@@ -251,6 +252,7 @@ chmod +x Scripts/*.sh
 - 選單列：Lint 選單的第一行顯示本機模型的狀態（未載入、載入中、運作中、閒置中、重啟中或失敗，圖示上的小圓點也會顯示）。展開它可以切換模型：由 Lint 管理的本機模型，或這台 Mac 可以用的 Apple Intelligence。還沒下載的模型會先列出大小並詢問，同意後才下載，進度就顯示在這一行，下載完成後自動啟動。同一個清單也能啟動、停止、重新啟動或重新檢查本機服務。
 - 介面語言（「設定 → 一般」）：跟隨系統、English、繁體中文、简体中文、日本語、한국어、Tiếng Việt、Bahasa Indonesia、ไทย 或 Português (Brasil)。重新啟動 Lint 後套用。
 - 翻譯語言（「設定 → 一般」）：「翻譯」模式與建議下方的參考譯文使用的語言，預設繁體中文，可選的語言同上（英文除外）。Lint 只把英文翻成這個語言，變更立即生效。
+- 診斷（「設定 → 診斷」，或選單列選單的 **「診斷記錄…」**）：記錄 Lint 做了什麼、結果如何（擷取、取代、模型請求、本機服務、錯誤），不含你的文字。記錄存在 `~/Library/Logs/Lint/`，最多兩個各 1 MB 的檔案。**「拷貝」**會把 Lint 版本與這台 Mac 的資訊附在最近 1000 行前面，方便回報問題。見 [SECURITY.md](SECURITY.md#diagnostic-log)。
 
 ### 更新
 

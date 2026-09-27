@@ -15,6 +15,8 @@ final class LocalLlamaServerManager: LocalServerControlling {
     private var startedByUs = false
     private var logBuffer: BoundedLogBuffer?
     private var logPipe: Pipe?
+    /// The process whose start was already logged: several requests can wait for the same launch.
+    private var loggedStartOf: Int32?
 
     private init() {}
 
@@ -57,6 +59,7 @@ final class LocalLlamaServerManager: LocalServerControlling {
     func start(plan: LlamaServerLaunchPlan, port: Int) async throws -> Bool {
         if await isHealthy(port: port) {
             status = .running(pid: nil, managedByLint: false)
+            DiagnosticLog.shared.log("server", "attached to a running server port=\(port)")
             return false
         }
         // A cancelled task's health check fails without asking the server: never launch because of it.
@@ -85,10 +88,15 @@ final class LocalLlamaServerManager: LocalServerControlling {
         } catch {
             let failure = LocalAIError.launchFailed(String(localized: "無法啟動 llama-server：\(error.localizedDescription)"))
             status = .failed(failure.localizedDescription)
+            DiagnosticLog.shared.log("server", "launch failed \(DiagnosticLog.describe(error))")
             throw failure
         }
         process = proc
         startedByUs = true
+        DiagnosticLog.shared.log(
+            "server",
+            "launch \(plan.executableURL.path) pid=\(proc.processIdentifier) port=\(port) args=\(plan.arguments.joined(separator: " "))"
+        )
 
         // Drain the pipe so it never fills up, keeping only the last few KB for diagnostics.
         pipe.fileHandleForReading.readabilityHandler = { handle in
@@ -103,13 +111,16 @@ final class LocalLlamaServerManager: LocalServerControlling {
     /// merely slow (a 4-5 GB model being paged in on a busy Mac can take minutes), it is left running: the
     /// error says so, and the next start attaches to the same process instead of loading everything again.
     private func awaitHealthy(port: Int, process proc: Process) async throws {
+        let started = ContinuousClock.now
         do {
             try await waitUntilHealthy(port: port, timeoutSeconds: Self.startupTimeoutSeconds)
             status = .running(pid: proc.processIdentifier, managedByLint: true)
+            logStartOnce(proc, "ready pid=\(proc.processIdentifier) after \((ContinuousClock.now - started).components.seconds) s")
         } catch LocalAIError.startTimeout(let seconds) {
             logTail = logBuffer?.tail() ?? ""
             let failure = LocalAIError.startTimeout(seconds: seconds)
             status = .failed(failure.localizedDescription)
+            logStartOnce(proc, "not ready after \(seconds) s, left running", tail: logTail)
             throw failure
         } catch is CancellationError {
             // The caller gave up (e.g. a newer selection replaced its suggestion), not the server: it keeps
@@ -117,9 +128,21 @@ final class LocalLlamaServerManager: LocalServerControlling {
             throw CancellationError()
         } catch {
             logTail = logBuffer?.tail() ?? ""
+            logStartOnce(proc, "start failed \(DiagnosticLog.describe(error))", tail: logTail)
             stopIfStartedByUs()
             status = .failed(error.localizedDescription)
             throw error
+        }
+    }
+
+    /// How a launch ended, then the server's last lines: what it printed while starting (paths, flags,
+    /// the model's load), not anyone's text.
+    private func logStartOnce(_ proc: Process, _ message: String, tail: String = "") {
+        guard loggedStartOf != proc.processIdentifier else { return }
+        loggedStartOf = proc.processIdentifier
+        DiagnosticLog.shared.log("server", message)
+        for line in tail.split(whereSeparator: \.isNewline) {
+            DiagnosticLog.shared.log("server", "| \(line)")
         }
     }
 
@@ -127,6 +150,7 @@ final class LocalLlamaServerManager: LocalServerControlling {
         guard startedByUs, let process else {
             return
         }
+        DiagnosticLog.shared.log("server", "stop pid=\(process.processIdentifier)")
         process.terminate()
         self.process = nil
         startedByUs = false
@@ -158,6 +182,7 @@ final class LocalLlamaServerManager: LocalServerControlling {
         process = nil
         startedByUs = false
         status = .stopped
+        DiagnosticLog.shared.log("server", "stop port=\(port) managed=\(stoppedManaged) other pids=\(killedExternal)")
 
         if stoppedManaged && killedExternal.isEmpty {
             return String(localized: "已停止 Lint 管理的 llama-server")

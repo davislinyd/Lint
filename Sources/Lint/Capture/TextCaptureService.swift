@@ -15,6 +15,12 @@ final class TextCaptureService {
         var chipAnchorRange: CFRange? = nil
         /// Read with ⌘A then ⌘C because the field exposes no text: the text is the whole field.
         var selectedAll = false
+
+        /// Where Replace would write, for the diagnostic log: never the text.
+        var diagnosticTarget: String {
+            let range = selectedRange.map { "\($0.location)+\($0.length)" } ?? "none"
+            return "hasAX=\(axElement != nil) range=\(range) pid=\(sourceAppPID.map(String.init) ?? "none")"
+        }
     }
 
     private(set) var lastCapture: CaptureResult?
@@ -33,7 +39,7 @@ final class TextCaptureService {
         let element = AXUIElementCreateApplication(app.processIdentifier)
         for name in ["AXManualAccessibility", "AXEnhancedUserInterface"] {
             let err = AXUIElementSetAttributeValue(element, name as CFString, kCFBooleanTrue)
-            log("\(name) pid=\(app.processIdentifier) err=\(err.rawValue)")
+            DiagnosticLog.shared.log("capture", "\(name) pid=\(app.processIdentifier) err=\(err.rawValue)")
         }
     }
 
@@ -51,9 +57,16 @@ final class TextCaptureService {
     /// field to read it. The full panel keeps its old behaviour of never touching the source app's selection.
     func capture(allowSelectAll: Bool = false) async -> CaptureResult? {
         let bundle = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
-        if LiveCheckPolicy.isDenylisted(bundle) { return nil }
+        let app = bundle ?? "?"
+        if LiveCheckPolicy.isDenylisted(bundle) {
+            DiagnosticLog.shared.log("capture", "skipped denylisted app=\(app)")
+            return nil
+        }
         let focused = AccessibilityPermission.isTrusted ? Self.focusedElement() : nil
-        if focused.map(Self.isSecureElement) == true { return nil }
+        if focused.map(Self.isSecureElement) == true {
+            DiagnosticLog.shared.log("capture", "skipped secure field app=\(app)")
+            return nil
+        }
         if AccessibilityPermission.isTrusted { Self.ensureWebAccessibility() }
         if AccessibilityPermission.isTrusted, let ax = Self.readAXSelectedText() {
             let result = CaptureResult(
@@ -63,18 +76,22 @@ final class TextCaptureService {
                 sourceAppPID: Self.frontmostPID(),
                 selectedRange: Self.readSelectedRange(ax.element)
             )
+            DiagnosticLog.shared.log("capture", "ax chars=\(result.text.count) app=\(app)")
             lastCapture = result
             return result
         }
         // Never fall back to whatever was already on the clipboard: only text that ⌘C just copied counts.
         if let selected = await readViaClipboard() {
+            DiagnosticLog.shared.log("capture", "clipboard chars=\(selected.text.count) app=\(app)")
             lastCapture = selected
             return selected
         }
         if allowSelectAll, let whole = await readViaSelectAll() {
+            DiagnosticLog.shared.log("capture", "select-all chars=\(whole.text.count) app=\(app)")
             lastCapture = whole
             return whole
         }
+        DiagnosticLog.shared.log("capture", "nothing read axTrusted=\(AccessibilityPermission.isTrusted) app=\(app)")
         return nil
     }
 
@@ -201,7 +218,7 @@ final class TextCaptureService {
             Self.log("replace refused blocked source")
             return ReplaceRefusal.notWholeField.message
         }
-        Self.log("replace start originalCount=\(last.text.count) newCount=\(newText.count) hasAX=\(last.axElement != nil) range=\(String(describing: last.selectedRange)) pid=\(String(describing: last.sourceAppPID))")
+        Self.log("replace start originalCount=\(last.text.count) newCount=\(newText.count) \(last.diagnosticTarget)")
 
         // Always bring source app forward first — we likely stole focus for the bubble.
         await activateSourceAppIfNeeded()
@@ -845,42 +862,9 @@ final class TextCaptureService {
 
     static func logPublic(_ message: String) { log(message) }
 
+    /// Replace events go to the diagnostic log: counts, pids and app names, never the text.
     private static func log(_ message: String) {
-        var line = String(describing: Date())
-        line += " "
-        line += message
-        line += String(Character(UnicodeScalar(10)!))
-        fputs(line, stdout)
-        fflush(stdout)
-        let path = "/tmp/lint-replace.log"
-        // Also mirror under Application Support (always writable).
-        let homeLog: String = {
-            let dir = FileManager.default.homeDirectoryForCurrentUser
-                .appendingPathComponent("Library/Logs/Lint", isDirectory: true)
-            try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-            return dir.appendingPathComponent("replace.log").path
-        }()
-        let url = URL(fileURLWithPath: path)
-        guard let data = line.data(using: .utf8) else { return }
-        if FileManager.default.fileExists(atPath: path),
-           let handle = try? FileHandle(forWritingTo: url) {
-            defer { try? handle.close() }
-            _ = try? handle.seekToEnd()
-            try? handle.write(contentsOf: data)
-        } else {
-            try? data.write(to: url)
-        }
-        if let homeData = line.data(using: .utf8) {
-            let homeURL = URL(fileURLWithPath: homeLog)
-            if FileManager.default.fileExists(atPath: homeLog),
-               let handle = try? FileHandle(forWritingTo: homeURL) {
-                defer { try? handle.close() }
-                _ = try? handle.seekToEnd()
-                try? handle.write(contentsOf: homeData)
-            } else {
-                try? homeData.write(to: homeURL)
-            }
-        }
+        DiagnosticLog.shared.log("replace", message)
     }
 }
 

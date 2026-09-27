@@ -55,7 +55,7 @@ actor MemoryDreamCoordinator {
         } catch is CancellationError {
             record.status = .cancelled
         } catch {
-            NSLog("Lint memory: dreaming failed: \(error.localizedDescription)")
+            DiagnosticLog.shared.log("memory", "dreaming failed: \(DiagnosticLog.describe(error))")
             record.status = .failed
         }
         record.finishedAt = clock()
@@ -108,7 +108,7 @@ actor MemoryDreamCoordinator {
             if let rejection = validator.validate(
                 proposal, cluster: cluster, minimumSources: joining ? 1 : minimum, at: now
             ) {
-                NSLog("Lint memory: dropped a proposed memory (\(rejection))")
+                DiagnosticLog.shared.log("memory", "dropped a proposed memory (\(rejection))")
                 continue
             }
             let outcome = try await store.applyConsolidation(
@@ -193,7 +193,7 @@ actor MemoryDreamCoordinator {
             }
         }.value
         if let failure {
-            NSLog("Lint memory: could not record a dream: \(failure.localizedDescription)")
+            DiagnosticLog.shared.log("memory", "could not record a dream: \(DiagnosticLog.describe(failure))")
         }
     }
 }

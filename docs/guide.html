@@ -118,7 +118,7 @@
         <span class="zh">從下載到第一個建議，一步一步來。每一步都會告訴你，繼續之前應該看到什麼。</span>
       </p>
       <ul class="chips">
-        <li>Lint 0.5.3</li>
+        <li>Lint 0.6.0</li>
         <li>macOS 14+</li>
         <li>Apple Silicon</li>
       </ul>
@@ -374,11 +374,11 @@
 
       <article class="step">
         <div class="step-head"><span class="step-num">9</span><h3><span class="en">The menu bar menu</span><span class="zh">選單列選單</span></h3></div>
-        <p class="en">Click Lint's icon, a pen nib with a check mark. The first row shows the local model's state: not loaded, loading, running, idle (its memory was released after a while without suggestions), restarting or failed; the dot on the icon shows the same. Open that row to switch to another model or to Apple Intelligence (a model that is not downloaded yet shows its size and asks first; its download progress then shows in that row, and it starts when it is in), or to start, stop, restart or recheck the local server. Below it are <strong>Improve Selected Text</strong>, the <strong>Mode</strong> and <strong>Tone</strong>, whether Accessibility is on, <strong>Set Up Local AI…</strong> (until the local AI is set up), <strong>Check for Updates…</strong>, the version, <strong>Settings…</strong> and <strong>Quit Lint</strong>. When a newer release is found, the menu also offers to download and install it.</p>
-        <p class="zh">點選單列上 Lint 的圖示（筆尖加一個勾）。第一行顯示本機模型的狀態：未載入、載入中、運作中、閒置中（一段時間沒要求建議後已釋放記憶體）、重啟中或失敗，圖示上的小圓點也會顯示同樣的狀態。展開這一行可以切換到其他模型或 Apple Intelligence（還沒下載的模型會先列出大小並詢問，同意後下載進度就顯示在這一行，下載完成後自動啟動），也可以啟動、停止、重新啟動或重新檢查本機服務。下面是<strong>「改善選取文字」</strong>、切換<strong>「模式」</strong>與<strong>「語氣」</strong>、輔助功能是否已開啟、<strong>「設定本機 AI…」</strong>（本機 AI 設定好之前才有）、<strong>「檢查更新…」</strong>、版本號，以及<strong>「設定…」</strong>與<strong>「結束 Lint」</strong>。找到較新的正式版時，選單也會提供下載並安裝。</p>
+        <p class="en">Click Lint's icon, a pen nib with a check mark. The first row shows the local model's state: not loaded, loading, running, idle (its memory was released after a while without suggestions), restarting or failed; the dot on the icon shows the same. Open that row to switch to another model or to Apple Intelligence (a model that is not downloaded yet shows its size and asks first; its download progress then shows in that row, and it starts when it is in), or to start, stop, restart or recheck the local server. Below it are <strong>Improve Selected Text</strong>, the <strong>Mode</strong> and <strong>Tone</strong>, whether Accessibility is on, <strong>Set Up Local AI…</strong> (until the local AI is set up), <strong>Check for Updates…</strong>, the version, <strong>Diagnostic Log…</strong>, <strong>Settings…</strong> and <strong>Quit Lint</strong>. When a newer release is found, the menu also offers to download and install it.</p>
+        <p class="zh">點選單列上 Lint 的圖示（筆尖加一個勾）。第一行顯示本機模型的狀態：未載入、載入中、運作中、閒置中（一段時間沒要求建議後已釋放記憶體）、重啟中或失敗，圖示上的小圓點也會顯示同樣的狀態。展開這一行可以切換到其他模型或 Apple Intelligence（還沒下載的模型會先列出大小並詢問，同意後下載進度就顯示在這一行，下載完成後自動啟動），也可以啟動、停止、重新啟動或重新檢查本機服務。下面是<strong>「改善選取文字」</strong>、切換<strong>「模式」</strong>與<strong>「語氣」</strong>、輔助功能是否已開啟、<strong>「設定本機 AI…」</strong>（本機 AI 設定好之前才有）、<strong>「檢查更新…」</strong>、版本號、<strong>「診斷記錄…」</strong>，以及<strong>「設定…」</strong>與<strong>「結束 Lint」</strong>。找到較新的正式版時，選單也會提供下載並安裝。</p>
         <figure>
-          <a class="shot en" href="assets/guide/en/menu.png" target="_blank" rel="noopener"><img src="assets/guide/en/menu.png" alt="The Lint menu in the menu bar, with the local model row open" width="829" height="305" loading="lazy"></a>
-          <a class="shot zh" href="assets/guide/zh/menu.png" target="_blank" rel="noopener"><img src="assets/guide/zh/menu.png" alt="選單列中的 Lint 選單，展開了本機模型那一行" width="649" height="305" loading="lazy"></a>
+          <a class="shot en" href="assets/guide/en/menu.png" target="_blank" rel="noopener"><img src="assets/guide/en/menu.png" alt="The Lint menu in the menu bar, with the local model row open" width="829" height="329" loading="lazy"></a>
+          <a class="shot zh" href="assets/guide/zh/menu.png" target="_blank" rel="noopener"><img src="assets/guide/zh/menu.png" alt="選單列中的 Lint 選單，展開了本機模型那一行" width="649" height="329" loading="lazy"></a>
           <figcaption><span class="en">The menu under Lint's icon, with the local model row open.</span><span class="zh">Lint 圖示下的選單，展開了本機模型那一行。</span></figcaption>
         </figure>
       </article>
@@ -431,6 +431,19 @@
         <p class="en">The <strong>Memory</strong> pane has its own section below: <a href="#learning">Memory and dreaming</a>.</p>
         <p class="zh"><strong>「記憶」</strong>頁另有說明，見下方<a href="#learning">「記憶與作夢」</a>。</p>
       </article>
+
+      <article class="step" id="diagnostics">
+        <div class="step-head"><span class="step-num">13</span><h3><span class="en">Diagnostics</span><span class="zh">診斷</span></h3></div>
+        <p class="en"><strong>Diagnostics</strong> (also <strong>Diagnostic Log…</strong> in the menu bar menu) shows the log of what Lint did and how it went: text it captured (character counts, not the text), suggestions it asked the model for, replaces, the local server and errors. <strong>Copy</strong> puts the last 1000 lines on the clipboard with the Lint version and your Mac's details, ready for a bug report; <strong>Show in Finder</strong> opens <code>~/Library/Logs/Lint</code>; <strong>Clear Log…</strong> deletes it.</p>
+        <p class="zh"><strong>「診斷」</strong>（也可以從選單列選單的<strong>「診斷記錄…」</strong>打開）顯示 Lint 做了什麼、結果如何的記錄：讀到的文字（只記字數，不記內容）、向模型要的建議、取代、本機服務與錯誤。<strong>「拷貝」</strong>會把最近 1000 行連同 Lint 版本與這台 Mac 的資訊放到剪貼簿，方便回報問題；<strong>「在 Finder 顯示」</strong>會打開 <code>~/Library/Logs/Lint</code>；<strong>「清除記錄…」</strong>會刪除記錄。</p>
+        <figure>
+          <a class="shot en" href="assets/guide/en/settings-diagnostics.png" target="_blank" rel="noopener"><img src="assets/guide/en/settings-diagnostics.png" alt="Settings, Diagnostics pane with the log after a suggestion was replaced" width="984" height="812" loading="lazy"></a>
+          <a class="shot zh" href="assets/guide/zh/settings-diagnostics.png" target="_blank" rel="noopener"><img src="assets/guide/zh/settings-diagnostics.png" alt="設定的「診斷」頁，顯示取代一次建議後的記錄" width="984" height="812" loading="lazy"></a>
+          <figcaption><span class="en">Diagnostics, after one suggestion was replaced.</span><span class="zh">「診斷」頁，取代一次建議之後。</span></figcaption>
+        </figure>
+        <div class="note en"><p><strong>Privacy:</strong> the log never contains the text you check, the model's answers or your memories. It stays on your Mac, Lint never sends it, and it is capped at two files of 1 MB each.</p></div>
+        <div class="note zh"><p><strong>隱私：</strong>記錄裡不會有你檢查的文字、模型的回答或你的記憶。它只存在你的 Mac，Lint 不會送出，最多保留兩個各 1 MB 的檔案。</p></div>
+      </article>
     </section>
 
     <!-- ============================================================ -->
@@ -440,7 +453,7 @@
       <p class="part-lead zh">選用功能，預設關閉。開啟後，Lint 會留意你反覆修正的寫作習慣，例如常拼錯的字、常漏掉的冠詞，把每一個記成簡短的規則。關閉時，Lint 的行為與沒有這個功能時完全相同。作夢是之後把記憶留下、忘記，或把好幾條收成一條的時候。</p>
 
       <article class="step">
-        <div class="step-head"><span class="step-num">13</span><h3><span class="en">Turn on Memory</span><span class="zh">開啟記憶</span></h3></div>
+        <div class="step-head"><span class="step-num">14</span><h3><span class="en">Turn on Memory</span><span class="zh">開啟記憶</span></h3></div>
         <p class="en">Open <strong>Settings… → Memory</strong> and turn on <strong>Enable Memory</strong>. The counts start at 0 and grow as you use Lint.</p>
         <p class="zh">打開<strong>「設定… → 記憶」</strong>，開啟<strong>「啟用記憶」</strong>。記憶數從 0 開始，會隨著你使用 Lint 增加。</p>
         <figure>
@@ -544,6 +557,11 @@
           <h3><span class="en">A new version is found but not installed</span><span class="zh">找到新版卻沒有安裝</span></h3>
           <p class="en">With <strong>Ask before installing</strong> (the default), choose <strong>Download and Install</strong> in Settings → General → Updates or in the menu bar menu. Lint only replaces a copy in /Applications or ~/Applications that is signed with Lint's Developer ID; otherwise it offers <strong>Open Release Page</strong>, where you can download the DMG yourself.</p>
           <p class="zh">在<strong>「手動更新」</strong>（預設）下，到「設定 → 一般 → 更新」或選單列選單按<strong>「下載並安裝」</strong>。Lint 只會取代放在 /Applications 或 ~/Applications、並以 Lint 的 Developer ID 簽署的那一份；其他情況會提供<strong>「打開釋出頁面」</strong>，讓你自己下載 DMG。</p>
+        </article>
+        <article>
+          <h3><span class="en">Something else is wrong</span><span class="zh">其他異常</span></h3>
+          <p class="en">Choose <strong>Diagnostic Log…</strong> in the menu bar menu (or <a href="#diagnostics">Settings → Diagnostics</a>) to see what Lint did and how it went: captures, replaces, model requests, the local server and errors. <strong>Copy</strong> adds the Lint version and your Mac's details, ready to paste into a GitHub issue. The log never contains your text; it stays on your Mac and is capped at about 2 MB.</p>
+          <p class="zh">在選單列選單點<strong>「診斷記錄…」</strong>（或<a href="#diagnostics">「設定 → 診斷」</a>），可以看到 Lint 做了什麼、結果如何：擷取、取代、模型請求、本機伺服器與錯誤。<strong>「拷貝」</strong>會附上 Lint 版本與這台 Mac 的資訊，可以直接貼到 GitHub issue。記錄不含你的文字，只存在你的 Mac，最多約 2 MB。</p>
         </article>
       </div>
     </section>

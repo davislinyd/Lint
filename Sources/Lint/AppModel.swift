@@ -16,6 +16,8 @@ final class AppModel: NSObject, NSWindowDelegate {
     let appleIntelligence = SystemAppleIntelligence()
     let panel: FloatingPanelController
     var accessibilityTrusted = AccessibilityPermission.isTrusted
+    /// The pane the settings window shows; a menu item can open it on a given pane.
+    var settingsPane: SettingsPane = .general
     private var settingsWindow: NSWindow?
     private var localAISetupWindow: NSWindow?
     private var selectionMonitor: SelectionMonitor?
@@ -157,7 +159,7 @@ final class AppModel: NSObject, NSWindowDelegate {
             try await localAI.ensureServerRunning()
         } catch {
             // Non-fatal at launch — the request path will surface the error.
-            NSLog("Lint local server: \(error.localizedDescription)")
+            DiagnosticLog.shared.log("server", "not started at launch \(DiagnosticLog.describe(error))")
         }
     }
 
@@ -227,7 +229,7 @@ final class AppModel: NSObject, NSWindowDelegate {
         do {
             try process.run()
         } catch {
-            NSLog("Lint relaunch failed: \(error.localizedDescription)")
+            DiagnosticLog.shared.log("app", "relaunch failed \(DiagnosticLog.describe(error))")
             return
         }
         NSApp.terminate(nil)
@@ -244,7 +246,8 @@ final class AppModel: NSObject, NSWindowDelegate {
         }
     }
 
-    func openSettings() {
+    func openSettings(pane: SettingsPane? = nil) {
+        if let pane { settingsPane = pane }
         if settingsWindow == nil {
             let window = NSWindow(
                 contentRect: NSRect(x: 0, y: 0, width: 760, height: 560),

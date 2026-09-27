@@ -42,6 +42,7 @@ final class LlamaServerLaunchPlanTests: XCTestCase {
     private let sharedTuning = [
         "--jinja", "--no-skip-chat-parsing", "-ngl", "99", "-fa", "on", "-c", "3072",
         "-np", "1", "-t", "6", "-ctk", "q8_0", "-ctv", "q8_0", "-b", "512", "-ub", "256",
+        "--lazy-mode", "on",
     ]
 
     func testTheTuningDefaultsAreWhatLintDecidedForItsOwnWorkload() {
@@ -74,7 +75,7 @@ final class LlamaServerLaunchPlanTests: XCTestCase {
     func testEverySizedOptionAppearsExactlyOnce() {
         for extra in ["", "-c 8192", "--ctx-size=8192 -ctk f16", "--verbose", "-ngl 40 -t 2 --reasoning auto"] {
             let arguments = plan(profile: ModelCatalog.gemma4_12bQATQ4_0.runtimeProfile, idleSleepSeconds: 300, extra: extra).arguments
-            for flag in ["-c", "-ctk", "-ctv", "-b", "-ub", "-ngl", "-fa", "-np", "-t", "--reasoning", "--sleep-idle-seconds", "--jinja", "--host", "--port"] {
+            for flag in ["-c", "-ctk", "-ctv", "-b", "-ub", "-ngl", "-fa", "-np", "-t", "--reasoning", "--sleep-idle-seconds", "--lazy-mode", "--jinja", "--host", "--port"] {
                 XCTAssertLessThanOrEqual(
                     arguments.filter { $0 == flag }.count, 1,
                     "\(flag) appears more than once for extra: '\(extra)'"
@@ -103,6 +104,17 @@ final class LlamaServerLaunchPlanTests: XCTestCase {
         XCTAssertFalse(long.contains("-ngl"))
         XCTAssertFalse(long.contains("--jinja"))
         XCTAssertTrue(long.contains("-ctv"), "the V cache was not overridden, so Lint still sets it")
+    }
+
+    func testTheUserCanKeepPerLayerEmbeddingsResidentAgain() {
+        for extra in ["--lazy-mode off", "-lzm auto", "--lazy-mode=off"] {
+            let arguments = plan(extra: extra).arguments
+            XCTAssertFalse(
+                zip(arguments, arguments.dropFirst()).contains { $0 == "--lazy-mode" && $1 == "on" },
+                "Lint's own `--lazy-mode on` is gone; extra: \(extra)"
+            )
+            XCTAssertEqual(arguments.filter { $0.hasPrefix("--lazy-mode") || $0 == "-lzm" }.count, 1, "extra: \(extra)")
+        }
     }
 
     // MARK: - Idle sleep

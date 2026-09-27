@@ -81,6 +81,11 @@ public struct LlamaServerLaunchPlan: Equatable, Sendable {
         add(["-ctv", profile.kvCacheType])
         add(["-b", "\(profile.batchTokens)"])
         add(["-ub", "\(profile.ubatchTokens)"])
+        // Reads per-layer embeddings (2.15 GiB of Gemma 4 E4B's 4.8) a row per token instead of
+        // loading them: `auto` only does that above 4 GiB. About 2 GB less stays resident, and on a
+        // Mac short of memory a load from disk went from 12-20 s to 6-8 s (with memory to spare it
+        // made no difference). Models without such tensors are unaffected.
+        add(["--lazy-mode", "on"])
         add(profile.reasoningArguments)
         if idleSleepSeconds > 0 {
             add(["--sleep-idle-seconds", "\(idleSleepSeconds)"])
@@ -107,7 +112,7 @@ public struct LlamaServerLaunchPlan: Equatable, Sendable {
     /// are listed: the point is to notice that the user set the same one.
     enum OptionFamily: Hashable {
         case context, cacheTypeK, cacheTypeV, batch, ubatch, gpuLayers, flashAttention
-        case parallel, threads, jinja, chatParsing, reasoning, idleSleep
+        case parallel, threads, jinja, chatParsing, reasoning, idleSleep, lazyMode
 
         static func of(_ token: String) -> OptionFamily? {
             let flag = token.split(separator: "=", maxSplits: 1).first.map(String.init) ?? token
@@ -125,6 +130,7 @@ public struct LlamaServerLaunchPlan: Equatable, Sendable {
             case "--skip-chat-parsing", "--no-skip-chat-parsing": return .chatParsing
             case "-rea", "--reasoning": return .reasoning
             case "--sleep-idle-seconds": return .idleSleep
+            case "-lzm", "--lazy-mode": return .lazyMode
             default: return nil
             }
         }

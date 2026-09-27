@@ -13,7 +13,7 @@ A macOS menu-bar AI writing assistant. Press a global hotkey to capture the sele
 Get the latest `Lint-<version>-macOS-arm64.dmg` from [GitHub Releases](https://github.com/davislinyd/Lint/releases). Official releases are signed with a Developer ID certificate and notarized by Apple. They need macOS 14+ on an Apple Silicon Mac.
 
 1. Open the DMG and drag **Lint** into **Applications**.
-2. Launch Lint from Applications. A pencil icon appears in the menu bar and the **Set Up Local AI** window opens.
+2. Launch Lint from Applications. Lint's icon (a pen nib with a check mark) appears in the menu bar and the **Set Up Local AI** window opens.
 3. It reports the Local AI runtime as ready, because llama.cpp is already inside Lint. The AI model is the one thing still missing: Lint shows its size (about 5.2 GB for the default Gemma 4 E4B) and where it is stored, and starts downloading only after you click **Download and Install**. It shows progress, verifies the download, then starts the local server.
 4. Allow **Lint** under System Settings → Privacy & Security → Accessibility (the setup window guides you and updates when it is on).
 5. Optional: verify the download with `shasum -a 256 -c Lint-<version>-macOS-arm64.dmg.sha256`, run in the folder that holds both files.
@@ -82,7 +82,7 @@ chmod +x Scripts/*.sh
 ./Scripts/run-dev.sh
 ```
 
-A pencil icon appears in the menu bar. Packaging fetches the pinned llama.cpp runtime on first use (`Scripts/fetch-llama-runtime.sh`, hash-verified, cached under `.build/`); to try a development build without touching your real models, set `LINT_APP_SUPPORT_DIR` to another folder.
+Lint's icon (a pen nib with a check mark) appears in the menu bar. Packaging fetches the pinned llama.cpp runtime on first use (`Scripts/fetch-llama-runtime.sh`, hash-verified, cached under `.build/`); to try a development build without touching your real models, set `LINT_APP_SUPPORT_DIR` to another folder.
 
 ### How it reads text
 
@@ -99,6 +99,7 @@ A pencil icon appears in the menu bar. Packaging fetches the pinned llama.cpp ru
 - Default endpoint: `http://127.0.0.1:8000/v1`
 - Ollama: `http://127.0.0.1:11434/v1`; LM Studio: `http://127.0.0.1:1234/v1`
 - Local llama.cpp: pick it as the source in Settings → Model. The same page shows the bundled runtime, the model (download / remove / show in Finder) and the server (start / stop / restart, port); Advanced holds the runtime source (automatic or a custom `llama-server`), the model source and extra arguments. The server only listens on `127.0.0.1`.
+- Menu bar: the first row of Lint's menu shows the local model's state (not loaded, loading, running, idle, restarting or failed; the dot on the icon shows it too). It opens a list to switch models: one that Lint manages, or Apple Intelligence when this Mac has it. A model that is not downloaded yet shows its size and asks first; it then downloads with its progress in that row, and starts when it is in. The same list starts, stops, restarts or rechecks the local server.
 - Interface language (Settings → General): Follow System, English, Traditional Chinese, Simplified Chinese, Japanese, Korean, Vietnamese, Indonesian, Thai or Portuguese (Brazil). It applies after Lint restarts.
 - Translation language (Settings → General): the language the **Translate** mode and the reference translation under a suggestion use, Traditional Chinese by default, from the same list (English excepted). Lint only translates from English into it; the change applies at once.
 
@@ -160,7 +161,7 @@ macOS 選單列 AI 寫作助手：全域快捷鍵擷取選取文字，送到 LLM
 到 [GitHub Releases](https://github.com/davislinyd/Lint/releases) 下載最新的 `Lint-<版本>-macOS-arm64.dmg`。正式版以 Developer ID 憑證簽署並通過 Apple 公證，需要 macOS 14+ 與 Apple Silicon Mac。
 
 1. 開啟 DMG，把 **Lint** 拖進 **Applications**。
-2. 從「應用程式」開啟 Lint，選單列會出現鉛筆圖示，並開啟「設定本機 AI」視窗。
+2. 從「應用程式」開啟 Lint，選單列會出現 Lint 的圖示（筆尖加一個勾），並開啟「設定本機 AI」視窗。
 3. 視窗會顯示本機 AI 執行環境已就緒，因為 llama.cpp 已經在 Lint 裡面。還缺的只有 AI 模型：Lint 會列出大小（預設的 Gemma 4 E4B 約 5.2 GB）與存放位置，按下**下載並安裝**之後才開始下載，並顯示進度、驗證檔案，再啟動本機服務。
 4. 到 系統設定 → 隱私權與安全性 → 輔助功能，勾選 **Lint**（設定視窗會引導，開啟後自動更新）。
 5. 選用：在放有 DMG 與 `.sha256` 的資料夾執行 `shasum -a 256 -c Lint-<版本>-macOS-arm64.dmg.sha256` 驗證下載。
@@ -229,7 +230,7 @@ chmod +x Scripts/*.sh
 ./Scripts/run-dev.sh
 ```
 
-選單列會出現鉛筆圖示。組包時第一次會下載固定版本的 llama.cpp 執行環境（`Scripts/fetch-llama-runtime.sh`，驗證雜湊後快取在 `.build/`）；想試用開發版又不動到真正的模型，可把 `LINT_APP_SUPPORT_DIR` 設成別的資料夾。
+選單列會出現 Lint 的圖示（筆尖加一個勾）。組包時第一次會下載固定版本的 llama.cpp 執行環境（`Scripts/fetch-llama-runtime.sh`，驗證雜湊後快取在 `.build/`）；想試用開發版又不動到真正的模型，可把 `LINT_APP_SUPPORT_DIR` 設成別的資料夾。
 
 ### 如何讀取文字
 
@@ -246,6 +247,7 @@ chmod +x Scripts/*.sh
 - 預設 Endpoint：`http://127.0.0.1:8000/v1`
 - Ollama：`http://127.0.0.1:11434/v1`；LM Studio：`http://127.0.0.1:1234/v1`
 - 本機 llama.cpp：在「設定 → 模型」選擇該來源。同一頁會顯示內建的執行環境、模型（下載／移除／在 Finder 顯示）與服務（啟動／停止／重啟、埠）；「進階」有執行環境來源（自動或自訂 `llama-server`）、模型來源與額外參數。服務只監聽 `127.0.0.1`。
+- 選單列：Lint 選單的第一行顯示本機模型的狀態（未載入、載入中、運作中、閒置中、重啟中或失敗，圖示上的小圓點也會顯示）。展開它可以切換模型：由 Lint 管理的本機模型，或這台 Mac 可以用的 Apple Intelligence。還沒下載的模型會先列出大小並詢問，同意後才下載，進度就顯示在這一行，下載完成後自動啟動。同一個清單也能啟動、停止、重新啟動或重新檢查本機服務。
 - 介面語言（「設定 → 一般」）：跟隨系統、English、繁體中文、简体中文、日本語、한국어、Tiếng Việt、Bahasa Indonesia、ไทย 或 Português (Brasil)。重新啟動 Lint 後套用。
 - 翻譯語言（「設定 → 一般」）：「翻譯」模式與建議下方的參考譯文使用的語言，預設繁體中文，可選的語言同上（英文除外）。Lint 只把英文翻成這個語言，變更立即生效。
 

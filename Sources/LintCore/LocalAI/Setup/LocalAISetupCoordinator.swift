@@ -39,7 +39,9 @@ public final class LocalAISetupCoordinator {
     @ObservationIgnored private let models: LocalModelManager
     @ObservationIgnored private let downloader: ModelDownloadManager
     @ObservationIgnored private let server: any LocalServerControlling
+    @ObservationIgnored private let rewriter: ModelFileRewriter
     @ObservationIgnored private let settleDelay: Duration
+    @ObservationIgnored private var rewriteTask: Task<Void, Never>?
     @ObservationIgnored private var installTask: Task<Void, Never>?
     @ObservationIgnored private var installGeneration = 0
 
@@ -65,6 +67,7 @@ public final class LocalAISetupCoordinator {
         models: LocalModelManager = LocalModelManager(),
         downloader: ModelDownloadManager = ModelDownloadManager(),
         server: any LocalServerControlling,
+        rewriter: ModelFileRewriter = ModelFileRewriter(),
         accessibilityTrusted: Bool = false,
         settleDelay: Duration = .milliseconds(400)
     ) {
@@ -73,6 +76,7 @@ public final class LocalAISetupCoordinator {
         self.models = models
         self.downloader = downloader
         self.server = server
+        self.rewriter = rewriter
         self.accessibilityTrusted = accessibilityTrusted
         self.settleDelay = settleDelay
     }
@@ -343,5 +347,21 @@ public final class LocalAISetupCoordinator {
         }
         serverStatus = server.status
         serverLogTail = server.logTail
+        if configuration.modelSource == .managed { rewriteManagedModelInBackground(configuration.managedModel) }
+    }
+
+    /// Lays the managed model's files out in one piece (see `ModelFileRewriter`), once per file: the
+    /// first time after a download or an upgrade. It starts once the server has loaded the model, so
+    /// nothing waits for it and the bytes are read back from memory. The server keeps the copy it
+    /// mapped; its next load (after an idle release, a restart or the next launch) reads the new one.
+    /// A failure only costs speed: the file stays as it was, and the next launch tries again.
+    private func rewriteManagedModelInBackground(_ model: ModelDescriptor) {
+        guard rewriteTask == nil else { return }
+        let rewriter = self.rewriter
+        let paths = models.paths
+        rewriteTask = Task { [weak self] in
+            await Task.detached(priority: .utility) { try? rewriter.rewriteIfNeeded(model, in: paths) }.value
+            self?.rewriteTask = nil
+        }
     }
 }

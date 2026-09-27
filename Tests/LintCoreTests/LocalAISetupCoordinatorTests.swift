@@ -185,6 +185,18 @@ final class LocalAISetupCoordinatorTests: XCTestCase {
         XCTAssertTrue(env.coordinator.isSetupComplete)
     }
 
+    func testTheModelIsLaidOutInOnePieceOnceTheServerHasLoadedIt() async throws {
+        let env = try makeEnv()
+        let files = env.model.files.map { env.paths.installDirectory(for: env.model).appendingPathComponent($0.fileName) }
+        var rewrittenAtStart: [[Bool]] = []
+        env.server.onStart = { rewrittenAtStart.append(files.map(ModelFileRewriter.isRewritten)) }
+        env.coordinator.installModel()
+        try await waitUntil("the server to be ready") { env.coordinator.state == .serverReady }
+        try await waitUntil("the rewrite") { files.allSatisfy(ModelFileRewriter.isRewritten) }
+        try await env.coordinator.restartServer()
+        XCTAssertEqual(rewrittenAtStart, [[false, false], [true, true]], "the first start does not wait; the next one reads the new files")
+    }
+
     func testCancellingTheDownloadLeavesASafeStateAndRetryResumes() async throws {
         let env = try makeEnv()
         env.transport.pauseAfterBytes = 3000

@@ -79,6 +79,9 @@ struct WritingEvalRun: Codable {
 ///     # Gemma through a llama-server you started yourself
 ///     LINT_EVAL=1 LINT_EVAL_ENGINE=llama LINT_EVAL_LABEL=gemma LINT_EVAL_URL=http://127.0.0.1:8099/v1 \
 ///         swift test --filter WritingEvalRunTests
+///     # A GEC model: llama-completion from the pinned runtime and a T5 GGUF (proofread/preserve cases only)
+///     LINT_EVAL=1 LINT_EVAL_ENGINE=gec LINT_EVAL_LABEL=gec-t5 LINT_EVAL_GEC_BIN=<dir>/llama-completion \
+///         LINT_EVAL_GEC_MODEL=<dir>/gec-t5_small-q8_0.gguf swift test --filter WritingEvalRunTests
 ///     # then put the runs side by side in .build/eval/comparison.md
 ///     LINT_EVAL_COMPARE=1 swift test --filter WritingEvalReportTests
 ///
@@ -107,15 +110,25 @@ final class WritingEvalRunTests: XCTestCase {
         let engine = environment["LINT_EVAL_ENGINE"] ?? "apple"
         let label = environment["LINT_EVAL_LABEL"] ?? engine
         let onDevice = engine == "apple"
-        let guarded = environment["LINT_EVAL_GUARD"].map { $0 == "1" } ?? onDevice
+        // A GEC model (`llama-completion` + a T5 GGUF) only proofreads with the tone kept, always guarded.
+        let gec = engine == "gec"
+        let guarded = gec || (environment["LINT_EVAL_GUARD"].map { $0 == "1" } ?? onDevice)
         let only = environment["LINT_EVAL_ONLY"].map { Set($0.split(separator: ",").map(String.init)) }
         // The app sends llama-server 0.3; LINT_EVAL_TEMPERATURE tries another (0 = greedy).
         let temperature = environment["LINT_EVAL_TEMPERATURE"].flatMap(Double.init) ?? 0.3
         let reminders = environment["LINT_EVAL_REMINDERS"]
 
-        let provider: any LLMProvider
+        var provider: (any LLMProvider)?
+        var corrector: GrammarCorrector?
         let model: String
-        if onDevice {
+        if gec {
+            let executable = try XCTUnwrap(environment["LINT_EVAL_GEC_BIN"], "set LINT_EVAL_GEC_BIN to a llama-completion")
+            let gguf = try XCTUnwrap(environment["LINT_EVAL_GEC_MODEL"], "set LINT_EVAL_GEC_MODEL to a T5 GEC GGUF")
+            corrector = GrammarCorrector(provider: LlamaCompletionGECProvider(
+                executable: URL(fileURLWithPath: executable), model: URL(fileURLWithPath: gguf)
+            ))
+            model = URL(fileURLWithPath: gguf).lastPathComponent
+        } else if onDevice {
             let status = SystemAppleIntelligence().currentStatus()
             try XCTSkipUnless(status.isAvailable, "Apple Intelligence is not available: \(status)")
             provider = AppleFoundationModelProvider()
@@ -142,6 +155,7 @@ final class WritingEvalRunTests: XCTestCase {
         for testCase in fixtures.cases where only?.contains(testCase.id) ?? true {
             let mode = testCase.writingMode
             let tone = testCase.writingTone
+            if gec, mode != .proofread || tone != .preserve { continue }
             var usage: TokenUsage?
             func generate(_ systemPrompt: String, _ text: String) async throws -> String {
                 let request = ChatRequest(
@@ -152,6 +166,7 @@ final class WritingEvalRunTests: XCTestCase {
                     temperature: onDevice ? nil : temperature,
                     transformsUserText: true
                 )
+                guard let provider else { throw LLMError.unresolvedProvider }
                 var output = ""
                 for try await event in provider.stream(request) {
                     switch event {
@@ -175,7 +190,14 @@ final class WritingEvalRunTests: XCTestCase {
             var outcome = "unguarded"
             var requests = 1
             do {
-                if guarded {
+                if let corrector {
+                    let result = try await corrector.correct(testCase.input)
+                    output = result.text
+                    first = output
+                    requests = result.corrected
+                    outcome = result.keptSource > 0 ? "keptSource" : "accepted"
+                    print("[eval] \(testCase.id) gec: \(result.corrected) sent, \(result.keptSource) kept by the guard, \(result.skipped) skipped")
+                } else if guarded {
                     let budget = onDevice
                         ? AppleFoundationModelProvider.contextSize.map { WritingChunkBudget(contextSize: $0, instructions: systemPrompt) }
                         : nil
@@ -222,11 +244,11 @@ final class WritingEvalRunTests: XCTestCase {
             label: label, startedAt: Date(),
             environment: WritingEvalEnvironment(
                 engine: engine, model: model, osVersion: metadata.osVersion, appVersion: Self.appVersion,
-                promptProfile: profile.isEnglish ? "english (\(onDevice ? "apple" : "local"))" : "standard",
+                promptProfile: gec ? "gec: prefix" : profile.isEnglish ? "english (\(onDevice ? "apple" : "local"))" : "standard",
                 promptVersion: promptVersion.isEmpty ? nil : promptVersion,
                 appleVariant: onDevice ? metadata.variant : nil,
                 contextSize: onDevice ? metadata.contextSize : nil,
-                guarded: guarded, temperature: onDevice ? nil : temperature, hardware: Self.hardware
+                guarded: guarded, temperature: onDevice ? nil : gec ? 0 : temperature, hardware: Self.hardware
             ),
             results: results
         )
@@ -331,17 +353,22 @@ final class WritingEvalReportTests: XCTestCase {
             markdown += "| \(run.label) | \(env.engine) | \(model) | \(env.osVersion) | \(env.promptProfile) \(env.promptVersion ?? "") | \(guardNote) | \(env.hardware) |\n"
         }
         markdown += "\n## Objective checks\n\n"
-        markdown += "| Run | Cases | Any check failed | Errors left (cases / pieces) | Clean sentences changed | Literal lost | Language | Simplified chars | Mainland terms | Lines/lists | Preamble | Retried | Kept source | Flagged | Request failed |\n"
-        markdown += "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|\n"
+        markdown += "| Run | Cases | Any check failed | Errors left (cases / pieces) | Errors left, proofread/preserve (pieces) | Clean sentences changed | Literal lost | Language | Simplified chars | Mainland terms | Lines/lists | Preamble | Retried | Kept source | Flagged | Request failed |\n"
+        markdown += "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|\n"
         for run in runs {
             let cscr = run.cleanSentenceChangeRate.map { "\($0.changed)/\($0.of) (\(Int((Double($0.changed) / Double($0.of) * 100).rounded()))%)" } ?? "n/a"
-            let unfixedPieces = run.results.reduce(0) { total, result in
-                guard let testCase = fixtures.cases.first(where: { $0.id == result.id }) else { return total }
-                return total + (testCase.mustFix ?? []).filter(result.output.contains).count
+            // Out of the pieces in the cases this run answered: a GEC run answers proofread/preserve only.
+            func pieces(_ include: (WritingEvalResult) -> Bool) -> (left: Int, of: Int) {
+                run.results.filter(include).reduce((0, 0)) { total, result in
+                    guard let testCase = fixtures.cases.first(where: { $0.id == result.id }) else { return total }
+                    let mustFix = testCase.mustFix ?? []
+                    return (total.0 + mustFix.filter(result.output.contains).count, total.1 + mustFix.count)
+                }
             }
-            let fixable = fixtures.cases.reduce(0) { $0 + ($1.mustFix?.count ?? 0) }
+            let all = pieces { _ in true }
+            let preserve = pieces { $0.mode == "proofread" && $0.tone == "preserve" }
             markdown += "| \(run.label) | \(run.results.count) | \(run.results.filter { !$0.failures.isEmpty }.count) "
-            markdown += "| \(count(run, "fixes")) / \(unfixedPieces) of \(fixable) | \(cscr) "
+            markdown += "| \(count(run, "fixes")) / \(all.left) of \(all.of) | \(preserve.left) of \(preserve.of) | \(cscr) "
             markdown += "| \(count(run, "preserves")) | \(count(run, "language")) | \(count(run, "simplified-chinese")) | \(count(run, "taiwan-wording")) "
             markdown += "| \(count(run, "line-structure")) | \(count(run, "no-preamble")) "
             markdown += "| \(run.results.filter { $0.outcome == "retried" }.count) | \(run.results.filter { $0.outcome == "keptSource" }.count) "

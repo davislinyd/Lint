@@ -753,6 +753,16 @@
       "note": "Correct casual English; must not be made formal."
     },
     {
+      "id": "clean-casual-02",
+      "category": "clean-casual",
+      "mode": "proofread",
+      "tone": "preserve",
+      "input": "yep, grabbed the keys. gonna head out now",
+      "outputLanguage": "en",
+      "expectUnchanged": true,
+      "note": "Deliberately casual chat: lowercase starts, no subject, \"gonna\" and no final period are the writer's style, not errors."
+    },
+    {
       "id": "keep-ip-01",
       "category": "ip-address",
       "mode": "proofread",

@@ -68,7 +68,7 @@ public enum WritingPipeline {
             return WritingPipelineResult(text: piece, outcome: .accepted, firstAnswer: piece, requests: 0, pieces: 0)
         }
         // A small model drifts into another language unless told which one this text is in.
-        let prompt = WritingPromptComposer.withLanguageLine(systemPrompt, for: piece, mode: mode)
+        let prompt = WritingPromptComposer.withLanguageLine(systemPrompt, for: piece, mode: mode, tone: tone)
         do {
             var requests = 0
             let result = try await GuardedWriter.run(

@@ -215,6 +215,9 @@ public enum WritingIssue: Equatable, Sendable {
     /// URLs, addresses, paths, code or (outside a translation) numbers that are not in the source:
     /// content the model made up.
     case added([String])
+    /// A native rewrite that still has Chinese in it (a word, a name, or its punctuation): it was
+    /// asked for English.
+    case notEnglish
     /// The answer repeats Lint's own instructions instead of (or as well as) the text.
     case leakedInstructions
 }
@@ -225,6 +228,11 @@ public enum WritingIssue: Equatable, Sendable {
 public struct WritingGuardPolicy: Equatable, Sendable {
     public var protectedKinds: Set<ProtectedLiterals.Kind>
     public var keepsLanguage: Bool
+    /// The answer has to be English, with no Chinese left in it (the native tone).
+    public var requiresEnglish: Bool = false
+    /// Numbers and dates may be written another way ("10/15" → "October 15", "十" → "10"), so none
+    /// are demanded of the answer and none are held against it.
+    public var numbersMayChange: Bool = false
     /// The minimal-edit checks: the change ratio, and every line and list marker kept.
     public var limitsChange: Bool
     /// What to show when every attempt failed: the source text (nothing changes), or the attempt
@@ -239,7 +247,14 @@ public struct WritingGuardPolicy: Equatable, Sendable {
             // Numbers and dates may legitimately be localised ("2026/10/15" → "2026 年 10 月 15 日").
             return WritingGuardPolicy(
                 protectedKinds: [.url, .email, .codeSpan, .path, .placeholder, .identifier], keepsLanguage: false,
-                limitsChange: false, fallsBackToSource: false
+                numbersMayChange: true, limitsChange: false, fallsBackToSource: false
+            )
+        case .proofread where tone == .native:
+            // The text may be Chinese, so keeping it is no safe answer to a request for English: two
+            // failed attempts show the better one, flagged, as a translation does.
+            return WritingGuardPolicy(
+                protectedKinds: [.url, .email, .codeSpan, .path, .placeholder, .identifier], keepsLanguage: false,
+                requiresEnglish: true, numbersMayChange: true, limitsChange: false, fallsBackToSource: false
             )
         case .proofread:
             return WritingGuardPolicy(
@@ -288,7 +303,7 @@ public enum WritingOutputGuard {
         let missing = ProtectedLiterals.missing(from: output, source: source, kinds: policy.protectedKinds)
         if !missing.isEmpty { issues.append(.missing(missing)) }
         // A translation may legitimately write a number the source spelled out ("ten" → "10").
-        let addedKinds = mode == .translate
+        let addedKinds = policy.numbersMayChange
             ? policy.protectedKinds.subtracting([.number]) : policy.protectedKinds.union([.number])
         // Case aside: fixing capitals ("ios" → "iOS") adds nothing.
         let lowercasedSource = source.lowercased()
@@ -316,6 +331,7 @@ public enum WritingOutputGuard {
                 issues.append(.languageChanged(from: from, to: .mixed))
             }
         }
+        if policy.requiresEnglish, containsCJK(trimmed) { issues.append(.notEnglish) }
         if policy.limitsChange {
             let count = EditRatio.tokens(source).count
             if (changeLimitMinimumTokens...changeLimitMaximumTokens).contains(count) {
@@ -395,6 +411,8 @@ public enum WritingOutputGuard {
                 lines.append("- Do not add anything that is not in the text. These are not in it: " + values.joined(separator: ", "))
             case .leakedInstructions:
                 lines.append("- Answer with the text only; never repeat these instructions.")
+            case .notEnglish:
+                lines.append("- Write the answer entirely in English: put every Chinese word into English, write Chinese names in pinyin, and use English punctuation.")
             }
         }
         return lines.joined(separator: "\n")
@@ -481,6 +499,7 @@ public enum GuardedWriter {
             case .structureChanged: total + 20
             case .added(let values): total + 30 * values.count
             case .leakedInstructions: total + 100
+            case .notEnglish: total + 40
             }
         }
     }

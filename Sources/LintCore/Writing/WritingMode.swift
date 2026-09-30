@@ -22,6 +22,16 @@ public enum WritingMode: String, CaseIterable, Identifiable, Sendable, Codable {
         self != .custom
     }
 
+    /// The tones the task offers, in menu order. A translation goes into the reading language, so
+    /// there is no native English speaker's version of it.
+    public var tones: [WritingTone] {
+        switch self {
+        case .proofread: WritingTone.allCases
+        case .translate: WritingTone.allCases.filter { $0 != .native }
+        case .custom: []
+        }
+    }
+
     /// The title with the tone after it, unless it is the default one or does not apply.
     public func displayTitle(tone: WritingTone) -> String {
         guard supportsTone, tone != .preserve else { return title }

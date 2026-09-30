@@ -194,6 +194,7 @@
 "正式" = "Formal";
 "簡潔" = "Concise";
 "專業" = "Professional";
+"母語人士" = "Native speaker";
 "啟用記憶" = "Enable Memory";
 "記下你修正過的寫作習慣，下一次建議就開始提醒模型；沒有再出現的會在作夢時忘記。資料只存在這台 Mac，只記抽象的規則，不記原文。Lint 認不出中文人名或全小寫的英文名，被你修正過的名字仍可能被記下；可在「管理記憶」查看並刪除。" = "Writes down writing habits you correct and reminds the model from the next suggestion on; the ones that don’t come back are forgotten while dreaming. Data stays on this Mac, and only abstract rules are kept, never your text. Lint can’t recognize Chinese names or names typed in lowercase, so a name you corrected may still be remembered; you can review and delete it under Manage Memories.";
 "關閉時，Lint 的行為與沒有這個功能時完全相同。" = "When off, Lint behaves exactly as if this feature didn’t exist.";

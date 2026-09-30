@@ -79,3 +79,10 @@ Entry points:
   matches GitHub's asset digest and the `.sha256` asset, containing `app.lint.assistant` signed by team `N964GDJY6A`
   (Developer ID, Hardened Runtime). Keep the asset names, and publish only after the DMG was checked.
 - Agents do not push release tags, publish GitHub Releases or submit to Apple unless explicitly asked.
+
+## Models already evaluated and not adopted
+
+- **GEC T5 Small (`Unbabel/gec-t5_small`) for Proofread**, 2026-09-28: `llama-server` cannot run encoder-decoder
+  models, it left 22 of 86 errors against Gemma 4 E4B's 4, and it changed meanings. Not added to the app. Read
+  [docs/GEC-T5-EVALUATION.md](docs/GEC-T5-EVALUATION.md) before proposing a GEC or T5-style model again; its
+  evaluation engine (`LINT_EVAL_ENGINE=gec`) is kept for measuring one.

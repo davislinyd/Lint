@@ -16,12 +16,22 @@ public enum WritingPromptComposer {
         profile: WritingPromptProfile = .standard,
         translationLanguage: TranslationLanguage = .traditionalChinese
     ) -> String {
+        // A tone the task does not offer (native for a translation) is the default one.
+        let tone = mode.supportsTone && !mode.tones.contains(tone) ? WritingTone.preserve : tone
         if case .english(let reader) = profile {
             return EnglishWritingPrompts.compose(
                 mode: mode, tone: tone, customPrompt: customPrompt, reader: reader, translationLanguage: translationLanguage
             )
         }
         switch mode {
+        case .proofread where tone == .native:
+            // It is not an edit of the text's own words: no "keep the language", no minimal edit.
+            return [
+                nativeTask,
+                priority,
+                toneInstruction(tone, for: .proofread),
+                numbered(commonRules),
+            ].joined(separator: "\n\n")
         case .proofread:
             return [
                 proofreadTask(tone: tone),
@@ -134,6 +144,26 @@ public enum WritingPromptComposer {
         return lines.joined(separator: "\n")
     }
 
+    /// Native: the text's meaning, in any language, said the way a native English speaker would say it.
+    private static let nativeTask = """
+        你是英語母語的資深寫手。
+
+        任務：先理解使用者文字的語意（想表達什麼、意圖、情境、禮貌與直接程度），再用英語母語者在同樣情境下會說的話重寫。
+
+        作法：
+        - 用母語者慣用的說法、詞語搭配、句型與語感；不要逐字翻譯，也不要只改原文的措辭。原文不像母語者會說的話時，整句重寫。
+        - 輸入可能是中文、英文或中英夾雜，英文也可能有錯或帶著中式腔調；不論輸入是哪一種語言，一律用英文作答。
+        - 中文人名用拼音寫成英文，中文標點改成英文標點。
+        - 保留原意、全部資訊與說話者的意圖（請求、道歉、拒絕等）；禮貌、正式程度與情緒強度都不要自行升高或降低。
+
+        範例（只示範改法，不要在輸出中重複範例）：
+        原文：這週我比較忙，下週再約可以嗎？
+        輸出：I'm swamped this week. Could we find a time next week instead?
+
+        原文：Sorry I reply late, I was very busy on the last days, so I not see your message.
+        輸出：Sorry for the late reply. I've been swamped the past few days and missed your message.
+        """
+
     /// Translation only ever goes from English into `TranslationLanguage`: it is there to help read
     /// English, and Lint does not translate into English.
     private static func translateTask(into translationLanguage: TranslationLanguage) -> String {
@@ -165,6 +195,8 @@ public enum WritingPromptComposer {
         case .professional:
             let base = "語氣：專業。用自然、清楚、禮貌、具體的措辭，適合寄給同事、主管或客戶；避免情緒化指責、模糊的歸咎、過度隨便的用語與過度奉承；除非情境真的需要，避免罐頭式商務套語（例如「希望此信找到您安好」）。不要新增原文沒有的承諾、請求、期限或事實。"
             return translating ? base + "翻譯時，以目標語言中自然的專業語氣表達相同的意思。" : base
+        case .native:
+            return "語氣：母語人士。讓文字讀起來就像英語母語者自己寫的：自然、道地，用他們在這個情境裡真的會用的詞與句型。道地不等於華麗：不要加入原文沒有的事實、承諾、意見或情緒，也不要改變原文的禮貌與正式程度。"
         }
     }
 }

@@ -191,6 +191,7 @@ extension WritingIssue {
         case .structureChanged: "structureChanged"
         case .added(let items): "added×\(items.count)"
         case .leakedInstructions: "leakedInstructions"
+        case .notEnglish: "notEnglish"
         }
     }
 }

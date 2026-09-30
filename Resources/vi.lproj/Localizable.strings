@@ -194,6 +194,7 @@
 "正式" = "Trang trọng";
 "簡潔" = "Ngắn gọn";
 "專業" = "Chuyên nghiệp";
+"母語人士" = "Như người bản xứ";
 "啟用記憶" = "Bật bộ nhớ";
 "記下你修正過的寫作習慣，下一次建議就開始提醒模型；沒有再出現的會在作夢時忘記。資料只存在這台 Mac，只記抽象的規則，不記原文。Lint 認不出中文人名或全小寫的英文名，被你修正過的名字仍可能被記下；可在「管理記憶」查看並刪除。" = "Ghi lại thói quen viết mà bạn sửa và nhắc mô hình từ đề xuất tiếp theo; thói quen không xuất hiện lại sẽ bị quên khi mơ. Dữ liệu chỉ ở trên máy Mac này, và chỉ lưu quy tắc trừu tượng, không lưu nguyên văn. Lint không nhận ra tên người Trung Quốc hoặc tên tiếng Anh viết thường, nên tên bạn đã sửa vẫn có thể được ghi lại; bạn có thể xem và xóa trong “Quản lý bộ nhớ”.";
 "關閉時，Lint 的行為與沒有這個功能時完全相同。" = "Khi tắt, Lint hoạt động hoàn toàn như khi không có tính năng này.";

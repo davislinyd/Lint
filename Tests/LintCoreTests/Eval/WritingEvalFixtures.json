@@ -1,6 +1,6 @@
 {
-  "version": 6,
-  "about": "Lint's own writing fixtures: English proofreading and tone rewrites (also the English inside mixed Chinese-English text, whose Chinese is left alone), and English-to-Traditional-Chinese translation for reference. Every sentence was written for this repository; nothing is taken from a benchmark corpus. They exist to compare engines on Lint's actual workload, not to score a model in general.",
+  "version": 7,
+  "about": "Lint's own writing fixtures: English proofreading and tone rewrites (also the English inside mixed Chinese-English text, whose Chinese is left alone), English-to-Traditional-Chinese translation for reference, and the native-speaker tone (Chinese, mixed or broken English in, a native speaker's English out). Every sentence was written for this repository; nothing is taken from a benchmark corpus. They exist to compare engines on Lint's actual workload, not to score a model in general.",
   "cases": [
     {
       "id": "en-grammar-01",
@@ -1387,6 +1387,153 @@
       "outputLanguage": "mixed",
       "expectUnchanged": true,
       "note": "Already correct: casual code-switching, nothing in English to fix and the Chinese is left alone."
+    },
+    {
+      "id": "native-01",
+      "category": "native-zh",
+      "mode": "proofread",
+      "tone": "native",
+      "input": "抱歉，這個需求我們這季排不進去，下季再評估看看。",
+      "outputLanguage": "en",
+      "note": "Polite decline with a next step. Say it as a native would (\"we won't be able to fit this in this quarter; let's revisit it next quarter\"); keep the decline and the deferral, invent no date or promise."
+    },
+    {
+      "id": "native-02",
+      "category": "native-zh",
+      "mode": "proofread",
+      "tone": "native",
+      "input": "麻煩你幫我確認一下客戶有沒有收到合約，收到的話請跟我說一聲。",
+      "outputLanguage": "en",
+      "note": "A request with a condition: check whether the client got the contract, and tell me if so. Both parts stay."
+    },
+    {
+      "id": "native-03",
+      "category": "native-zh",
+      "mode": "proofread",
+      "tone": "native",
+      "input": "我覺得這個方案風險太高，建議我們先做小範圍測試，再決定要不要全面上線。",
+      "outputLanguage": "en",
+      "note": "An opinion and a suggestion, with its hedge (\"I think\", \"suggest\"). Not turned into an order or softened into a maybe."
+    },
+    {
+      "id": "native-04",
+      "category": "native-zh",
+      "mode": "proofread",
+      "tone": "native",
+      "input": "會議改到 10/21 下午 3:30，地點在 5 樓的小會議室，請準時到場。",
+      "outputLanguage": "en",
+      "mustPreserve": [
+        "3:30"
+      ],
+      "note": "Date, time, floor and room. The date may be written out (\"October 21\"); the time, the floor and the request to be on time must survive."
+    },
+    {
+      "id": "native-05",
+      "category": "native-zh",
+      "mode": "proofread",
+      "tone": "native",
+      "input": "這個流程真的很爛，每次都要重填一樣的資料，到底是誰設計的？",
+      "outputLanguage": "en",
+      "note": "Frustration. A native would say it with the same heat (\"who designed this?\"); no added softening, no added insult."
+    },
+    {
+      "id": "native-06",
+      "category": "native-mixed",
+      "mode": "proofread",
+      "tone": "native",
+      "input": "這個 bug 是 cache invalidation 的問題，我已經 push 一個 hotfix，你 review 完就可以 merge。",
+      "outputLanguage": "en",
+      "mustPreserve": [
+        "cache invalidation"
+      ],
+      "note": "Mixed Chinese and English: one English sentence comes out, the English terms stay, and no Chinese is left."
+    },
+    {
+      "id": "native-07",
+      "category": "native-mixed",
+      "mode": "proofread",
+      "tone": "native",
+      "input": "下週一 kickoff 前，可以先把 slide 的 draft 傳給我嗎？我想先 align 一下 messaging。",
+      "outputLanguage": "en",
+      "note": "Mixed text with workplace jargon. Natural English (\"before Monday's kickoff\"), a request kept as a request."
+    },
+    {
+      "id": "native-08",
+      "category": "native-english",
+      "mode": "proofread",
+      "tone": "native",
+      "input": "Hello, I want to ask you about the invoice what I send last week, you have receive it or not?",
+      "outputLanguage": "en",
+      "mustFix": [
+        "what I send",
+        "you have receive it or not"
+      ],
+      "note": "Broken, translated-from-Chinese English. The meaning (did you get last week's invoice?) is said the way a native would, not patched word by word."
+    },
+    {
+      "id": "native-09",
+      "category": "native-english",
+      "mode": "proofread",
+      "tone": "native",
+      "input": "Because the server is very slow recently, so I suggest we should to upgrade the memory as soon as possible.",
+      "outputLanguage": "en",
+      "mustFix": [
+        "recently, so I suggest",
+        "should to upgrade"
+      ],
+      "note": "A doubled conjunction and \"should to\". Keep the reason and the recommendation; the server is slow lately and memory should be upgraded soon."
+    },
+    {
+      "id": "native-10",
+      "category": "native-urls",
+      "mode": "proofread",
+      "tone": "native",
+      "input": "請先看一下 https://wiki.example.com/onboarding/checklist 這份文件，看完之後再跟我約時間。",
+      "outputLanguage": "en",
+      "mustPreserve": [
+        "https://wiki.example.com/onboarding/checklist"
+      ],
+      "note": "The URL stays exactly; read first, then schedule a time."
+    },
+    {
+      "id": "native-11",
+      "category": "native-list",
+      "mode": "proofread",
+      "tone": "native",
+      "input": "- 確認客戶的付款狀態\n- 把發票寄給財務部\n- 下週五前回報進度",
+      "outputLanguage": "en",
+      "preserveLineStructure": true,
+      "note": "A list stays a list of three lines with its markers; each item is English, and \"by next Friday\" is kept."
+    },
+    {
+      "id": "native-12",
+      "category": "native-already-english",
+      "mode": "proofread",
+      "tone": "native",
+      "input": "Thanks, that works for me. I'll send the draft over by end of day.",
+      "outputLanguage": "en",
+      "expectUnchanged": true,
+      "note": "Already what a native would write: a native rewrite has nothing to add and must not reword it for the sake of it."
+    },
+    {
+      "id": "native-13",
+      "category": "native-already-english",
+      "mode": "proofread",
+      "tone": "native",
+      "input": "Could you take a look at the PR when you get a chance? No rush.",
+      "outputLanguage": "en",
+      "expectUnchanged": true,
+      "note": "Already how a native would ask; a native rewrite leaves it alone."
+    },
+    {
+      "id": "native-14",
+      "category": "native-already-english",
+      "mode": "proofread",
+      "tone": "native",
+      "input": "Heads up: the deploy is paused until the migration finishes. I'll ping you once it's moving again.",
+      "outputLanguage": "en",
+      "expectUnchanged": true,
+      "note": "Casual workplace English that is already idiomatic; nothing to rewrite."
     }
   ]
 }

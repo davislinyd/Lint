@@ -126,6 +126,28 @@ final class WritingPipelineTests: XCTestCase {
         XCTAssertEqual(translation.calls.count, 1)
     }
 
+    func testANativeRewriteOfChineseIsWrittenAsEnglishAndNeverToldToKeepTheLanguage() async throws {
+        let source = "我已經把報告寄給客戶了，他們說 10/15 前會回覆。"
+        let model = FakeModel { _, _ in "I've sent the report to the client. They said they'd reply by October 15." }
+        let result = try await WritingPipeline.run(
+            source: source, mode: .proofread, tone: .native, systemPrompt: "P", budget: nil
+        ) { try model.generate($0, $1) }
+        XCTAssertEqual(result.text, "I've sent the report to the client. They said they'd reply by October 15.")
+        XCTAssertEqual(result.outcome, .accepted)
+        XCTAssertEqual(model.calls.map(\.prompt), ["P"], "no \"the text is in …\" line")
+        XCTAssertEqual(model.calls.map(\.text), [source])
+    }
+
+    func testANativeRewriteThatStaysChineseIsFlaggedNotReplacedByTheSource() async throws {
+        let source = "我已經把報告寄給客戶了。"
+        let model = FakeModel { _, _ in source }
+        let result = try await WritingPipeline.run(
+            source: source, mode: .proofread, tone: .native, systemPrompt: "P", budget: nil
+        ) { try model.generate($0, $1) }
+        XCTAssertEqual(result.outcome, .flagged(issues: [.notEnglish]))
+        XCTAssertEqual(model.calls.count, 2, "one retry, never a loop")
+    }
+
     func testAPieceTheModelSaysIsTooLongIsSplitAgainAtMostTwice() async throws {
         let text = (1...60).map { "Sentence \($0) is here and says a few things." }.joined(separator: " ")
         XCTAssertGreaterThan(WritingChunker.estimatedTokens(text), WritingPipeline.minimumTokensToSplit * 2)

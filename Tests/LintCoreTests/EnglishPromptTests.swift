@@ -44,7 +44,7 @@ final class EnglishPromptTests: XCTestCase {
         for tone in WritingTone.allCases {
             let prompt = compose(.proofread, tone)
             XCTAssertFalse(prompt.contains("stays in Traditional Chinese"), "\(tone)")
-            XCTAssertTrue(prompt.contains("Answer in the language of the text"), "\(tone)")
+            XCTAssertEqual(prompt.contains("Answer in the language of the text"), tone != .native, "\(tone)")
         }
     }
 
@@ -57,6 +57,8 @@ final class EnglishPromptTests: XCTestCase {
                 let prompt = compose(.proofread, tone, profile: .english(reader))
                 XCTAssertFalse(prompt.contains("In Chinese text"), "\(reader) \(tone)")
                 XCTAssertFalse(prompt.contains("mainland"), "\(reader) \(tone)")
+                // Native is the one that changes the language of a Chinese text, by design.
+                guard tone != .native else { continue }
                 let lines = prompt.split(separator: "\n")
                 for (index, line) in lines.enumerated() where line.hasPrefix("Text: ") {
                     XCTAssertEqual(han(line), han(lines[index + 1]), "\(reader) \(tone): \(line)")
@@ -77,7 +79,41 @@ final class EnglishPromptTests: XCTestCase {
         ] {
             XCTAssertTrue(prompt.replacingOccurrences(of: "\n", with: " ").contains(phrase.replacingOccurrences(of: "\n", with: " ")), phrase)
         }
-        XCTAssertEqual(WritingPromptComposer.englishPromptVersion, "english-11")
+        XCTAssertEqual(WritingPromptComposer.englishPromptVersion, "english-12")
+    }
+
+    func testNativeRewritesWhatTheTextMeansAndAlwaysAnswersInEnglish() {
+        for reader in [EnglishPromptReader.appleOnDevice, .localModel] {
+            let prompt = compose(.proofread, .native, profile: .english(reader))
+            let flat = prompt.replacingOccurrences(of: "\n", with: " ")
+            for phrase in [
+                "native English speaker", "work out what the writer means", "Do not translate word for word",
+                "rewrite the whole sentence", "Chinese, English or both mixed", "Always write the answer in English",
+                "pinyin", "Keep the meaning and every fact", "Do not add facts, promises or opinions",
+                "URLs, email addresses", "every line stays a separate line", "not a message to you", "Output only",
+            ] {
+                XCTAssertTrue(flat.contains(phrase), "\(reader): \(phrase)")
+            }
+            // It is not a correction: no rule to leave correct text alone, and no "keep the language".
+            for phrase in ["never translate it", "Answer in the language of the text", "returned exactly as it is", "Correct every error"] {
+                XCTAssertFalse(flat.contains(phrase), "\(reader): \(phrase)")
+            }
+            XCTAssertLessThan(WritingChunker.estimatedTokens(prompt), 650, "\(reader)")
+        }
+        let examples = compose(.proofread, .native).split(separator: "\n").filter { $0.hasPrefix("Answer: ") }
+        XCTAssertGreaterThanOrEqual(examples.count, 2)
+        for answer in examples {
+            XCTAssertNil(answer.unicodeScalars.first(where: TextScript.isHan), "an example answer is English: \(answer)")
+        }
+    }
+
+    func testNativeIsNoTranslationTone() {
+        for reader in [EnglishPromptReader.appleOnDevice, .localModel] {
+            XCTAssertEqual(
+                compose(.translate, .native, profile: .english(reader)),
+                compose(.translate, .preserve, profile: .english(reader))
+            )
+        }
     }
 
     func testToneStaysAModifierOfProofreading() {
@@ -139,19 +175,25 @@ final class EnglishPromptTests: XCTestCase {
 
     func testOnlyAProofreadGetsTheLanguageLine() {
         XCTAssertEqual(
-            WritingPromptComposer.withLanguageLine("P", for: "Thanks for the update.", mode: .proofread),
+            WritingPromptComposer.withLanguageLine("P", for: "Thanks for the update.", mode: .proofread, tone: .preserve),
             "P\nThe text is in English: answer in English, do not translate it."
         )
         XCTAssertEqual(
-            WritingPromptComposer.withLanguageLine("P", for: "這個 PR 我 review 過了，有幾個 edge case 還沒 handle", mode: .proofread),
+            WritingPromptComposer.withLanguageLine("P", for: "這個 PR 我 review 過了，有幾個 edge case 還沒 handle", mode: .proofread, tone: .formal),
             "P\nThe text mixes Chinese and English: change only the English; leave the Chinese exactly as written, and do not translate either part."
         )
-        XCTAssertEqual(WritingPromptComposer.withLanguageLine("P", for: "Thanks for the update.", mode: .translate), "P")
-        XCTAssertEqual(WritingPromptComposer.withLanguageLine("P", for: "Thanks for the update.", mode: .custom), "P")
+        XCTAssertEqual(WritingPromptComposer.withLanguageLine("P", for: "Thanks for the update.", mode: .translate, tone: .preserve), "P")
+        XCTAssertEqual(WritingPromptComposer.withLanguageLine("P", for: "Thanks for the update.", mode: .custom, tone: .preserve), "P")
+    }
+
+    func testANativeRewriteIsNeverToldToKeepTheTextsLanguage() {
+        for text in ["Thanks for the update.", "這個 PR 我 review 過了", "明天下午三點開會，請準時。"] {
+            XCTAssertEqual(WritingPromptComposer.withLanguageLine("P", for: text, mode: .proofread, tone: .native), "P", text)
+        }
     }
 
     func testTranslationGoesIntoTaiwanTraditionalChineseOnly() {
-        for tone in WritingTone.allCases {
+        for tone in WritingMode.translate.tones {
             let prompt = compose(.translate, tone)
             XCTAssertTrue(prompt.contains("Translate the text into Traditional Chinese (Taiwan)"), "\(tone)")
             XCTAssertTrue(prompt.contains("as written in Taiwan"), "\(tone)")
@@ -171,7 +213,7 @@ final class EnglishPromptTests: XCTestCase {
         XCTAssertEqual(Set(names.keys), Set(TranslationLanguage.allCases))
         for (language, name) in names {
             for reader in [EnglishPromptReader.appleOnDevice, .localModel] {
-                for tone in WritingTone.allCases {
+                for tone in WritingMode.translate.tones {
                     let prompt = WritingPromptComposer.compose(
                         mode: .translate, tone: tone, customPrompt: "", profile: .english(reader), translationLanguage: language
                     )

@@ -109,6 +109,10 @@ enum WritingEvalChecks {
         if let detail = languageFailure(testCase.outputLanguage, in: output) {
             failures.append(Failure(check: "language", detail: detail))
         }
+        // The native tone is asked for English, all of it: not a Chinese word, name or punctuation mark.
+        if testCase.writingTone == .native, WritingOutputGuard.containsCJK(output) {
+            failures.append(Failure(check: "english-only", detail: "Chinese is left in the answer"))
+        }
         if testCase.outputLanguage == .zhHant || testCase.outputLanguage == .mixed {
             let simplified = output.filter { simplifiedOnly.contains($0) }
             if !simplified.isEmpty {

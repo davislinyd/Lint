@@ -252,6 +252,75 @@ final class WritingOutputGuardTests: XCTestCase {
         )
     }
 
+    // MARK: native speaker
+
+    func testANativeRewriteOfChineseIsAcceptedAsEnglish() {
+        let source = "我已經把報告寄給客戶了，他們說 10/15 前會回覆。詳情在 https://example.com/report"
+        let output = "I've sent the report to the client. They said they'd get back to us by October 15. Details are at https://example.com/report"
+        XCTAssertEqual(WritingOutputGuard.assess(source: source, output: output, mode: .proofread, tone: .native), [])
+        XCTAssertEqual(
+            WritingOutputGuard.assess(
+                source: "- 修好登入問題\n- 更新 README", output: "Fixed the login bug, and updated the README.",
+                mode: .proofread, tone: .native
+            ), [], "a native rewrite is free to regroup lines"
+        )
+    }
+
+    func testANativeRewriteIsNotHeldToAMinimalEditOrToTheTextsLanguage() {
+        let source = "Sorry I reply late, I was very busy on the last days, so I not see your message."
+        let output = "Sorry for the late reply. I've been swamped the past few days and missed your message."
+        XCTAssertEqual(WritingOutputGuard.assess(source: source, output: output, mode: .proofread, tone: .native), [])
+        XCTAssertEqual(
+            WritingOutputGuard.assess(source: "明天下午三點開會，請準時。", output: "The meeting is at 3 PM tomorrow, so please be on time.", mode: .proofread, tone: .native), [],
+            "Han in, Latin out is what it is for"
+        )
+    }
+
+    func testANativeRewriteThatIsNotEnglishIsCaught() {
+        let source = "我已經把報告寄給客戶了。"
+        for (output, why) in [
+            ("我已經把報告寄給客戶了。", "came back in Chinese"),
+            ("I sent 報告 to the client.", "a Chinese word left in"),
+            ("Please send it to 王小明.", "a name left in Han"),
+            ("I sent the report to the client。", "Chinese punctuation"),
+            ("I sent the report to the “client”, 「Amy」.", "corner brackets"),
+        ] {
+            XCTAssertTrue(
+                WritingOutputGuard.assess(source: source, output: output, mode: .proofread, tone: .native).contains(.notEnglish), why
+            )
+        }
+        XCTAssertFalse(
+            WritingOutputGuard.assess(source: "Thanks for the update.", output: "Thanks for the update.", mode: .proofread, tone: .native).contains(.notEnglish)
+        )
+    }
+
+    func testOnlyANativeRewriteMustBeEnglish() {
+        for (mode, tone) in [(WritingMode.proofread, WritingTone.preserve), (.proofread, .formal), (.translate, .preserve), (.custom, .preserve)] {
+            XCTAssertFalse(
+                WritingOutputGuard.assess(source: "Thanks for the update.", output: "謝謝你的更新。", mode: mode, tone: tone).contains(.notEnglish), "\(mode)/\(tone)"
+            )
+        }
+    }
+
+    func testANativeRewriteStillHasToKeepURLsAndCodeAndInventNothing() {
+        let source = "請看 https://status.example.com/incident 然後跑 `make reset`，檔案在 ~/logs/app.log"
+        XCTAssertEqual(
+            WritingOutputGuard.assess(source: source, output: "Please check the status page and run the reset command.", mode: .proofread, tone: .native),
+            [.missing(["https://status.example.com/incident", "`make reset`", "~/logs/app.log"])]
+        )
+        let invented = WritingOutputGuard.assess(
+            source: "請把報告寄給客戶。", output: "Please send the report to bob@example.com.", mode: .proofread, tone: .native
+        )
+        XCTAssertEqual(invented, [.added(["bob@example.com"])])
+    }
+
+    func testTheRetryForANativeRewriteSaysToWriteEnglish() {
+        let lines = WritingOutputGuard.retryInstruction(for: [.notEnglish], source: "我已經把報告寄給客戶了。")
+        XCTAssertTrue(lines.contains("entirely in English"))
+        XCTAssertTrue(lines.contains("pinyin"))
+        XCTAssertFalse(lines.contains("do not translate"), "that is the opposite of what a native rewrite is asked for")
+    }
+
     func testEmptyAnswersAndLeakedReasoningAreCaught() {
         XCTAssertEqual(WritingOutputGuard.assess(source: "Hello there, friend.", output: "  \n", mode: .translate, tone: .preserve), [.empty])
         XCTAssertTrue(
@@ -346,6 +415,29 @@ final class WritingOutputGuardTests: XCTestCase {
         }
         XCTAssertEqual(result.text, "請見 https://example.com/a 網站。", "the attempt that lost less")
         XCTAssertEqual(result.outcome, .flagged(issues: [.missing(["https://example.com/b"])]))
+    }
+
+    func testANativeRewriteThatStaysChineseIsRetriedInEnglish() async throws {
+        let source = "我已經把報告寄給客戶了。"
+        let script = Script(["我已經把報告寄給客戶了。", "I've sent the report to the client."])
+        let result = try await GuardedWriter.run(source: source, mode: .proofread, tone: .native, systemPrompt: "P") {
+            script.next($0, $1)
+        }
+        XCTAssertEqual(result.text, "I've sent the report to the client.")
+        XCTAssertEqual(result.outcome, .acceptedAfterRetry(firstIssues: [.notEnglish]))
+        XCTAssertTrue(script.prompts[1].hasPrefix("P\n\n"))
+        XCTAssertTrue(script.prompts[1].contains("entirely in English"))
+    }
+
+    func testANativeRewriteThatFailsTwiceIsFlaggedNeverReplacedByItsChineseSource() async throws {
+        let source = "我已經把報告寄給客戶了。"
+        let script = Script(["我已經把報告寄給客戶了。", "I sent 報告 to the client."])
+        let result = try await GuardedWriter.run(source: source, mode: .proofread, tone: .native, systemPrompt: "P") {
+            script.next($0, $1)
+        }
+        XCTAssertEqual(result.text, "I sent 報告 to the client.", "the source is no answer to a request for English")
+        XCTAssertEqual(result.outcome, .flagged(issues: [.notEnglish]))
+        XCTAssertEqual(script.prompts.count, GuardedWriter.maximumAttempts)
     }
 
     func testACustomPromptGetsExactlyOneUncheckedRequest() async throws {

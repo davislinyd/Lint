@@ -217,7 +217,7 @@ final class WritingEvalRunTests: XCTestCase {
                 } else {
                     // The unguarded path of the app adds the language line itself (the pipeline does it otherwise).
                     let prompt = profile.isEnglish
-                        ? WritingPromptComposer.withLanguageLine(systemPrompt, for: testCase.input, mode: mode) : systemPrompt
+                        ? WritingPromptComposer.withLanguageLine(systemPrompt, for: testCase.input, mode: mode, tone: testCase.writingTone) : systemPrompt
                     output = try await generate(prompt, testCase.input)
                     first = output
                 }

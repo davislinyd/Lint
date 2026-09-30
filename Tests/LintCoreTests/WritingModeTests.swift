@@ -16,7 +16,24 @@ final class WritingModeTests: XCTestCase {
     }
 
     func testPreserveIsTheFirstTone() {
-        XCTAssertEqual(WritingTone.allCases, [.preserve, .formal, .concise, .professional])
+        XCTAssertEqual(WritingTone.allCases, [.preserve, .formal, .concise, .professional, .native])
+    }
+
+    func testOnlyProofreadingCanWriteLikeANativeSpeaker() {
+        XCTAssertEqual(WritingMode.proofread.tones, WritingTone.allCases)
+        XCTAssertEqual(WritingMode.translate.tones, [.preserve, .formal, .concise, .professional])
+        XCTAssertEqual(WritingMode.custom.tones, [])
+    }
+
+    func testATranslationRemembersNoNativeTone() {
+        var memory = WritingToneMemory(proofread: .native, translate: .native)
+        XCTAssertEqual(memory.tone(for: .proofread), .native)
+        XCTAssertEqual(memory.tone(for: .translate), .preserve, "a translation has no native tone to restore")
+        memory.set(.native, for: .translate)
+        XCTAssertEqual(memory.tone(for: .translate), .preserve)
+        memory.set(.formal, for: .translate)
+        XCTAssertEqual(memory.tone(for: .translate), .formal)
+        XCTAssertEqual(memory.tone(for: .proofread), .native, "each task keeps its own")
     }
 
     func testProofreadingAndTranslationTakeATone() {
@@ -33,6 +50,9 @@ final class WritingModeTests: XCTestCase {
         XCTAssertEqual(
             WritingMode.translate.displayTitle(tone: .professional),
             "\(WritingMode.translate.title) · \(WritingTone.professional.title)"
+        )
+        XCTAssertEqual(
+            WritingMode.proofread.displayTitle(tone: .native), "\(WritingMode.proofread.title) · \(WritingTone.native.title)"
         )
         XCTAssertEqual(WritingMode.custom.displayTitle(tone: .formal), WritingMode.custom.title, "custom has no tone")
     }

@@ -26,7 +26,7 @@ struct FloatingPanelView: View {
                 .frame(maxWidth: 240)
                 if viewModel.mode.supportsTone {
                     Picker("語氣", selection: $viewModel.tone) {
-                        ForEach(WritingTone.allCases) { tone in
+                        ForEach(viewModel.mode.tones) { tone in
                             Text(tone.title).tag(tone)
                         }
                     }

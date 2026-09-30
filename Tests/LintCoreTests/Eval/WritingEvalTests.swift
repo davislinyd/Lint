@@ -8,7 +8,7 @@ import XCTest
 final class WritingEvalFixtureTests: XCTestCase {
     func testTheFixturesCoverLintsWorkloadAndAreWellFormed() throws {
         let fixtures = try WritingEvalFixtures.load()
-        XCTAssertEqual(fixtures.version, 6)
+        XCTAssertEqual(fixtures.version, 7)
         XCTAssertGreaterThanOrEqual(fixtures.cases.count, 60, "the set is meant to be about 60-140 cases")
         XCTAssertLessThanOrEqual(fixtures.cases.count, 140)
         XCTAssertEqual(Set(fixtures.cases.map(\.id)).count, fixtures.cases.count, "ids are unique")
@@ -22,6 +22,7 @@ final class WritingEvalFixtureTests: XCTestCase {
             "fragment", "clean-technical", "clean-business", "clean-casual", "casual-preserve",
             "ip-address", "shell-command", "code-identifier", "currency", "file-path", "product-names",
             "english-natural", "english-holdout", "mixed-english",
+            "native-zh", "native-mixed", "native-english", "native-urls", "native-list", "native-already-english",
         ] {
             XCTAssertTrue(categories.contains(wanted), "no fixture for \(wanted)")
         }
@@ -44,6 +45,8 @@ final class WritingEvalFixtureTests: XCTestCase {
         }
         // English edits, and English-to-Chinese translation only for reference: no Chinese
         // proofreading and no Chinese-to-English translation. Mixed text has its English edited only.
+        // The native tone is the one way in: text in any language, English out.
+        XCTAssertGreaterThanOrEqual(fixtures.cases.filter { $0.writingTone == .native }.count, 10)
         for testCase in fixtures.cases {
             if testCase.writingMode == .translate {
                 XCTAssertEqual(testCase.outputLanguage, .zhHant, "\(testCase.id): translation only goes into Chinese")
@@ -113,6 +116,25 @@ final class WritingEvalFixtureTests: XCTestCase {
         let checks = WritingEvalChecks.run(translation, output: "请把视频存到共享盘，并更新軟件的默認设置。").map(\.check)
         XCTAssertTrue(checks.contains("simplified-chinese"))
         XCTAssertTrue(checks.contains("taiwan-wording"))
+    }
+
+    func testANativeAnswerHasToBeEnglishAllTheWayThrough() throws {
+        let fixtures = try WritingEvalFixtures.load()
+        let native = try XCTUnwrap(fixtures.cases.first { $0.id == "native-06" })
+        XCTAssertTrue(
+            WritingEvalChecks.run(native, output: "The bug is a cache invalidation problem. I've pushed a hotfix, so you can merge once you've reviewed it.").isEmpty
+        )
+        XCTAssertTrue(
+            WritingEvalChecks.run(native, output: "The bug is a cache invalidation problem. I pushed a hotfix，please review.")
+                .contains { $0.check == "english-only" }, "Chinese punctuation"
+        )
+        XCTAssertTrue(
+            WritingEvalChecks.run(native, output: "The cache invalidation 問題 is fixed in the hotfix.").contains { $0.check == "english-only" },
+            "a Chinese word is too little for the language check to see, and still a failure here"
+        )
+        XCTAssertTrue(
+            WritingEvalChecks.run(native, output: native.input).contains { $0.check == "language" }, "the input left as it was"
+        )
     }
 
     func testTheLanguageCheckOnlyCatchesTheWrongLanguage() {

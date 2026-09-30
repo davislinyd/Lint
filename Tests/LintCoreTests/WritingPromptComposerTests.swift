@@ -11,6 +11,9 @@ final class WritingPromptComposerTests: XCTestCase {
     /// Wording that only the proofreading task may carry: it says to stay in the source language.
     private let keepsSourceLanguage = ["維持同一語言", "不要擅自翻譯", "自動判斷原文語言"]
 
+    /// The tones that correct a text in its own language. Native writes English whatever the text is in.
+    private let tonesEditingInPlace = WritingTone.allCases.filter { $0 != .native }
+
     func testEveryTaskAndToneComposesAPrompt() {
         for mode in [WritingMode.proofread, .translate] {
             for tone in WritingTone.allCases {
@@ -33,7 +36,7 @@ final class WritingPromptComposerTests: XCTestCase {
     // MARK: proofread
 
     func testProofreadKeepsTheSourceLanguage() {
-        for tone in WritingTone.allCases {
+        for tone in tonesEditingInPlace {
             let prompt = compose(.proofread, tone)
             for phrase in keepsSourceLanguage {
                 XCTAssertTrue(prompt.contains(phrase), "proofread \(tone) lacks \(phrase)")
@@ -42,7 +45,7 @@ final class WritingPromptComposerTests: XCTestCase {
     }
 
     func testProofreadEditsTheEnglishOnly() {
-        for tone in WritingTone.allCases {
+        for tone in tonesEditingInPlace {
             let prompt = compose(.proofread, tone)
             XCTAssertTrue(prompt.contains("中英夾雜時只修改英文部分，中文一字不改"), "\(tone)")
             for chinesePolish in ["的／地／得", "精通繁體中文", "中文："] {
@@ -80,10 +83,26 @@ final class WritingPromptComposerTests: XCTestCase {
         XCTAssertTrue(prompt.contains("不要新增原文沒有的承諾"))
     }
 
+    func testProofreadNativeWritesEnglishWhateverLanguageTheTextIsIn() {
+        let prompt = compose(.proofread, .native)
+        XCTAssertTrue(prompt.contains("語氣：母語人士"))
+        XCTAssertTrue(prompt.contains("一律用英文作答"))
+        XCTAssertTrue(prompt.contains("不要逐字翻譯"))
+        XCTAssertTrue(prompt.contains("整句重寫"))
+        XCTAssertTrue(prompt.contains("忠實度優先"))
+        XCTAssertTrue(prompt.contains("共通規則"))
+        XCTAssertFalse(prompt.hasSuffix("\n"))
+        // Nothing that asks for the text's own language, or for a minimal edit.
+        for phrase in keepsSourceLanguage + ["中英夾雜時只修改英文部分", "原樣保留", "只改有問題"] {
+            XCTAssertFalse(prompt.contains(phrase), phrase)
+        }
+        XCTAssertFalse(prompt.contains("保留原語氣"))
+    }
+
     func testAToneOtherThanPreserveDoesNotArgueWithItself() {
         // "Colloquial stays colloquial" and the untouched already-correct example are what
         // preserving the tone means; under another tone they would contradict it.
-        for tone in [WritingTone.formal, .concise, .professional] {
+        for tone in [WritingTone.formal, .concise, .professional, .native] {
             let prompt = compose(.proofread, tone)
             XCTAssertFalse(prompt.contains("口語仍口語"), "\(tone)")
             XCTAssertFalse(prompt.contains("Sounds good"), "\(tone)")
@@ -161,6 +180,16 @@ final class WritingPromptComposerTests: XCTestCase {
         XCTAssertTrue(compose(.translate, .preserve).contains("說話風格"))
     }
 
+    func testTranslationHasNoNativeTone() {
+        for language in TranslationLanguage.allCases {
+            XCTAssertEqual(
+                WritingPromptComposer.compose(mode: .translate, tone: .native, customPrompt: "", translationLanguage: language),
+                WritingPromptComposer.compose(mode: .translate, tone: .preserve, customPrompt: "", translationLanguage: language),
+                "\(language)"
+            )
+        }
+    }
+
     // MARK: custom
 
     func testCustomIgnoresTheTone() {
@@ -189,6 +218,7 @@ final class WritingPromptComposerTests: XCTestCase {
         let all = WritingMode.allCases.flatMap { mode in
             WritingTone.allCases.map { WritingPromptComposer.overrideKey(mode: mode, tone: $0) }
         }
-        XCTAssertEqual(Set(all).count, 9, "eight task and tone pairs, and custom")
+        XCTAssertEqual(WritingPromptComposer.overrideKey(mode: .proofread, tone: .native), "proofread|native")
+        XCTAssertEqual(Set(all).count, 11, "ten task and tone pairs, and custom")
     }
 }

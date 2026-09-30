@@ -261,7 +261,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         let currentMode = app.settings.lastMode
         let currentTone = app.settings.tone(for: currentMode)
         let toneMenu = NSMenu(title: String(localized: "語氣"))
-        for tone in WritingTone.allCases {
+        for tone in currentMode.tones {
             let item = NSMenuItem(title: tone.title, action: #selector(selectTone(_:)), keyEquivalent: "")
             item.target = self
             item.representedObject = tone.rawValue

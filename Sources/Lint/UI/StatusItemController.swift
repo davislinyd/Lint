@@ -262,6 +262,8 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         let currentTone = app.settings.tone(for: currentMode)
         let toneMenu = NSMenu(title: String(localized: "語氣"))
         for tone in currentMode.tones {
+            // The native speaker tones, which write English from any language, are a group of their own.
+            if tone == .native { toneMenu.addItem(.separator()) }
             let item = NSMenuItem(title: tone.title, action: #selector(selectTone(_:)), keyEquivalent: "")
             item.target = self
             item.representedObject = tone.rawValue

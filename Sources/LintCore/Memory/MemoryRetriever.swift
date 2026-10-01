@@ -184,8 +184,8 @@ struct MemoryRetriever: Sendable {
         if memory.modeScope == .translate, query.mode == .translate {
             return query.outputLanguage.map { $0 == memory.language } ?? true
         }
-        // A native rewrite is English whatever the text is in (only English memories get this far).
-        if query.mode == .proofread, query.tone == .native { return true }
+        // A native rewrite, in any style, is English whatever the text is in (only English memories get this far).
+        if query.mode == .proofread, query.tone.isNative { return true }
         return habit ? profile.dominates(memory.language) : profile.mentions(memory.language)
     }
 

@@ -8,7 +8,7 @@ import XCTest
 final class WritingEvalFixtureTests: XCTestCase {
     func testTheFixturesCoverLintsWorkloadAndAreWellFormed() throws {
         let fixtures = try WritingEvalFixtures.load()
-        XCTAssertEqual(fixtures.version, 7)
+        XCTAssertEqual(fixtures.version, 8)
         XCTAssertGreaterThanOrEqual(fixtures.cases.count, 60, "the set is meant to be about 60-140 cases")
         XCTAssertLessThanOrEqual(fixtures.cases.count, 140)
         XCTAssertEqual(Set(fixtures.cases.map(\.id)).count, fixtures.cases.count, "ids are unique")
@@ -23,6 +23,7 @@ final class WritingEvalFixtureTests: XCTestCase {
             "ip-address", "shell-command", "code-identifier", "currency", "file-path", "product-names",
             "english-natural", "english-holdout", "mixed-english",
             "native-zh", "native-mixed", "native-english", "native-urls", "native-list", "native-already-english",
+            "native-casual", "native-formal", "native-genz",
         ] {
             XCTAssertTrue(categories.contains(wanted), "no fixture for \(wanted)")
         }
@@ -47,6 +48,12 @@ final class WritingEvalFixtureTests: XCTestCase {
         // proofreading and no Chinese-to-English translation. Mixed text has its English edited only.
         // The native tone is the one way in: text in any language, English out.
         XCTAssertGreaterThanOrEqual(fixtures.cases.filter { $0.writingTone == .native }.count, 10)
+        // Each style is tried on the same sentences, so that the voices can be read side by side.
+        for style in [WritingTone.nativeCasual, .nativeFormal, .nativeGenZ] {
+            let inputs = fixtures.cases.filter { $0.writingTone == style }.map(\.input)
+            XCTAssertGreaterThanOrEqual(inputs.count, 4, "\(style)")
+            XCTAssertEqual(Set(inputs), Set(fixtures.cases.filter { $0.writingTone == .nativeFormal }.map(\.input)), "\(style): the same sentences")
+        }
         for testCase in fixtures.cases {
             if testCase.writingMode == .translate {
                 XCTAssertEqual(testCase.outputLanguage, .zhHant, "\(testCase.id): translation only goes into Chinese")
@@ -135,6 +142,22 @@ final class WritingEvalFixtureTests: XCTestCase {
         XCTAssertTrue(
             WritingEvalChecks.run(native, output: native.input).contains { $0.check == "language" }, "the input left as it was"
         )
+    }
+
+    func testAFormalNativeAnswerHasNoContractions() throws {
+        let fixtures = try WritingEvalFixtures.load()
+        let formal = try XCTUnwrap(fixtures.cases.first { $0.writingTone == .nativeFormal })
+        XCTAssertTrue(WritingEvalChecks.run(formal, output: "We will not be able to fit this request into this quarter. We shall review it next quarter.").isEmpty)
+        for answer in [
+            "We can't fit this request into this quarter.", "We won\u{2019}t be able to fit it in.", "I'm sorry; it is not possible.",
+            "That's not possible this quarter.", "We'll review it next quarter.", "Let's review it next quarter.",
+        ] {
+            XCTAssertTrue(WritingEvalChecks.run(formal, output: answer).contains { $0.check == "formal-contractions" }, answer)
+        }
+        // A possessive is not a contraction, and only the formal style is held to this.
+        XCTAssertFalse(WritingEvalChecks.run(formal, output: "The client's contract is with the finance team's lawyers.").contains { $0.check == "formal-contractions" })
+        let casual = try XCTUnwrap(fixtures.cases.first { $0.writingTone == .nativeCasual })
+        XCTAssertFalse(WritingEvalChecks.run(casual, output: "We can't fit it in this quarter, sorry.").contains { $0.check == "formal-contractions" })
     }
 
     func testTheLanguageCheckOnlyCatchesTheWrongLanguage() {

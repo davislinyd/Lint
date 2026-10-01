@@ -1,6 +1,6 @@
 {
-  "version": 7,
-  "about": "Lint's own writing fixtures: English proofreading and tone rewrites (also the English inside mixed Chinese-English text, whose Chinese is left alone), English-to-Traditional-Chinese translation for reference, and the native-speaker tone (Chinese, mixed or broken English in, a native speaker's English out). Every sentence was written for this repository; nothing is taken from a benchmark corpus. They exist to compare engines on Lint's actual workload, not to score a model in general.",
+  "version": 8,
+  "about": "Lint's own writing fixtures: English proofreading and tone rewrites (also the English inside mixed Chinese-English text, whose Chinese is left alone), English-to-Traditional-Chinese translation for reference, and the native-speaker tone (Chinese, mixed or broken English in, a native speaker's English out) in its four styles: standard, casual, formal and Gen Z. Every sentence was written for this repository; nothing is taken from a benchmark corpus. They exist to compare engines on Lint's actual workload, not to score a model in general.",
   "cases": [
     {
       "id": "en-grammar-01",
@@ -1534,6 +1534,126 @@
       "outputLanguage": "en",
       "expectUnchanged": true,
       "note": "Casual workplace English that is already idiomatic; nothing to rewrite."
+    },
+    {
+      "id": "native-casual-01",
+      "category": "native-casual",
+      "mode": "proofread",
+      "tone": "nativeCasual",
+      "input": "抱歉，這個需求我們這季排不進去，下季再評估看看。",
+      "outputLanguage": "en",
+      "note": "Casual: contractions and plain words, still a polite decline with the same deferral to next quarter; no invented date."
+    },
+    {
+      "id": "native-casual-02",
+      "category": "native-casual",
+      "mode": "proofread",
+      "tone": "nativeCasual",
+      "input": "我覺得這個方案風險太高，建議我們先做小範圍測試，再決定要不要全面上線。",
+      "outputLanguage": "en",
+      "note": "Casual: \"I think\" and \"let's\" style, an opinion and a suggestion; not turned into an order."
+    },
+    {
+      "id": "native-casual-03",
+      "category": "native-casual",
+      "mode": "proofread",
+      "tone": "nativeCasual",
+      "input": "這個流程真的很爛，每次都要重填一樣的資料，到底是誰設計的？",
+      "outputLanguage": "en",
+      "note": "Casual: the heat stays (a native would say it as plainly as it was meant); no softening, no added insult."
+    },
+    {
+      "id": "native-casual-04",
+      "category": "native-casual",
+      "mode": "proofread",
+      "tone": "nativeCasual",
+      "input": "Hello, I want to ask you about the invoice what I send last week, you have receive it or not?",
+      "outputLanguage": "en",
+      "mustFix": [
+        "what I send",
+        "you have receive it or not"
+      ],
+      "note": "Casual: the meaning (did you get last week's invoice?) in an easy, friendly way; not patched word by word."
+    },
+    {
+      "id": "native-formal-01",
+      "category": "native-formal",
+      "mode": "proofread",
+      "tone": "nativeFormal",
+      "input": "抱歉，這個需求我們這季排不進去，下季再評估看看。",
+      "outputLanguage": "en",
+      "note": "Formal: a courteous written decline with the deferral; no contractions, no slang, no invented date."
+    },
+    {
+      "id": "native-formal-02",
+      "category": "native-formal",
+      "mode": "proofread",
+      "tone": "nativeFormal",
+      "input": "我覺得這個方案風險太高，建議我們先做小範圍測試，再決定要不要全面上線。",
+      "outputLanguage": "en",
+      "note": "Formal: the opinion and the recommendation, in careful written English; the hedge (\"I think\", \"recommend\") stays."
+    },
+    {
+      "id": "native-formal-03",
+      "category": "native-formal",
+      "mode": "proofread",
+      "tone": "nativeFormal",
+      "input": "這個流程真的很爛，每次都要重填一樣的資料，到底是誰設計的？",
+      "outputLanguage": "en",
+      "note": "Formal: the complaint stays a complaint (not a polite question about preferences); no slang, no contractions."
+    },
+    {
+      "id": "native-formal-04",
+      "category": "native-formal",
+      "mode": "proofread",
+      "tone": "nativeFormal",
+      "input": "Hello, I want to ask you about the invoice what I send last week, you have receive it or not?",
+      "outputLanguage": "en",
+      "mustFix": [
+        "what I send",
+        "you have receive it or not"
+      ],
+      "note": "Formal: a proper business inquiry about last week's invoice; no contractions."
+    },
+    {
+      "id": "native-genz-01",
+      "category": "native-genz",
+      "mode": "proofread",
+      "tone": "nativeGenZ",
+      "input": "抱歉，這個需求我們這季排不進去，下季再評估看看。",
+      "outputLanguage": "en",
+      "note": "Gen Z: a decline is a serious-ish message, so little or no slang; short, texting-style; same deferral, no invented date."
+    },
+    {
+      "id": "native-genz-02",
+      "category": "native-genz",
+      "mode": "proofread",
+      "tone": "nativeGenZ",
+      "input": "我覺得這個方案風險太高，建議我們先做小範圍測試，再決定要不要全面上線。",
+      "outputLanguage": "en",
+      "note": "Gen Z: short and loose, maybe tbh or lowkey once; the suggestion and the reason (too risky) both stay; no emoji."
+    },
+    {
+      "id": "native-genz-03",
+      "category": "native-genz",
+      "mode": "proofread",
+      "tone": "nativeGenZ",
+      "input": "這個流程真的很爛，每次都要重填一樣的資料，到底是誰設計的？",
+      "outputLanguage": "en",
+      "note": "Gen Z: slang is welcome here, the frustration keeps its strength; no emoji, nothing added about who designed it."
+    },
+    {
+      "id": "native-genz-04",
+      "category": "native-genz",
+      "mode": "proofread",
+      "tone": "nativeGenZ",
+      "input": "Hello, I want to ask you about the invoice what I send last week, you have receive it or not?",
+      "outputLanguage": "en",
+      "mustFix": [
+        "what I send",
+        "you have receive it or not"
+      ],
+      "note": "Gen Z: a quick, casual check on last week's invoice; not a pile of slang."
     }
   ]
 }

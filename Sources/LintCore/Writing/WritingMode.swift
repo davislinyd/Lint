@@ -27,7 +27,7 @@ public enum WritingMode: String, CaseIterable, Identifiable, Sendable, Codable {
     public var tones: [WritingTone] {
         switch self {
         case .proofread: WritingTone.allCases
-        case .translate: WritingTone.allCases.filter { $0 != .native }
+        case .translate: WritingTone.allCases.filter { !$0.isNative }
         case .custom: []
         }
     }

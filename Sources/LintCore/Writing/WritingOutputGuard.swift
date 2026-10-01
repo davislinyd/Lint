@@ -249,7 +249,7 @@ public struct WritingGuardPolicy: Equatable, Sendable {
                 protectedKinds: [.url, .email, .codeSpan, .path, .placeholder, .identifier], keepsLanguage: false,
                 numbersMayChange: true, limitsChange: false, fallsBackToSource: false
             )
-        case .proofread where tone == .native:
+        case .proofread where tone.isNative:
             // The text may be Chinese, so keeping it is no safe answer to a request for English: two
             // failed attempts show the better one, flagged, as a translation does.
             return WritingGuardPolicy(

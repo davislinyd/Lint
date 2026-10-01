@@ -110,8 +110,12 @@ enum WritingEvalChecks {
             failures.append(Failure(check: "language", detail: detail))
         }
         // The native tone is asked for English, all of it: not a Chinese word, name or punctuation mark.
-        if testCase.writingTone == .native, WritingOutputGuard.containsCJK(output) {
+        if testCase.writingTone.isNative, WritingOutputGuard.containsCJK(output) {
             failures.append(Failure(check: "english-only", detail: "Chinese is left in the answer"))
+        }
+        // The formal style is asked for no contractions at all: a hard rule that can be checked.
+        if testCase.writingTone == .nativeFormal, let found = contractions(in: output).first {
+            failures.append(Failure(check: "formal-contractions", detail: "\"\(found)\" in a formal answer"))
         }
         if testCase.outputLanguage == .zhHant || testCase.outputLanguage == .mixed {
             let simplified = output.filter { simplifiedOnly.contains($0) }
@@ -166,6 +170,17 @@ enum WritingEvalChecks {
     /// measure, so the eval and the guard agree on what "the wrong language" is.
     static func hanRatio(of text: String) -> Double {
         TextScript.hanShare(text)
+    }
+
+    /// n't, 'm, 're, 've, 'll, 'd, and the 's of it's, that's, let's and the like. A possessive is not one.
+    private static let contractionPattern = try! NSRegularExpression(
+        pattern: #"\b(?:\w+n['\u2019]t|i['\u2019]m|\w+['\u2019](?:re|ve|ll|d)|(?:it|that|let|there|here|what|he|she|who|how|where|when)['\u2019]s)\b"#,
+        options: [.caseInsensitive]
+    )
+
+    static func contractions(in text: String) -> [String] {
+        let range = NSRange(text.startIndex..., in: text)
+        return contractionPattern.matches(in: text, range: range).compactMap { Range($0.range, in: text).map { String(text[$0]) } }
     }
 
     static func languageFailure(_ expected: WritingEvalCase.Language, in output: String) -> String? {

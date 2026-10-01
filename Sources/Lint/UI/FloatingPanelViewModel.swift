@@ -402,7 +402,7 @@ final class FloatingPanelViewModel {
     /// the local one is not even woken for it. The native tone is the exception: it writes English
     /// from a text in any language.
     private static func hasNoEnglish(_ text: String, mode: WritingMode, tone: WritingTone) -> Bool {
-        mode == .proofread && tone != .native && !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        mode == .proofread && !tone.isNative && !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && !TextScript.hasEnglish(text)
     }
 

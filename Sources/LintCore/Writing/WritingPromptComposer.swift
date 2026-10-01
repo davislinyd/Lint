@@ -24,7 +24,7 @@ public enum WritingPromptComposer {
             )
         }
         switch mode {
-        case .proofread where tone == .native:
+        case .proofread where tone.isNative:
             // It is not an edit of the text's own words: no "keep the language", no minimal edit.
             return [
                 nativeTask,
@@ -195,6 +195,12 @@ public enum WritingPromptComposer {
         case .professional:
             let base = "語氣：專業。用自然、清楚、禮貌、具體的措辭，適合寄給同事、主管或客戶；避免情緒化指責、模糊的歸咎、過度隨便的用語與過度奉承；除非情境真的需要，避免罐頭式商務套語（例如「希望此信找到您安好」）。不要新增原文沒有的承諾、請求、期限或事實。"
             return translating ? base + "翻譯時，以目標語言中自然的專業語氣表達相同的意思。" : base
+        case .nativeCasual:
+            return "語氣：母語人士 · 輕鬆。像寫給朋友或相處融洽的同事：口語、自然，用縮寫與日常用字，句子短；不用很快過時的流行語。不要加入原文沒有的事實、承諾或意見，也不要改變原文的禮貌程度。"
+        case .nativeFormal:
+            return "語氣：母語人士 · 正式。像商務信函或正式公告的書面英文：完整句子、用字精確，不用縮寫與俚語；平實，不誇張。不要加入原文沒有的客套、承諾或內容。"
+        case .nativeGenZ:
+            return "語氣：母語人士 · Gen Z。像年輕的英語母語者傳訊息：簡短、隨性，可用 tbh、ngl 這類縮寫與少量流行用語（lowkey、fr），只在合適處使用，不要每句都塞；不主動加表情符號；內容嚴肅（壞消息、道歉、正式請求）時少用或不用俚語；不改事實與情緒強度。"
         case .native:
             return "語氣：母語人士。讓文字讀起來就像英語母語者自己寫的：自然、道地，用他們在這個情境裡真的會用的詞與句型。道地不等於華麗：不要加入原文沒有的事實、承諾、意見或情緒，也不要改變原文的禮貌與正式程度。"
         }

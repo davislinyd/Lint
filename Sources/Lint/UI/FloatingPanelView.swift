@@ -31,7 +31,7 @@ struct FloatingPanelView: View {
                         }
                     }
                     .pickerStyle(.menu)
-                    .frame(maxWidth: 180)
+                    .frame(maxWidth: 260)
                 }
                 if viewModel.mode == .translate {
                     Picker("翻譯語言", selection: Bindable(viewModel.settings).translationLanguage) {

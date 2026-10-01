@@ -297,6 +297,7 @@ final class MemoryExtractorTests: XCTestCase {
         }
         XCTAssertEqual(seen.count, WritingTone.allCases.count, "plain proofreading and each tone keep their own")
         XCTAssertTrue(seen.contains("vocabulary:en:proofread|native:large>huge"), "so does the native tone")
+        XCTAssertTrue(seen.contains("vocabulary:en:proofread|nativeGenZ:large>huge"), "and each native style")
         XCTAssertTrue(seen.contains("vocabulary:en:large>huge"), "plain proofreading stays global")
     }
 
@@ -319,7 +320,7 @@ final class MemoryExtractorTests: XCTestCase {
 
     func testProofreadingInAToneIsNotProofreadingTheModelsRewriteIsNotAHabit() {
         // The same correction that plain proofreading learns from is the tone's own rewrite here.
-        for tone in [WritingTone.formal, .concise, .professional, .native] {
+        for tone in [WritingTone.formal, .concise, .professional, .native, .nativeCasual, .nativeFormal, .nativeGenZ] {
             let sample = feedback(
                 .proofread, tone: tone,
                 original: "I have meeting tomorrow.", generated: "I have a meeting tomorrow."

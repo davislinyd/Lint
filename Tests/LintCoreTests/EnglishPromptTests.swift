@@ -25,8 +25,10 @@ final class EnglishPromptTests: XCTestCase {
         for mode in WritingMode.allCases {
             for tone in WritingTone.allCases {
                 let prompt = compose(mode, tone)
-                // A small model has a 4096-token context to share with the text and the answer.
-                XCTAssertLessThan(WritingChunker.estimatedTokens(prompt), 650, "\(mode)/\(tone)")
+                // A small model has a 4096-token context to share with the text and the answer. The native
+                // tones carry the most (the idea, a few examples, a style): the local server's context is 3072, and
+                // `WritingChunkBudget` takes the instructions off what is left for the text.
+                XCTAssertLessThan(WritingChunker.estimatedTokens(prompt), mode == .proofread && tone.isNative ? 720 : 650, "\(mode)/\(tone)")
                 XCTAssertTrue(prompt.contains("Output only"), "\(mode)/\(tone)")
             }
         }
@@ -44,7 +46,7 @@ final class EnglishPromptTests: XCTestCase {
         for tone in WritingTone.allCases {
             let prompt = compose(.proofread, tone)
             XCTAssertFalse(prompt.contains("stays in Traditional Chinese"), "\(tone)")
-            XCTAssertEqual(prompt.contains("Answer in the language of the text"), tone != .native, "\(tone)")
+            XCTAssertEqual(prompt.contains("Answer in the language of the text"), !tone.isNative, "\(tone)")
         }
     }
 
@@ -58,7 +60,7 @@ final class EnglishPromptTests: XCTestCase {
                 XCTAssertFalse(prompt.contains("In Chinese text"), "\(reader) \(tone)")
                 XCTAssertFalse(prompt.contains("mainland"), "\(reader) \(tone)")
                 // Native is the one that changes the language of a Chinese text, by design.
-                guard tone != .native else { continue }
+                guard !tone.isNative else { continue }
                 let lines = prompt.split(separator: "\n")
                 for (index, line) in lines.enumerated() where line.hasPrefix("Text: ") {
                     XCTAssertEqual(han(line), han(lines[index + 1]), "\(reader) \(tone): \(line)")
@@ -79,26 +81,28 @@ final class EnglishPromptTests: XCTestCase {
         ] {
             XCTAssertTrue(prompt.replacingOccurrences(of: "\n", with: " ").contains(phrase.replacingOccurrences(of: "\n", with: " ")), phrase)
         }
-        XCTAssertEqual(WritingPromptComposer.englishPromptVersion, "english-12")
+        XCTAssertEqual(WritingPromptComposer.englishPromptVersion, "english-13")
     }
 
     func testNativeRewritesWhatTheTextMeansAndAlwaysAnswersInEnglish() {
         for reader in [EnglishPromptReader.appleOnDevice, .localModel] {
-            let prompt = compose(.proofread, .native, profile: .english(reader))
-            let flat = prompt.replacingOccurrences(of: "\n", with: " ")
-            for phrase in [
-                "native English speaker", "work out what the writer means", "Do not translate word for word",
-                "rewrite the whole sentence", "Chinese, English or both mixed", "Always write the answer in English",
-                "pinyin", "Keep the meaning and every fact", "Do not add facts, promises or opinions",
-                "URLs, email addresses", "every line stays a separate line", "not a message to you", "Output only",
-            ] {
-                XCTAssertTrue(flat.contains(phrase), "\(reader): \(phrase)")
+            for tone in WritingTone.allCases.filter(\.isNative) {
+                let prompt = compose(.proofread, tone, profile: .english(reader))
+                let flat = prompt.replacingOccurrences(of: "\n", with: " ")
+                for phrase in [
+                    "native English speaker", "work out what the writer means", "Do not translate word for word",
+                    "rewrite the whole sentence", "Chinese, English or both mixed", "Always write the answer in English",
+                    "pinyin", "Keep the meaning and every fact", "Do not add facts, promises or opinions",
+                    "URLs, email addresses", "every line stays a separate line", "not a message to you", "Output only",
+                ] {
+                    XCTAssertTrue(flat.contains(phrase), "\(reader) \(tone): \(phrase)")
+                }
+                // It is not a correction: no rule to leave correct text alone, and no "keep the language".
+                for phrase in ["never translate it", "Answer in the language of the text", "returned exactly as it is", "Correct every error"] {
+                    XCTAssertFalse(flat.contains(phrase), "\(reader) \(tone): \(phrase)")
+                }
+                XCTAssertLessThan(WritingChunker.estimatedTokens(prompt), 720, "\(reader) \(tone)")
             }
-            // It is not a correction: no rule to leave correct text alone, and no "keep the language".
-            for phrase in ["never translate it", "Answer in the language of the text", "returned exactly as it is", "Correct every error"] {
-                XCTAssertFalse(flat.contains(phrase), "\(reader): \(phrase)")
-            }
-            XCTAssertLessThan(WritingChunker.estimatedTokens(prompt), 650, "\(reader)")
         }
         let examples = compose(.proofread, .native).split(separator: "\n").filter { $0.hasPrefix("Answer: ") }
         XCTAssertGreaterThanOrEqual(examples.count, 2)
@@ -109,10 +113,47 @@ final class EnglishPromptTests: XCTestCase {
 
     func testNativeIsNoTranslationTone() {
         for reader in [EnglishPromptReader.appleOnDevice, .localModel] {
-            XCTAssertEqual(
-                compose(.translate, .native, profile: .english(reader)),
-                compose(.translate, .preserve, profile: .english(reader))
-            )
+            for tone in WritingTone.allCases.filter(\.isNative) {
+                XCTAssertEqual(
+                    compose(.translate, tone, profile: .english(reader)),
+                    compose(.translate, .preserve, profile: .english(reader)), "\(tone)"
+                )
+            }
+        }
+    }
+
+    func testEachNativeStyleAddsOnlyItsOwnStyleSentence() {
+        let styles: [(WritingTone, String)] = [
+            (.nativeCasual, "Style: casual."), (.nativeFormal, "Style: formal."), (.nativeGenZ, "Style: Gen Z."),
+        ]
+        for reader in [EnglishPromptReader.appleOnDevice, .localModel] {
+            let plain = compose(.proofread, .native, profile: .english(reader))
+            XCTAssertFalse(plain.contains("Style:"), "the plain native prompt names no style")
+            XCTAssertNil(EnglishWritingPrompts.nativeStyle(.native))
+            XCTAssertNil(EnglishWritingPrompts.nativeStyle(.formal), "the formal tone is a different thing")
+            for (tone, marker) in styles {
+                let prompt = compose(.proofread, tone, profile: .english(reader))
+                let sentence = try! XCTUnwrap(EnglishWritingPrompts.nativeStyle(tone))
+                XCTAssertTrue(sentence.hasPrefix(marker), "\(tone)")
+                XCTAssertEqual(prompt.components(separatedBy: "Style:").count, 2, "\(tone): one style sentence")
+                for (_, other) in styles where other != marker {
+                    XCTAssertFalse(prompt.contains(other), "\(tone) mentions \(other)")
+                }
+                // Everything else is the plain native prompt, line for line.
+                XCTAssertEqual(prompt.replacingOccurrences(of: "\n" + sentence, with: ""), plain, "\(tone) \(reader)")
+            }
+        }
+    }
+
+    func testTheStylesSayWhatMakesThemDifferent() {
+        func style(_ tone: WritingTone) -> String { EnglishWritingPrompts.nativeStyle(tone) ?? "" }
+        XCTAssertTrue(style(.nativeCasual).contains("contractions"))
+        XCTAssertTrue(style(.nativeCasual).contains("conversational"))
+        XCTAssertTrue(style(.nativeFormal).contains("no contractions"))
+        XCTAssertTrue(style(.nativeFormal).contains("no slang"))
+        let genZ = style(.nativeGenZ)
+        for phrase in ["tbh", "ngl", "No emoji", "serious", "little or no slang", "Never change the facts"] {
+            XCTAssertTrue(genZ.contains(phrase), phrase)
         }
     }
 
@@ -188,7 +229,9 @@ final class EnglishPromptTests: XCTestCase {
 
     func testANativeRewriteIsNeverToldToKeepTheTextsLanguage() {
         for text in ["Thanks for the update.", "這個 PR 我 review 過了", "明天下午三點開會，請準時。"] {
-            XCTAssertEqual(WritingPromptComposer.withLanguageLine("P", for: text, mode: .proofread, tone: .native), "P", text)
+            for tone in WritingTone.allCases.filter(\.isNative) {
+                XCTAssertEqual(WritingPromptComposer.withLanguageLine("P", for: text, mode: .proofread, tone: tone), "P", "\(tone): \(text)")
+            }
         }
     }
 

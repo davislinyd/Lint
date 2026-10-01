@@ -112,11 +112,21 @@ final class MemoryRetrieverTests: XCTestCase {
         // The answer is English whatever the text is in, so an English habit applies to Chinese text too.
         let habit = [memory("articles")]
         let chinese = "明天下午三點在會議室討論預算"
-        XCTAssertEqual(keys(habit, chinese, tone: .native), ["articles"])
+        for tone in WritingTone.allCases.filter(\.isNative) {
+            XCTAssertEqual(keys(habit, chinese, tone: tone), ["articles"], "\(tone)")
+        }
         XCTAssertEqual(keys(habit, chinese, tone: .formal), [], "every other tone still needs the text to be English")
         XCTAssertEqual(keys(habit, chinese, mode: .translate, tone: .preserve), [])
         let chineseHabit = [memory("x", language: "zh-Hant")]
         XCTAssertEqual(keys(chineseHabit, chinese, tone: .native), [], "a proofread is never reminded of Chinese")
+    }
+
+    func testAMemoryLearnedInOneNativeStyleIsNotRemindedInAnother() {
+        let genZ = [memory("genz-phrase", kind: .style, scope: .proofread, tone: .nativeGenZ)]
+        XCTAssertEqual(keys(genZ, english, tone: .nativeGenZ), ["genz-phrase"])
+        for tone in [WritingTone.native, .nativeCasual, .nativeFormal, .formal, .preserve] {
+            XCTAssertEqual(keys(genZ, english, tone: tone), [], "\(tone)")
+        }
     }
 
     func testAMemoryScopedToTheNativeToneStaysThere() {

@@ -294,6 +294,22 @@ final class WritingOutputGuardTests: XCTestCase {
         )
     }
 
+    func testEveryNativeStyleIsHeldToTheSamePolicyAsTheNativeTone() {
+        let policy = WritingGuardPolicy.for(mode: .proofread, tone: .native)
+        XCTAssertEqual(policy?.requiresEnglish, true)
+        let source = "我已經把報告寄給客戶了。"
+        for tone in WritingTone.allCases.filter(\.isNative) {
+            XCTAssertEqual(WritingGuardPolicy.for(mode: .proofread, tone: tone), policy, "\(tone)")
+            XCTAssertEqual(
+                WritingOutputGuard.assess(source: source, output: "I sent the report to the client already, tbh.", mode: .proofread, tone: tone), [], "\(tone)"
+            )
+            XCTAssertEqual(
+                WritingOutputGuard.assess(source: source, output: "我已經把報告寄給客戶了。", mode: .proofread, tone: tone), [.notEnglish], "\(tone)"
+            )
+            XCTAssertEqual(WritingGuardPolicy.for(mode: .translate, tone: tone)?.requiresEnglish, false, "a translation is not asked for English")
+        }
+    }
+
     func testOnlyANativeRewriteMustBeEnglish() {
         for (mode, tone) in [(WritingMode.proofread, WritingTone.preserve), (.proofread, .formal), (.translate, .preserve), (.custom, .preserve)] {
             XCTAssertFalse(

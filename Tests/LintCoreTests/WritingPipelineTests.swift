@@ -138,6 +138,23 @@ final class WritingPipelineTests: XCTestCase {
         XCTAssertEqual(model.calls.map(\.text), [source])
     }
 
+    func testEveryNativeStyleIsWrittenAsEnglishWithoutTheLanguageLine() async throws {
+        let source = "我已經把報告寄給客戶了。"
+        for tone in WritingTone.allCases.filter(\.isNative) {
+            let model = FakeModel { _, _ in "I've sent the report to the client." }
+            let result = try await WritingPipeline.run(
+                source: source, mode: .proofread, tone: tone, systemPrompt: "P", budget: nil
+            ) { try model.generate($0, $1) }
+            XCTAssertEqual(result.outcome, .accepted, "\(tone)")
+            XCTAssertEqual(model.calls.map(\.prompt), ["P"], "\(tone): no language line")
+            let stays = FakeModel { _, _ in source }
+            let flagged = try await WritingPipeline.run(
+                source: source, mode: .proofread, tone: tone, systemPrompt: "P", budget: nil
+            ) { try stays.generate($0, $1) }
+            XCTAssertEqual(flagged.outcome, .flagged(issues: [.notEnglish]), "\(tone)")
+        }
+    }
+
     func testANativeRewriteThatStaysChineseIsFlaggedNotReplacedByTheSource() async throws {
         let source = "我已經把報告寄給客戶了。"
         let model = FakeModel { _, _ in source }

@@ -12,7 +12,8 @@ final class WritingPromptComposerTests: XCTestCase {
     private let keepsSourceLanguage = ["維持同一語言", "不要擅自翻譯", "自動判斷原文語言"]
 
     /// The tones that correct a text in its own language. Native writes English whatever the text is in.
-    private let tonesEditingInPlace = WritingTone.allCases.filter { $0 != .native }
+    private let tonesEditingInPlace = WritingTone.allCases.filter { !$0.isNative }
+    private let nativeTones = WritingTone.allCases.filter(\.isNative)
 
     func testEveryTaskAndToneComposesAPrompt() {
         for mode in [WritingMode.proofread, .translate] {
@@ -84,25 +85,50 @@ final class WritingPromptComposerTests: XCTestCase {
     }
 
     func testProofreadNativeWritesEnglishWhateverLanguageTheTextIsIn() {
-        let prompt = compose(.proofread, .native)
-        XCTAssertTrue(prompt.contains("語氣：母語人士"))
-        XCTAssertTrue(prompt.contains("一律用英文作答"))
-        XCTAssertTrue(prompt.contains("不要逐字翻譯"))
-        XCTAssertTrue(prompt.contains("整句重寫"))
-        XCTAssertTrue(prompt.contains("忠實度優先"))
-        XCTAssertTrue(prompt.contains("共通規則"))
-        XCTAssertFalse(prompt.hasSuffix("\n"))
-        // Nothing that asks for the text's own language, or for a minimal edit.
-        for phrase in keepsSourceLanguage + ["中英夾雜時只修改英文部分", "原樣保留", "只改有問題"] {
-            XCTAssertFalse(prompt.contains(phrase), phrase)
+        for tone in nativeTones {
+            let prompt = compose(.proofread, tone)
+            XCTAssertTrue(prompt.contains("語氣：母語人士"), "\(tone)")
+            XCTAssertTrue(prompt.contains("一律用英文作答"), "\(tone)")
+            XCTAssertTrue(prompt.contains("不要逐字翻譯"), "\(tone)")
+            XCTAssertTrue(prompt.contains("整句重寫"), "\(tone)")
+            XCTAssertTrue(prompt.contains("忠實度優先"), "\(tone)")
+            XCTAssertTrue(prompt.contains("共通規則"), "\(tone)")
+            XCTAssertFalse(prompt.hasSuffix("\n"), "\(tone)")
+            // Nothing that asks for the text's own language, or for a minimal edit.
+            for phrase in keepsSourceLanguage + ["中英夾雜時只修改英文部分", "原樣保留", "只改有問題"] {
+                XCTAssertFalse(prompt.contains(phrase), "\(tone): \(phrase)")
+            }
+            XCTAssertFalse(prompt.contains("保留原語氣"), "\(tone)")
         }
-        XCTAssertFalse(prompt.contains("保留原語氣"))
+    }
+
+    func testEachNativeStyleSaysHowItShouldSoundAndTheOthersDoNot() {
+        let styles: [(WritingTone, String, [String])] = [
+            (.nativeCasual, "語氣：母語人士 · 輕鬆", ["口語", "縮寫"]),
+            (.nativeFormal, "語氣：母語人士 · 正式", ["書面", "不用縮寫", "俚語"]),
+            (.nativeGenZ, "語氣：母語人士 · Gen Z", ["tbh", "不主動加表情符號", "嚴肅", "不改事實"]),
+        ]
+        for (tone, heading, phrases) in styles {
+            let prompt = compose(.proofread, tone)
+            XCTAssertTrue(prompt.contains(heading), "\(tone)")
+            for phrase in phrases { XCTAssertTrue(prompt.contains(phrase), "\(tone): \(phrase)") }
+            for (other, otherHeading, _) in styles where other != tone {
+                XCTAssertFalse(prompt.contains(otherHeading), "\(tone) mentions \(other)")
+            }
+        }
+        // The plain native prompt names no style, and the four share everything but that line.
+        let plain = compose(.proofread, .native)
+        XCTAssertFalse(plain.contains("母語人士 · "))
+        for (tone, heading, _) in styles {
+            let withoutStyle = compose(.proofread, tone).components(separatedBy: "\n\n").filter { !$0.contains(heading) }
+            XCTAssertEqual(withoutStyle, plain.components(separatedBy: "\n\n").filter { !$0.hasPrefix("語氣：母語人士") }, "\(tone)")
+        }
     }
 
     func testAToneOtherThanPreserveDoesNotArgueWithItself() {
         // "Colloquial stays colloquial" and the untouched already-correct example are what
         // preserving the tone means; under another tone they would contradict it.
-        for tone in [WritingTone.formal, .concise, .professional, .native] {
+        for tone in [WritingTone.formal, .concise, .professional] + nativeTones {
             let prompt = compose(.proofread, tone)
             XCTAssertFalse(prompt.contains("口語仍口語"), "\(tone)")
             XCTAssertFalse(prompt.contains("Sounds good"), "\(tone)")
@@ -182,11 +208,13 @@ final class WritingPromptComposerTests: XCTestCase {
 
     func testTranslationHasNoNativeTone() {
         for language in TranslationLanguage.allCases {
-            XCTAssertEqual(
-                WritingPromptComposer.compose(mode: .translate, tone: .native, customPrompt: "", translationLanguage: language),
-                WritingPromptComposer.compose(mode: .translate, tone: .preserve, customPrompt: "", translationLanguage: language),
-                "\(language)"
-            )
+            for tone in nativeTones {
+                XCTAssertEqual(
+                    WritingPromptComposer.compose(mode: .translate, tone: tone, customPrompt: "", translationLanguage: language),
+                    WritingPromptComposer.compose(mode: .translate, tone: .preserve, customPrompt: "", translationLanguage: language),
+                    "\(language) \(tone)"
+                )
+            }
         }
     }
 
@@ -219,6 +247,7 @@ final class WritingPromptComposerTests: XCTestCase {
             WritingTone.allCases.map { WritingPromptComposer.overrideKey(mode: mode, tone: $0) }
         }
         XCTAssertEqual(WritingPromptComposer.overrideKey(mode: .proofread, tone: .native), "proofread|native")
-        XCTAssertEqual(Set(all).count, 11, "ten task and tone pairs, and custom")
+        XCTAssertEqual(WritingPromptComposer.overrideKey(mode: .proofread, tone: .nativeGenZ), "proofread|nativeGenZ")
+        XCTAssertEqual(Set(all).count, 2 * WritingTone.allCases.count + 1, "every task and tone pair, and custom")
     }
 }

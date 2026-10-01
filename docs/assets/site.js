@@ -13,6 +13,35 @@
   });
 })();
 
+// Light / dark theme. The page head has already set data-theme (the saved choice, else the system's); the button changes it.
+// Until a choice is saved, the page follows the system when it switches.
+(function () {
+  var button = document.getElementById('theme-toggle');
+  if (!button) return;
+  var root = document.documentElement;
+  var meta = document.querySelector('meta[name="theme-color"]');
+  function show(theme) {
+    root.setAttribute('data-theme', theme);
+    button.setAttribute('aria-pressed', theme === 'light' ? 'true' : 'false');
+    if (meta) meta.setAttribute('content', theme === 'light' ? '#faf9ff' : '#0b0a1a');
+  }
+  function saved() {
+    try { var theme = localStorage.getItem('lint-theme'); return theme === 'light' || theme === 'dark' ? theme : null; } catch (e) { return null; }
+  }
+  show(root.getAttribute('data-theme') === 'light' ? 'light' : 'dark');
+  button.hidden = false;
+  button.addEventListener('click', function () {
+    var next = root.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+    show(next);
+    try { localStorage.setItem('lint-theme', next); } catch (e) {}
+  });
+  if (window.matchMedia) {
+    var query = matchMedia('(prefers-color-scheme: light)');
+    var follow = function (event) { if (saved() === null) show(event.matches ? 'light' : 'dark'); };
+    if (query.addEventListener) query.addEventListener('change', follow);
+  }
+})();
+
 // Screenshots open as a floating image on the page instead of a new tab.
 // Close with the × button, Esc, or a click outside the image. Without JavaScript the link opens the image file.
 (function () {

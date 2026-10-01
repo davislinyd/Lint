@@ -1,5 +1,6 @@
-/* Shared by every page of the Lint site: tokens, language switch, top bar, buttons, screenshots, footer. */
+/* Shared by every page of the Lint site: tokens, light and dark theme, language switch, top bar, buttons, screenshots, footer. */
 :root {
+  color-scheme: dark;
   --bg: #0b0a1a;
   --bg-elev: rgba(255,255,255,0.045);
   --border: rgba(255,255,255,0.10);
@@ -12,6 +13,45 @@
   --green: #86efac;
   --amber: #fcd34d;
   --radius: 16px;
+  /* What differs between the themes beyond the colors above. */
+  --topbar-bg: rgba(11,10,26,0.8);
+  --surface-band: rgba(255,255,255,0.02);
+  --surface-chip: rgba(255,255,255,0.06);
+  --surface-ctl: rgba(255,255,255,0.08);
+  --surface-key: rgba(255,255,255,0.10);
+  --note-bg: rgba(252,211,77,0.07);
+  --note-border: rgba(252,211,77,0.25);
+  --title-from: #ffffff;
+  --title-to: var(--violet-light);
+  --glow-opacity: 0.35;
+  --switch-on: #ffffff;
+  --switch-off: var(--text);
+}
+
+/* Light theme. The page head sets data-theme before the first paint (the saved choice, else the system's),
+   and the button in the top bar changes it (site.js). The screenshots are dark and stay as they are. */
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #faf9ff;
+  --bg-elev: #ffffff;
+  --border: rgba(36,28,88,0.13);
+  --text: #1b1736;
+  --text-dim: #5a5679;
+  --indigo: #e7dfff;
+  --violet-light: #6d28d9; /* the accent as text: links, ticks, numbers */
+  --green: #15803d;
+  --amber: #92400e;
+  --topbar-bg: rgba(250,249,255,0.82);
+  --surface-band: rgba(36,28,88,0.03);
+  --surface-chip: rgba(36,28,88,0.05);
+  --surface-ctl: rgba(36,28,88,0.07);
+  --surface-key: rgba(36,28,88,0.08);
+  --note-bg: rgba(217,119,6,0.08);
+  --note-border: rgba(180,83,9,0.30);
+  --title-from: #1b1736;
+  --title-to: #7c3aed;
+  --glow-opacity: 0.22;
+  --switch-off: var(--text-dim);
 }
 
 * { box-sizing: border-box; }
@@ -47,7 +87,7 @@ a:focus-visible, button:focus-visible {
   position: sticky;
   top: 0;
   z-index: 10;
-  background: rgba(11,10,26,0.8);
+  background: var(--topbar-bg);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
   border-bottom: 1px solid var(--border);
@@ -72,7 +112,7 @@ a:focus-visible, button:focus-visible {
   width: 62px;
   height: 30px;
   padding: 0 3px;
-  background: rgba(255,255,255,0.08);
+  background: var(--surface-ctl);
   border: 1px solid var(--border);
   border-radius: 999px;
   cursor: pointer;
@@ -90,8 +130,31 @@ a:focus-visible, button:focus-visible {
   transition: transform 0.2s ease;
 }
 body:has(#lang-toggle:checked) .lang-switch::before { transform: translateX(29px); }
-.lang-switch span { position: relative; z-index: 1; width: 27px; text-align: center; font-size: 11px; font-weight: 700; color: var(--text); }
+.lang-switch span { position: relative; z-index: 1; width: 27px; text-align: center; font-size: 11px; font-weight: 700; color: var(--switch-off); }
+.lang-switch span:first-child { color: var(--switch-on); }
+body:has(#lang-toggle:checked) .lang-switch span:first-child { color: var(--switch-off); }
+body:has(#lang-toggle:checked) .lang-switch span:last-child { color: var(--switch-on); }
 .lang-toggle:focus-visible + .lang-switch { outline: 2px solid var(--violet-light); outline-offset: 3px; }
+
+/* Light / dark switch: shows the theme it switches to. Hidden until site.js runs, since it needs JavaScript. */
+.theme-switch {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  background: var(--surface-ctl);
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  color: var(--text);
+  cursor: pointer;
+}
+.theme-switch[hidden] { display: none; }
+.theme-switch:hover { background: var(--surface-key); }
+.theme-switch svg { display: none; }
+:root[data-theme="dark"] .theme-switch .icon-sun,
+:root[data-theme="light"] .theme-switch .icon-moon { display: block; }
 
 /* Buttons and keys */
 .btn {
@@ -109,7 +172,7 @@ body:has(#lang-toggle:checked) .lang-switch::before { transform: translateX(29px
 .btn-primary { background: var(--violet); color: #fff; }
 .btn-primary:hover { background: #6d28d9; transform: translateY(-1px); }
 .btn-ghost { background: transparent; border: 1px solid var(--border); color: var(--text); }
-.btn-ghost:hover { background: rgba(255,255,255,0.06); }
+.btn-ghost:hover { background: var(--surface-chip); }
 .btn-small { padding: 8px 16px; font-size: 13px; border-radius: 10px; }
 
 .kbd {
@@ -117,7 +180,7 @@ body:has(#lang-toggle:checked) .lang-switch::before { transform: translateX(29px
   align-items: center;
   padding: 7px 13px;
   border-radius: 8px;
-  background: rgba(255,255,255,0.08);
+  background: var(--surface-ctl);
   border: 1px solid var(--border);
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 14px;
@@ -127,7 +190,7 @@ body:has(#lang-toggle:checked) .lang-switch::before { transform: translateX(29px
   display: inline-block;
   padding: 1px 7px;
   border-radius: 6px;
-  background: rgba(255,255,255,0.1);
+  background: var(--surface-key);
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 0.92em;
   white-space: nowrap;
@@ -153,8 +216,17 @@ figcaption { margin-top: 8px; text-align: center; font-size: 13px; color: var(--
   .topnav, .page-links { gap: 12px; }
   .nav-link.github span { display: none; }
 }
+@media (max-width: 520px) {
+  /* The theme switch needs room: the top bar drops what the footer and the page already offer. */
+  .topbar-inner, .topnav, .page-links { gap: 8px; }
+  .nav-link.github { display: none; }
+  .topnav .btn-small { padding: 8px 12px; }
+}
 @media (max-width: 420px) {
   .brand-name { display: none; }
+}
+@media (max-width: 380px) {
+  .topnav .btn-primary { display: none; }
 }
 
 /* Floating screenshot (site.js) */
@@ -183,10 +255,11 @@ figcaption { margin-top: 8px; text-align: center; font-size: 13px; color: var(--
   width: 36px;
   height: 36px;
   padding: 0;
-  border: 1px solid var(--border);
+  /* The overlay is dark in both themes, so the button does not take the theme's colors. */
+  border: 1px solid rgba(255,255,255,0.10);
   border-radius: 50%;
   background: rgba(255,255,255,0.12);
-  color: var(--text);
+  color: #f5f3ff;
   cursor: pointer;
 }
 .lightbox-close:hover { background: rgba(255,255,255,0.22); }

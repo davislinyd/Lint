@@ -6,7 +6,18 @@
 <title>Install and use Lint — step-by-step guide</title>
 <meta name="description" content="A step-by-step guide with screenshots: download Lint, install it, set up its AI, allow Accessibility, and check your first text.">
 <meta name="theme-color" content="#0b0a1a">
-<meta name="color-scheme" content="dark">
+<meta name="color-scheme" content="dark light">
+<script>
+/* Sets the theme before the first paint: the saved choice, else the system's. site.js wires the button. */
+(function () {
+  var theme = null;
+  try { theme = localStorage.getItem('lint-theme'); } catch (e) {}
+  if (theme !== 'light' && theme !== 'dark') theme = window.matchMedia && matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', theme);
+  var meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute('content', theme === 'light' ? '#faf9ff' : '#0b0a1a');
+})();
+</script>
 <meta property="og:title" content="Install and use Lint — step-by-step guide">
 <meta property="og:description" content="Download, install, set up and use Lint, the macOS menu-bar AI writing assistant, one step at a time.">
 <meta property="og:type" content="article">
@@ -22,7 +33,7 @@
   code {
     font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
     font-size: 0.9em;
-    background: rgba(255,255,255,0.08);
+    background: var(--surface-ctl);
     padding: 1px 6px;
     border-radius: 6px;
     overflow-wrap: anywhere;
@@ -34,7 +45,7 @@
   .hero h1 { font-size: clamp(30px, 6vw, 44px); font-weight: 800; letter-spacing: -0.02em; margin-bottom: 12px; }
   .hero-sub { font-size: 16px; color: var(--text-dim); max-width: 600px; margin: 0 auto; }
   .chips { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 22px; padding: 0; list-style: none; }
-  .chips li { padding: 5px 13px; border-radius: 999px; background: rgba(255,255,255,0.06); border: 1px solid var(--border); font-size: 13px; color: var(--text-dim); }
+  .chips li { padding: 5px 13px; border-radius: 999px; background: var(--surface-chip); border: 1px solid var(--border); font-size: 13px; color: var(--text-dim); }
 
   .toc { margin: 8px 0 0; }
   .toc ol { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; padding: 0; list-style: none; counter-reset: part; }
@@ -56,7 +67,7 @@
   .step li { margin-top: 6px; }
   .check { color: var(--green); }
   .check::before { content: "✓ "; font-weight: 700; }
-  .note { margin-top: 14px; padding: 12px 14px; border-radius: 12px; background: rgba(252,211,77,0.07); border: 1px solid rgba(252,211,77,0.25); font-size: 14.5px; color: var(--text-dim); }
+  .note { margin-top: 14px; padding: 12px 14px; border-radius: 12px; background: var(--note-bg); border: 1px solid var(--note-border); font-size: 14.5px; color: var(--text-dim); }
   .note strong { color: var(--amber); }
   .step .note p { margin-top: 0; font-size: 14.5px; }
 
@@ -100,6 +111,10 @@
       <label for="lang-toggle" class="lang-switch" aria-label="Switch language / 切換語言">
         <span>EN</span><span>中</span>
       </label>
+      <button type="button" id="theme-toggle" class="theme-switch" aria-pressed="false" aria-label="Light theme / 淺色主題" title="Light / dark · 淺色／深色" hidden>
+        <svg class="icon-sun" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="8" cy="8" r="3"/><path d="M8 1.5V3M8 13v1.5M1.5 8H3M13 8h1.5M3.4 3.4l1.1 1.1M11.5 11.5l1.1 1.1M3.4 12.6l1.1-1.1M11.5 4.5l1.1-1.1"/></svg>
+        <svg class="icon-moon" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7z"/></svg>
+      </button>
       <a class="btn btn-primary btn-small" href="https://github.com/davislinyd/Lint/releases/latest" target="_blank" rel="noopener noreferrer">
         <span class="en">Download</span><span class="zh">下載</span>
       </a>

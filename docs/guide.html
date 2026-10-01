@@ -118,7 +118,7 @@
         <span class="zh">從下載到第一個建議，一步一步來。每一步都會告訴你，繼續之前應該看到什麼。</span>
       </p>
       <ul class="chips">
-        <li>Lint 0.6.0</li>
+        <li>Lint 0.7.0</li>
         <li>macOS 14+</li>
         <li>Apple Silicon</li>
       </ul>
@@ -202,16 +202,16 @@
 
       <article class="step">
         <div class="step-head"><span class="step-num">1</span><h3><span class="en">Download the DMG</span><span class="zh">下載 DMG</span></h3></div>
-        <p class="en">Open <a href="https://github.com/davislinyd/Lint/releases/latest" target="_blank" rel="noopener noreferrer">the latest release on GitHub</a> and click <code>Lint-0.6.0-macOS-arm64.dmg</code> under <strong>Assets</strong>. A newer release has a newer number in the name.</p>
-        <p class="zh">打開 <a href="https://github.com/davislinyd/Lint/releases/latest" target="_blank" rel="noopener noreferrer">GitHub 上的最新版本</a>，在 <strong>Assets</strong> 下點 <code>Lint-0.6.0-macOS-arm64.dmg</code>。之後的版本檔名裡的版本號會不同。</p>
+        <p class="en">Open <a href="https://github.com/davislinyd/Lint/releases/latest" target="_blank" rel="noopener noreferrer">the latest release on GitHub</a> and click <code>Lint-0.7.0-macOS-arm64.dmg</code> under <strong>Assets</strong>. A newer release has a newer number in the name.</p>
+        <p class="zh">打開 <a href="https://github.com/davislinyd/Lint/releases/latest" target="_blank" rel="noopener noreferrer">GitHub 上的最新版本</a>，在 <strong>Assets</strong> 下點 <code>Lint-0.7.0-macOS-arm64.dmg</code>。之後的版本檔名裡的版本號會不同。</p>
         <p class="check en">The DMG is in your Downloads folder.</p>
         <p class="check zh">「下載項目」資料夾裡有這個 DMG。</p>
         <figure>
-          <a class="shot flat" href="assets/guide/shared/github-release.png" target="_blank" rel="noopener"><img src="assets/guide/shared/github-release.png" alt="The Lint v0.6.0 release on GitHub with the DMG under Assets" width="1036" height="425" loading="lazy"></a>
+          <a class="shot flat" href="assets/guide/shared/github-release.png" target="_blank" rel="noopener"><img src="assets/guide/shared/github-release.png" alt="The Lint v0.7.0 release on GitHub with the DMG under Assets" width="1036" height="425" loading="lazy"></a>
           <figcaption><span class="en">Click the <code>.dmg</code> file under Assets.</span><span class="zh">在 Assets 下點 <code>.dmg</code> 檔。</span></figcaption>
         </figure>
-        <div class="note en"><p><strong>Optional:</strong> to check the download, also get <code>Lint-0.6.0-macOS-arm64.dmg.sha256</code>, then run <code>shasum -a 256 -c Lint-0.6.0-macOS-arm64.dmg.sha256</code> in Terminal, in the folder that holds both files. It prints <code>OK</code>.</p></div>
-        <div class="note zh"><p><strong>選用：</strong>想確認下載無誤，可以一併下載 <code>Lint-0.6.0-macOS-arm64.dmg.sha256</code>，在放著這兩個檔案的資料夾打開「終端機」，執行 <code>shasum -a 256 -c Lint-0.6.0-macOS-arm64.dmg.sha256</code>，會印出 <code>OK</code>。</p></div>
+        <div class="note en"><p><strong>Optional:</strong> to check the download, also get <code>Lint-0.7.0-macOS-arm64.dmg.sha256</code>, then run <code>shasum -a 256 -c Lint-0.7.0-macOS-arm64.dmg.sha256</code> in Terminal, in the folder that holds both files. It prints <code>OK</code>.</p></div>
+        <div class="note zh"><p><strong>選用：</strong>想確認下載無誤，可以一併下載 <code>Lint-0.7.0-macOS-arm64.dmg.sha256</code>，在放著這兩個檔案的資料夾打開「終端機」，執行 <code>shasum -a 256 -c Lint-0.7.0-macOS-arm64.dmg.sha256</code>，會印出 <code>OK</code>。</p></div>
       </article>
     </section>
 
@@ -330,8 +330,8 @@
     <!-- ============================================================ -->
     <section class="part" id="use">
       <h2><span class="en">Use Lint</span><span class="zh">開始使用</span></h2>
-      <p class="part-lead en">Lint works in any app where you can select text: Mail, Notes, browsers, Slack and more. It edits English; <strong>Translate</strong> helps you read English text in the translation language you choose.</p>
-      <p class="part-lead zh">只要能選取文字的 App 都能用 Lint：郵件、備忘錄、瀏覽器、Slack 等。Lint 修改英文；<strong>「翻譯」</strong>則把英文翻成你選的翻譯語言，幫你讀懂。</p>
+      <p class="part-lead en">Lint works in any app where you can select text: Mail, Notes, browsers, Slack and more. It edits English, and the <strong>Native speaker</strong> tone writes Chinese or mixed text as English; <strong>Translate</strong> helps you read English text in the translation language you choose.</p>
+      <p class="part-lead zh">只要能選取文字的 App 都能用 Lint：郵件、備忘錄、瀏覽器、Slack 等。Lint 修改英文，「母語人士」語氣會把中文或中英夾雜的文字寫成英文；<strong>「翻譯」</strong>則把英文翻成你選的翻譯語言，幫你讀懂。</p>
 
       <article class="step">
         <div class="step-head"><span class="step-num">7</span><h3><span class="en">Quick check: <span class="kbd-inline">⌥⌘K</span></span><span class="zh">快速檢查：<span class="kbd-inline">⌥⌘K</span></span></h3></div>
@@ -360,6 +360,8 @@
           <li><strong>語氣</strong>：保留原語氣、正式、簡潔、專業，或「母語人士」（只有校對有；輸出一律是英文，中文也可以）。</li>
           <li><strong>覆蓋取代</strong> <span class="kbd-inline">⌘⏎</span>、<strong>複製</strong> <span class="kbd-inline">⌥⌘C</span>、<strong>重試</strong> <span class="kbd-inline">⌥⌘⏎</span>。勾選<strong>「編輯」</strong>可以先修改結果再使用。</li>
         </ul>
+        <div class="note en"><p><strong>Native speaker</strong> is for when you know what you mean but not how to say it. Select Chinese, English or both, and Lint writes it the way a native English speaker would, always in English. For example, 「抱歉，這個需求我們這季排不進去，下季再評估看看。」 becomes “Sorry, we can't fit this request into this quarter. Let's reassess it next quarter.” The reference translation under the suggestion shows what the English says. Read the result before you replace the original: the small local model sometimes rewords text that was already natural.</p></div>
+        <div class="note zh"><p><strong>「母語人士」</strong>適合知道想說什麼、卻不知道英文怎麼說的時候。選取中文、英文或中英夾雜的文字，Lint 會用英語母語者會說的方式寫出來，輸出一律是英文。例如「抱歉，這個需求我們這季排不進去，下季再評估看看。」會變成 “Sorry, we can't fit this request into this quarter. Let's reassess it next quarter.”。建議下方的參考譯文會顯示這段英文在說什麼。取代原文之前請先看過結果：本機的小型模型有時會把本來就很道地的句子改寫。</p></div>
         <figure>
           <a class="shot en" href="assets/guide/en/panel.png" target="_blank" rel="noopener"><img src="assets/guide/en/panel.png" alt="The full panel: the original on the left, the result with changes marked on the right" width="872" height="600" loading="lazy"></a>
           <a class="shot zh" href="assets/guide/zh/panel.png" target="_blank" rel="noopener"><img src="assets/guide/zh/panel.png" alt="全面板：左邊是原文，右邊是標出修改處的結果" width="872" height="600" loading="lazy"></a>

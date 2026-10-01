@@ -127,7 +127,7 @@ A check only asks the GitHub API for the latest release; none of your text is se
 
 ### Writing modes
 
-Proofreading and polishing, translation and a custom prompt. Proofreading and translation also take a tone: Preserve Tone (the default), Formal, Concise or Professional; proofreading has one more, Native Speaker. Each mode remembers its own tone, and the custom prompt uses none. **Native Speaker** works out what the text means, whatever language it is in (Chinese, English or both mixed, even with mistakes), and writes it the way a native English speaker would say it: neither a translation nor a correction, and always in English. Otherwise Lint edits English: in the other tones a proofread of text without any English is not sent to the model, and translation goes from English into the translation language.
+Proofreading and polishing, translation and a custom prompt. Proofreading and translation also take a tone: Preserve Tone (the default), Formal, Concise or Professional; proofreading has one more, Native Speaker. Each mode remembers its own tone, and the custom prompt uses none. **Native Speaker** works out what the text means, whatever language it is in (Chinese, English or both mixed, even with mistakes), and writes it the way a native English speaker would say it: neither a translation nor a correction, and always in English. For example, 「抱歉，這個需求我們這季排不進去，下季再評估看看。」 becomes “Sorry, we can't fit this request into this quarter. Let's reassess it next quarter.” Read the result before replacing the original: the small local model sometimes rewords text that was already natural, and Apple Intelligence has not been measured with this tone. Otherwise Lint edits English: in the other tones a proofread of text without any English is not sent to the model, and translation goes from English into the translation language.
 
 ### Memory and dreaming (optional, off by default)
 
@@ -277,7 +277,7 @@ Lint 會到 GitHub Releases 檢查有沒有較新的正式版：預設每週一�
 
 ### 寫作模式
 
-任務有文法校對與潤飾、翻譯、自訂 Prompt；校對與翻譯都可以再選語氣：保留原語氣（預設）、正式、簡潔、專業；校對另有「母語人士」。每個任務各自記住自己的語氣，自訂 Prompt 不套用語氣。**「母語人士」**會先理解文字的語意（中文、英文或中英夾雜，英文有錯也可以），再用英語母語者會說的方式寫出來：不是翻譯、也不只是校正，輸出一律是英文。其他情況 Lint 只處理英文：其他語氣下，完全沒有英文的文字不會送去校對，翻譯則是把英文翻成翻譯語言。
+任務有文法校對與潤飾、翻譯、自訂 Prompt；校對與翻譯都可以再選語氣：保留原語氣（預設）、正式、簡潔、專業；校對另有「母語人士」。每個任務各自記住自己的語氣，自訂 Prompt 不套用語氣。**「母語人士」**會先理解文字的語意（中文、英文或中英夾雜，英文有錯也可以），再用英語母語者會說的方式寫出來：不是翻譯、也不只是校正，輸出一律是英文。例如「抱歉，這個需求我們這季排不進去，下季再評估看看。」會變成 “Sorry, we can't fit this request into this quarter. Let's reassess it next quarter.”。取代原文之前請先看過結果：本機的小型模型有時會把本來就很道地的句子改寫，Apple Intelligence 也還沒有用這個語氣量測過。其他情況 Lint 只處理英文：其他語氣下，完全沒有英文的文字不會送去校對，翻譯則是把英文翻成翻譯語言。
 
 ### 記憶與作夢（選用，預設關閉）
 

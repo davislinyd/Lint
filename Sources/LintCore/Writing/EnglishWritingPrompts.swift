@@ -37,7 +37,7 @@ public enum EnglishPromptReader: Equatable, Sendable {
 extension WritingPromptComposer {
     /// Recorded with every evaluation run; bump it whenever an English prompt changes, so that
     /// results before and after the change are not compared as if they were the same.
-    public static let englishPromptVersion = "english-15"
+    public static let englishPromptVersion = "english-16"
 
     /// `prompt` with one line naming the language of `text`, for proofreading only: a small model
     /// drifts into another language unless told which one the text is in. Not for the native tone,
@@ -253,9 +253,11 @@ enum EnglishWritingPrompts {
             "Style: casual. Relaxed and conversational, like a message to a friend or a colleague you get along with: contractions, everyday words, short sentences. No slang that dates quickly."
         case .nativeFormal:
             "Style: formal. The careful written English of a business letter or an official notice: complete sentences, precise words, no contractions, no slang. Plain, not pompous."
+        case .nativeConcise:
+            "Style: concise. Use as few words as the meaning allows: cut filler, throat-clearing (\"I just wanted to\", \"just letting you know\"), repetition and empty pleasantries. It is not a summary: keep every fact, time, request and condition."
         case .nativeGenZ:
             "Style: Gen Z. How a young native speaker texts: short, loose, casual, so that it reads like a text message, not an email. Use abbreviations (tbh, ngl, imo) and a little slang (lowkey, kinda, gonna). No emoji. For a serious message (bad news, an apology, a formal request) use little or no slang. Never change the facts or how strongly something is felt."
-        case .preserve, .idiomatic, .formal, .concise, .professional, .native:
+        case .preserve, .idiomatic, .formal, .casual, .concise, .professional, .native:
             nil
         }
     }
@@ -291,9 +293,10 @@ enum EnglishWritingPrompts {
         switch tone {
         case .preserve, .idiomatic: "natural"
         case .formal: "formal"
+        case .casual: "casual"
         case .concise: "concise"
         case .professional: "professional"
-        case .native, .nativeCasual, .nativeFormal, .nativeGenZ: "native"
+        case .native, .nativeCasual, .nativeFormal, .nativeGenZ, .nativeConcise: "native"
         }
     }
 
@@ -303,11 +306,13 @@ enum EnglishWritingPrompts {
             "Keep the original tone and formality."
         case .formal:
             "Formal means careful written language: no slang, chat abbreviations or exclamations, and fewer contractions. Do not make it pompous."
+        case .casual:
+            "Casual means relaxed and conversational, like a message to a friend or a colleague you get along with: contractions, everyday words, short sentences. No slang that dates quickly."
         case .concise:
             "Concise means fewer words for the same information: cut filler, repetition and empty pleasantries. It is not a summary; keep every piece of information."
         case .professional:
             "Professional means clear, polite and specific, suitable for colleagues, managers or customers. Avoid blame, sarcasm and stock phrases."
-        case .native, .nativeCasual, .nativeFormal, .nativeGenZ:
+        case .native, .nativeCasual, .nativeFormal, .nativeGenZ, .nativeConcise:
             "Native means what a native English speaker would naturally write, in their own idiom."
         }
     }

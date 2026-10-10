@@ -8,7 +8,7 @@ import XCTest
 final class WritingEvalFixtureTests: XCTestCase {
     func testTheFixturesCoverLintsWorkloadAndAreWellFormed() throws {
         let fixtures = try WritingEvalFixtures.load()
-        XCTAssertEqual(fixtures.version, 9)
+        XCTAssertEqual(fixtures.version, 10)
         XCTAssertGreaterThanOrEqual(fixtures.cases.count, 60, "the set is meant to be about 60-160 cases")
         XCTAssertLessThanOrEqual(fixtures.cases.count, 160)
         XCTAssertEqual(Set(fixtures.cases.map(\.id)).count, fixtures.cases.count, "ids are unique")
@@ -23,7 +23,7 @@ final class WritingEvalFixtureTests: XCTestCase {
             "ip-address", "shell-command", "code-identifier", "currency", "file-path", "product-names",
             "english-natural", "english-holdout", "mixed-english",
             "native-zh", "native-mixed", "native-english", "native-urls", "native-list", "native-already-english",
-            "native-casual", "native-formal", "native-genz", "idiomatic", "idiomatic-already",
+            "native-casual", "native-formal", "native-genz", "idiomatic", "idiomatic-already", "tone-casual", "native-concise",
         ] {
             XCTAssertTrue(categories.contains(wanted), "no fixture for \(wanted)")
         }

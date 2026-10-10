@@ -15,31 +15,45 @@ final class WritingModeTests: XCTestCase {
         }
     }
 
-    func testPreserveIsTheFirstTone() {
-        XCTAssertEqual(WritingTone.allCases, [.preserve, .idiomatic, .formal, .concise, .professional, .native, .nativeCasual, .nativeFormal, .nativeGenZ])
+    func testEveryToneStaysReadable() {
+        // Settings, prompt overrides and the memory database of earlier versions name every one of them.
+        XCTAssertEqual(WritingTone.allCases, [
+            .preserve, .idiomatic, .formal, .casual, .concise, .professional,
+            .native, .nativeCasual, .nativeFormal, .nativeGenZ, .nativeConcise,
+        ])
     }
 
-    func testTheNativeSpeakerTonesAreTheOnesThatWriteEnglishFromAnyLanguage() {
-        XCTAssertEqual(WritingTone.allCases.filter(\.isNative), [.native, .nativeCasual, .nativeFormal, .nativeGenZ])
-        for tone in [WritingTone.preserve, .idiomatic, .formal, .concise, .professional] {
-            XCTAssertFalse(tone.isNative, "\(tone)")
-        }
-    }
-
-    func testEveryNativeSpeakerStyleHasItsOwnTitleThatNamesTheBase() {
-        let titles = WritingTone.allCases.filter(\.isNative).map(\.title)
-        XCTAssertEqual(Set(titles).count, 4, "\(titles)")
-        for tone in [WritingTone.nativeCasual, .nativeFormal, .nativeGenZ] {
-            XCTAssertTrue(tone.title.hasPrefix(WritingTone.native.title + " · "), tone.title)
-        }
-        XCTAssertNotEqual(WritingTone.nativeFormal.title, WritingTone.formal.title, "the two formal tones are told apart")
-        XCTAssertTrue(WritingTone.nativeGenZ.title.hasSuffix("Gen Z"))
-    }
-
-    func testOnlyProofreadingCanWriteLikeANativeSpeaker() {
-        XCTAssertEqual(WritingMode.proofread.tones, WritingTone.allCases)
-        XCTAssertEqual(WritingMode.translate.tones, [.preserve, .formal, .concise, .professional])
+    func testTheMenusOfferFiveTones() {
+        XCTAssertEqual(WritingMode.proofread.tones, [.preserve, .idiomatic, .formal, .casual, .concise])
+        XCTAssertEqual(WritingMode.translate.tones, [.preserve, .formal, .casual, .concise], "no idiomatic English to make of a translation")
         XCTAssertEqual(WritingMode.custom.tones, [])
+        for tone in WritingMode.proofread.tones { XCTAssertEqual(tone.menuTone, tone, "\(tone)") }
+    }
+
+    func testEveryOtherToneBelongsToTheMenuToneItIsWrittenForOrNowMeans() {
+        let expected: [WritingTone: WritingTone] = [
+            .native: .idiomatic, .nativeFormal: .formal, .professional: .formal,
+            .nativeCasual: .casual, .nativeGenZ: .casual, .nativeConcise: .concise,
+        ]
+        for (tone, menu) in expected { XCTAssertEqual(tone.menuTone, menu, "\(tone)") }
+    }
+
+    func testTheTonesThatWriteEnglishFromChineseAreTheNativeOnes() {
+        XCTAssertEqual(WritingTone.allCases.filter(\.isNative), [.native, .nativeCasual, .nativeFormal, .nativeGenZ, .nativeConcise])
+        for tone in WritingMode.proofread.tones { XCTAssertFalse(tone.isNative, "\(tone)") }
+    }
+
+    func testThePromptsThatCanBeEditedAreEveryToneARequestCanBeWrittenIn() {
+        XCTAssertEqual(
+            WritingMode.proofread.promptTones,
+            [.preserve, .idiomatic, .native, .formal, .nativeFormal, .casual, .nativeCasual, .concise, .nativeConcise]
+        )
+        XCTAssertEqual(WritingMode.translate.promptTones, WritingMode.translate.tones)
+        // Each English-from-Chinese tone is named after its menu tone, so the list reads in pairs.
+        for tone in [WritingTone.native, .nativeFormal, .nativeCasual, .nativeConcise] {
+            XCTAssertTrue(tone.title.hasPrefix(tone.menuTone.title + " · "), tone.title)
+        }
+        XCTAssertEqual(Set(WritingMode.proofread.promptTones.map(\.title)).count, 9)
     }
 
     func testIdiomaticIsAProofreadingToneOnly() {
@@ -53,19 +67,17 @@ final class WritingModeTests: XCTestCase {
         XCTAssertEqual(WritingPromptComposer.overrideKey(mode: .proofread, tone: .idiomatic), "proofread|idiomatic")
     }
 
-    func testATranslationRemembersNoNativeTone() {
-        var memory = WritingToneMemory(proofread: .native, translate: .native)
-        XCTAssertEqual(memory.tone(for: .proofread), .native)
-        XCTAssertEqual(memory.tone(for: .translate), .preserve, "a translation has no native tone to restore")
-        for tone in WritingTone.allCases.filter(\.isNative) {
-            memory.set(tone, for: .translate)
-            XCTAssertEqual(memory.tone(for: .translate), .preserve, "\(tone)")
-            XCTAssertEqual(WritingToneMemory(proofread: tone, translate: tone).tone(for: .translate), .preserve, "\(tone)")
-            XCTAssertEqual(WritingToneMemory(proofread: tone).tone(for: .proofread), tone, "proofreading keeps \(tone)")
+    func testAToneSavedByAnEarlierVersionIsRememberedAsItsMenuTone() {
+        for tone in WritingTone.allCases {
+            XCTAssertEqual(WritingToneMemory(proofread: tone).tone(for: .proofread), tone.menuTone, "\(tone)")
+            let translated = WritingToneMemory(translate: tone).tone(for: .translate)
+            XCTAssertEqual(translated, WritingMode.translate.tones.contains(tone.menuTone) ? tone.menuTone : .preserve, "\(tone)")
         }
-        memory.set(.formal, for: .translate)
-        XCTAssertEqual(memory.tone(for: .translate), .formal)
-        XCTAssertEqual(memory.tone(for: .proofread), .native, "each task keeps its own")
+        var memory = WritingToneMemory()
+        memory.set(.nativeGenZ, for: .proofread)
+        XCTAssertEqual(memory.tone(for: .proofread), .casual)
+        memory.set(.native, for: .translate)
+        XCTAssertEqual(memory.tone(for: .translate), .preserve, "a translation has no idiomatic tone")
     }
 
     func testProofreadingAndTranslationTakeATone() {

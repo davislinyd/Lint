@@ -192,6 +192,11 @@
 "語氣" = "Giọng văn";
 "保留原語氣" = "Giữ giọng văn gốc";
 "道地" = "Tự nhiên";
+"中文 → 英文" = "Tiếng Trung → Tiếng Anh";
+"整段寫成英文" = "Viết toàn bộ bằng tiếng Anh";
+"保留中文，只改英文" = "Giữ tiếng Trung, chỉ sửa tiếng Anh";
+"中英夾雜的文字" = "Văn bản lẫn tiếng Trung và tiếng Anh";
+"校對時，「道地」「正式」「輕鬆」「簡潔」會把中文寫成英文；中英夾雜的文字照這裡的選擇。「保留原語氣」一律只改英文。" = "Khi hiệu đính, Tự nhiên, Trang trọng, Thoải mái và Ngắn gọn sẽ viết tiếng Trung thành tiếng Anh; văn bản lẫn tiếng Trung và tiếng Anh theo lựa chọn ở đây. Giữ giọng văn gốc luôn chỉ sửa tiếng Anh.";
 "正式" = "Trang trọng";
 "簡潔" = "Ngắn gọn";
 "專業" = "Chuyên nghiệp";

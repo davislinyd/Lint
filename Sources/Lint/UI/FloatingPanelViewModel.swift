@@ -171,7 +171,9 @@ final class FloatingPanelViewModel {
     private func currentRequestKey(for source: String) -> WritingRequestKey {
         let mode = settings.lastMode
         return WritingRequestKey(
-            source: source, mode: mode, tone: settings.tone(for: mode), customPrompt: settings.customPrompt,
+            source: source, mode: mode,
+            tone: settings.tone(for: mode).effective(for: source, mode: mode, mixed: settings.mixedTextHandling),
+            customPrompt: settings.customPrompt,
             translationLanguage: settings.translationLanguage
         )
     }
@@ -715,9 +717,14 @@ final class FloatingPanelViewModel {
         return true
     }
 
+    /// The tone a request in the panel's mode and tone is written in for `text` (`WritingTone.effective`).
+    private func writingTone(for text: String) -> WritingTone {
+        tone.effective(for: text, mode: mode, mixed: settings.mixedTextHandling)
+    }
+
     private func runAdoptedCapture(_ result: TextCaptureService.CaptureResult) async {
         do {
-            _ = try await prepareEngine(mode: mode, tone: tone)
+            _ = try await prepareEngine(mode: mode, tone: writingTone(for: result.text))
         } catch is CancellationError {
             return
         } catch {
@@ -734,7 +741,7 @@ final class FloatingPanelViewModel {
         let captured = await capture.capture()
         showPanel()
         do {
-            _ = try await prepareEngine(mode: mode, tone: tone)
+            _ = try await prepareEngine(mode: mode, tone: writingTone(for: captured?.text ?? ""))
         } catch is CancellationError {
             return
         } catch {
@@ -882,14 +889,14 @@ final class FloatingPanelViewModel {
     }
 
     private func runStream(forceLowReasoning: Bool = false) async {
-        if Self.hasNoEnglish(originalText, mode: mode, tone: tone) {
+        if Self.hasNoEnglish(originalText, mode: mode, tone: writingTone(for: originalText)) {
             errorMessage = Self.noEnglishMessage
             isStreaming = false
             return
         }
         let route: WritingEngineRoute
         do {
-            route = try await prepareEngine(mode: mode, tone: tone)
+            route = try await prepareEngine(mode: mode, tone: writingTone(for: originalText))
         } catch is CancellationError {
             return
         } catch {
@@ -906,7 +913,7 @@ final class FloatingPanelViewModel {
         settings.lastMode = mode
         let generationSource = originalText
         let generationMode = mode
-        let generationTone = tone
+        let generationTone = writingTone(for: originalText)
         let generationLanguage: TranslationLanguage? = mode == .translate ? settings.translationLanguage : nil
         let ticket = tickets.issue()
         errorMessage = nil

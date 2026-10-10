@@ -44,4 +44,20 @@ public enum WritingSettingsMigration {
         }
         return migrated
     }
+
+    /// The tones that are no longer offered: an override of one becomes the override of the tone it
+    /// means now (professional → formal, Gen Z → native casual), unless that one already has its own.
+    /// The old keys are left in place.
+    public static func migrateRetiredToneOverrides(_ overrides: [String: String]) -> [String: String] {
+        let moves: [(WritingMode, WritingTone, WritingTone)] = [
+            (.proofread, .professional, .formal), (.translate, .professional, .formal), (.proofread, .nativeGenZ, .nativeCasual),
+        ]
+        var migrated = overrides
+        for (mode, retired, now) in moves {
+            let old = WritingPromptComposer.overrideKey(mode: mode, tone: retired)
+            let new = WritingPromptComposer.overrideKey(mode: mode, tone: now)
+            if let text = overrides[old], migrated[new] == nil { migrated[new] = text }
+        }
+        return migrated
+    }
 }

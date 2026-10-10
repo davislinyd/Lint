@@ -50,6 +50,8 @@ final class SettingsStore {
         static let translationLanguage = "app.lint.translationLanguage"
         static let customPrompt = "app.lint.customPrompt"
         static let lastMode = "app.lint.lastMode"
+        static let mixedTextHandling = "app.lint.mixedTextHandling"
+        static let migratedMenuTones = "app.lint.migratedMenuTones"
         static let proofreadTone = "app.lint.lastTone.proofread"
         static let translateTone = "app.lint.lastTone.translate"
         static let reasoningEffort = "app.lint.reasoningEffort"
@@ -117,6 +119,10 @@ final class SettingsStore {
     /// What a translation and the reading aid under a suggestion are written in.
     var translationLanguage: TranslationLanguage {
         didSet { defaults.set(translationLanguage.rawValue, forKey: Keys.translationLanguage) }
+    }
+    /// Whether a tone that writes English from Chinese also does so for mixed Chinese and English text.
+    var mixedTextHandling: MixedTextHandling {
+        didSet { defaults.set(mixedTextHandling.rawValue, forKey: Keys.mixedTextHandling) }
     }
     /// Full system prompt overrides, one per mode and tone (`WritingPromptComposer.overrideKey`).
     /// Empty / missing → built-in default.
@@ -253,6 +259,13 @@ final class SettingsStore {
             Self.migrateToWritingTone(defaults)
             defaults.set(true, forKey: Keys.migratedWritingTone)
         }
+        // The stored tones need nothing: `WritingToneMemory` reads an old tone as its menu tone.
+        if !defaults.bool(forKey: Keys.migratedMenuTones) {
+            if let overrides = defaults.dictionary(forKey: Keys.systemPromptOverrides) as? [String: String] {
+                defaults.set(WritingSettingsMigration.migrateRetiredToneOverrides(overrides), forKey: Keys.systemPromptOverrides)
+            }
+            defaults.set(true, forKey: Keys.migratedMenuTones)
+        }
         var kind = ProviderKind(rawValue: defaults.string(forKey: Keys.provider) ?? "") ?? .localLlama
         if !kind.isEnabled {
             kind = .localLlama
@@ -263,6 +276,8 @@ final class SettingsStore {
         launchAppLanguage = language
         translationLanguage = TranslationLanguage(rawValue: defaults.string(forKey: Keys.translationLanguage) ?? "")
             ?? .traditionalChinese
+        // Writing all of it in English is what the native speaker tone did with mixed text.
+        mixedTextHandling = MixedTextHandling(rawValue: defaults.string(forKey: Keys.mixedTextHandling) ?? "") ?? .toEnglish
         customPrompt = defaults.string(forKey: Keys.customPrompt) ?? ""
         systemPromptOverrides =
             defaults.dictionary(forKey: Keys.systemPromptOverrides) as? [String: String] ?? [:]

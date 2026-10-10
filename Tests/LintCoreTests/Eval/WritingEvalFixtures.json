@@ -1,6 +1,6 @@
 {
-  "version": 9,
-  "about": "Lint's own writing fixtures: English proofreading and tone rewrites (also the English inside mixed Chinese-English text, whose Chinese is left alone), English-to-Traditional-Chinese translation for reference, and the native-speaker tone (Chinese, mixed or broken English in, a native speaker's English out) in its four styles: standard, casual, formal and Gen Z; and English that is correct but not what a native speaker would say, whose fix has to keep the writer's voice (keepsVoice). Every sentence was written for this repository; nothing is taken from a benchmark corpus. They exist to compare engines on Lint's actual workload, not to score a model in general.",
+  "version": 10,
+  "about": "Lint's own writing fixtures: English proofreading and tone rewrites (also the English inside mixed Chinese-English text, whose Chinese is left alone), English-to-Traditional-Chinese translation for reference, and the native-speaker tone (Chinese, mixed or broken English in, a native speaker's English out) in its styles (standard, casual, formal, Gen Z and concise); and English that is correct but not what a native speaker would say, whose fix has to keep the writer's voice (keepsVoice). Every sentence was written for this repository; nothing is taken from a benchmark corpus. They exist to compare engines on Lint's actual workload, not to score a model in general.",
   "cases": [
     {
       "id": "en-grammar-01",
@@ -1915,6 +1915,97 @@
       "expectUnchanged": true,
       "keepsVoice": true,
       "note": "Already natural: leave it."
+    },
+    {
+      "id": "casual-01",
+      "category": "tone-casual",
+      "mode": "proofread",
+      "tone": "casual",
+      "input": "I would like to inform you that the meeting has been rescheduled to Thursday at 3 pm.",
+      "outputLanguage": "en",
+      "mustPreserve": [
+        "Thursday",
+        "3 pm"
+      ],
+      "mustFix": [
+        "I would like to inform you"
+      ],
+      "note": "Relaxed: \"Heads up, the meeting's moved to Thursday at 3 pm.\" Same facts, no formula."
+    },
+    {
+      "id": "casual-02",
+      "category": "tone-casual",
+      "mode": "proofread",
+      "tone": "casual",
+      "input": "Please be advised that the server will be unavailable tonight due to scheduled maintenance.",
+      "outputLanguage": "en",
+      "mustFix": [
+        "Please be advised"
+      ],
+      "note": "Relaxed: the server's down tonight for maintenance. Keeps tonight and the reason."
+    },
+    {
+      "id": "casual-03",
+      "category": "tone-casual",
+      "mode": "proofread",
+      "tone": "casual",
+      "input": "Thank you very much for your assistance. I sincerely appreciate your help with the report.",
+      "outputLanguage": "en",
+      "mustFix": [
+        "sincerely appreciate"
+      ],
+      "note": "Relaxed thanks for the help with the report; one warm sentence is enough."
+    },
+    {
+      "id": "casual-04",
+      "category": "tone-casual",
+      "mode": "proofread",
+      "tone": "casual",
+      "input": "Could you kindly confirm whether you will be attending the dinner on Friday?",
+      "outputLanguage": "en",
+      "mustPreserve": [
+        "Friday"
+      ],
+      "mustFix": [
+        "kindly"
+      ],
+      "note": "Relaxed: are you coming to dinner on Friday? Stays a question."
+    },
+    {
+      "id": "native-concise-01",
+      "category": "native-concise",
+      "mode": "proofread",
+      "tone": "nativeConcise",
+      "input": "不好意思打擾一下，想跟您確認一下，就是我們下週三下午兩點的那個會議，請問是不是還是照原本的時間進行呢？",
+      "outputLanguage": "en",
+      "note": "Concise English: is next Wednesday's 2 pm meeting still on? Keeps the day and time, drops the throat-clearing."
+    },
+    {
+      "id": "native-concise-02",
+      "category": "native-concise",
+      "mode": "proofread",
+      "tone": "nativeConcise",
+      "input": "關於這個問題，我覺得其實我們可以先不要急著做決定，先觀察個一兩週，看看使用者的反應再說，這樣比較保險。",
+      "outputLanguage": "en",
+      "note": "Concise English: hold off on deciding; watch user feedback for a week or two first. Keeps the hedge and the time span."
+    },
+    {
+      "id": "native-concise-03",
+      "category": "native-concise",
+      "mode": "proofread",
+      "tone": "nativeConcise",
+      "input": "我想跟大家說一下，因為伺服器明天早上九點到十點要做維護，所以那段時間系統會沒辦法使用，請大家提前做好準備，謝謝。",
+      "outputLanguage": "en",
+      "note": "Concise English: the system is down tomorrow 9-10 am for server maintenance; plan ahead. Keeps both times and the request."
+    },
+    {
+      "id": "native-concise-04",
+      "category": "native-concise",
+      "mode": "proofread",
+      "tone": "nativeConcise",
+      "input": "這份報告我已經從頭到尾仔細看過一遍了，基本上沒有什麼太大的問題，只有第三頁的數字好像需要再確認一下。",
+      "outputLanguage": "en",
+      "note": "Concise English: I've read the report; it looks fine, but the numbers on page 3 need checking. Keeps page 3."
     }
   ]
 }

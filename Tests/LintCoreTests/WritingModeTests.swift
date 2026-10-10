@@ -16,12 +16,12 @@ final class WritingModeTests: XCTestCase {
     }
 
     func testPreserveIsTheFirstTone() {
-        XCTAssertEqual(WritingTone.allCases, [.preserve, .formal, .concise, .professional, .native, .nativeCasual, .nativeFormal, .nativeGenZ])
+        XCTAssertEqual(WritingTone.allCases, [.preserve, .idiomatic, .formal, .concise, .professional, .native, .nativeCasual, .nativeFormal, .nativeGenZ])
     }
 
     func testTheNativeSpeakerTonesAreTheOnesThatWriteEnglishFromAnyLanguage() {
         XCTAssertEqual(WritingTone.allCases.filter(\.isNative), [.native, .nativeCasual, .nativeFormal, .nativeGenZ])
-        for tone in [WritingTone.preserve, .formal, .concise, .professional] {
+        for tone in [WritingTone.preserve, .idiomatic, .formal, .concise, .professional] {
             XCTAssertFalse(tone.isNative, "\(tone)")
         }
     }
@@ -40,6 +40,17 @@ final class WritingModeTests: XCTestCase {
         XCTAssertEqual(WritingMode.proofread.tones, WritingTone.allCases)
         XCTAssertEqual(WritingMode.translate.tones, [.preserve, .formal, .concise, .professional])
         XCTAssertEqual(WritingMode.custom.tones, [])
+    }
+
+    func testIdiomaticIsAProofreadingToneOnly() {
+        XCTAssertTrue(WritingMode.proofread.tones.contains(.idiomatic))
+        XCTAssertFalse(WritingMode.translate.tones.contains(.idiomatic), "a translation is not English to make idiomatic")
+        var memory = WritingToneMemory(proofread: .idiomatic, translate: .idiomatic)
+        XCTAssertEqual(memory.tone(for: .proofread), .idiomatic)
+        XCTAssertEqual(memory.tone(for: .translate), .preserve)
+        memory.set(.idiomatic, for: .translate)
+        XCTAssertEqual(memory.tone(for: .translate), .preserve)
+        XCTAssertEqual(WritingPromptComposer.overrideKey(mode: .proofread, tone: .idiomatic), "proofread|idiomatic")
     }
 
     func testATranslationRemembersNoNativeTone() {

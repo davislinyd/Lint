@@ -200,7 +200,8 @@ final class FloatingPanelViewModel {
         lastModelActivity = Date()
         Task { [weak self] in
             guard let self else { return }
-            let route = await self.resolveRoute()
+            let mode = self.settings.lastMode
+            let route = await self.resolveRoute(mode: mode, tone: self.settings.tone(for: mode))
             guard self.settings.wantsManagedLocalServer(for: route) else { return }
             do {
                 try await self.ensureLocalServerIfNeeded(for: route)
@@ -454,24 +455,29 @@ final class FloatingPanelViewModel {
 
     /// Where a request goes now (see `WritingEngineRouter`). Cheap: Apple Intelligence's status is a
     /// property read, and local AI is only looked at (never started) if it has not been yet.
-    private func resolveRoute() async -> WritingEngineRoute {
+    private func resolveRoute(mode: WritingMode?, tone: WritingTone?) async -> WritingEngineRoute {
         let selected = settings.providerKind
         let apple = selected == .automatic || selected == .appleIntelligence
             ? appleIntelligence.currentStatus() : .unavailable
-        if selected == .automatic, !apple.isAvailable, !localAI.hasChecked {
+        // Under Automatic, a native rewrite asks whether the local AI is ready even when Apple
+        // Intelligence is (`WritingEngineRouter.route`).
+        let needsLocalCheck = selected == .automatic
+            && (!apple.isAvailable || WritingEngineRouter.prefersLocalModel(mode: mode, tone: tone))
+        if needsLocalCheck, !localAI.hasChecked {
             await localAI.refresh()
         }
         return WritingEngineRouter.route(
             selected: selected, apple: apple,
-            localAIReady: localAI.hasChecked && localAI.runtimeReady && localAI.modelReady
+            localAIReady: localAI.hasChecked && localAI.runtimeReady && localAI.modelReady,
+            mode: mode, tone: tone
         )
     }
 
     /// The engine for a request, ready to use: Lint's local server is started only when the request
     /// goes to it. When nothing can take the request, a friendly error (with the local AI setup
     /// button only where `WritingEngineRouter.offersLocalAISetup` says so).
-    private func prepareEngine() async throws -> WritingEngineRoute {
-        let route = await resolveRoute()
+    private func prepareEngine(mode: WritingMode? = nil, tone: WritingTone? = nil) async throws -> WritingEngineRoute {
+        let route = await resolveRoute(mode: mode, tone: tone)
         if case .unavailable(let status) = route {
             if WritingEngineRouter.offersLocalAISetup(selected: settings.providerKind, apple: status, localAIReady: false) {
                 setupErrorPending = true
@@ -518,7 +524,7 @@ final class FloatingPanelViewModel {
         }
         let route: WritingEngineRoute
         do {
-            route = try await prepareEngine()
+            route = try await prepareEngine(mode: key.mode, tone: key.tone)
         } catch is CancellationError {
             return
         } catch {
@@ -553,10 +559,10 @@ final class FloatingPanelViewModel {
             // More typing cancels this prefetch; do not send the model a request for stale text.
             if Task.isCancelled { return }
             prefetchUsedMemoryIDs = personalized.usedMemoryIDs
-            if onDevice {
-                let written = try await writeOnDevice(
-                    config: config, systemPrompt: personalized.systemPrompt, source: result.text,
-                    mode: key.mode, tone: key.tone
+            if onDevice || Self.guardsLocally(mode: key.mode, tone: key.tone, profile: profile) {
+                let written = try await writeGuarded(
+                    onDevice: onDevice, config: config, systemPrompt: personalized.systemPrompt, source: result.text,
+                    mode: key.mode, tone: key.tone, reasoningEffort: .low
                 ) { [weak self] usage in
                     if self?.prefetchAttachedToUI == true { self?.lastUsage = usage }
                 }
@@ -633,24 +639,37 @@ final class FloatingPanelViewModel {
         }
     }
 
-    /// The on-device path: the text is split if it is too long for the model's context, every answer
-    /// is checked, a failed one is retried once, and a proofread that still fails keeps the source
-    /// (`WritingPipeline`). One request per piece; each answer arrives whole.
-    private func writeOnDevice(
-        config: LLMRuntimeConfig, systemPrompt: String, source: String, mode: WritingMode, tone: WritingTone,
-        onUsage: (TokenUsage) -> Void
+    /// Lint's own model takes the guarded path only where `WritingGuardPolicy.guardsLocalModel` says
+    /// so; with the English prompts only, which are the ones the guard was measured with.
+    private static func guardsLocally(mode: WritingMode, tone: WritingTone, profile: WritingPromptProfile) -> Bool {
+        profile == .english(.localModel) && WritingGuardPolicy.guardsLocalModel(mode: mode, tone: tone)
+    }
+
+    /// The guarded path: every answer is checked, a failed one is retried once, and a proofread that
+    /// still fails keeps the source (`WritingPipeline`); each answer arrives whole. On device the text
+    /// is also split if it is too long for the model's context. Lint's own model gets the request the
+    /// unguarded path would send it, with the answer's length capped.
+    private func writeGuarded(
+        onDevice: Bool, config: LLMRuntimeConfig, systemPrompt: String, source: String, mode: WritingMode, tone: WritingTone,
+        reasoningEffort: ReasoningEffort, onUsage: (TokenUsage) -> Void
     ) async throws -> WritingPipelineResult {
-        let budget = AppleFoundationModelProvider.contextSize.map {
+        let budget = onDevice ? AppleFoundationModelProvider.contextSize.map {
             WritingChunkBudget(contextSize: $0, instructions: systemPrompt)
-        }
+        } : nil
         return try await WritingPipeline.run(
             source: source, mode: mode, tone: tone, systemPrompt: systemPrompt, budget: budget
         ) { prompt, text in
-            let request = ChatRequest(
-                model: config.model, systemPrompt: prompt, userText: text,
-                maxTokens: WritingPipeline.responseTokenLimit(for: text), reasoningEffort: nil,
-                transformsUserText: mode != .custom
-            )
+            let request = onDevice
+                ? ChatRequest(
+                    model: config.model, systemPrompt: prompt, userText: text,
+                    maxTokens: WritingPipeline.responseTokenLimit(for: text), reasoningEffort: nil,
+                    transformsUserText: mode != .custom
+                )
+                : ChatRequest(
+                    model: config.model, systemPrompt: prompt, userText: text,
+                    maxTokens: WritingPipeline.responseTokenLimit(for: text), reasoningEffort: reasoningEffort,
+                    temperature: Self.rewriteTemperature(for: config.kind), fastMode: settings.fastMode
+                )
             var answer = ""
             for try await event in try llm.stream(config: config, request: request) {
                 switch event {
@@ -683,6 +702,8 @@ final class FloatingPanelViewModel {
         switch outcome {
         case .accepted, .acceptedAfterRetry: nil
         case .keptSource: String(localized: "模型的建議改動過多或漏掉了原文內容，所以保留原文。")
+        case .flagged(let issues) where issues.allSatisfy(\.isVoiceOnly):
+            String(localized: "這份結果的語氣可能和原文略有不同，使用前請先核對。")
         case .flagged: String(localized: "這份結果可能漏掉或改動了原文的部分內容，使用前請先核對。")
         }
     }
@@ -696,7 +717,7 @@ final class FloatingPanelViewModel {
 
     private func runAdoptedCapture(_ result: TextCaptureService.CaptureResult) async {
         do {
-            _ = try await prepareEngine()
+            _ = try await prepareEngine(mode: mode, tone: tone)
         } catch is CancellationError {
             return
         } catch {
@@ -713,7 +734,7 @@ final class FloatingPanelViewModel {
         let captured = await capture.capture()
         showPanel()
         do {
-            _ = try await prepareEngine()
+            _ = try await prepareEngine(mode: mode, tone: tone)
         } catch is CancellationError {
             return
         } catch {
@@ -868,7 +889,7 @@ final class FloatingPanelViewModel {
         }
         let route: WritingEngineRoute
         do {
-            route = try await prepareEngine()
+            route = try await prepareEngine(mode: mode, tone: tone)
         } catch is CancellationError {
             return
         } catch {
@@ -923,10 +944,10 @@ final class FloatingPanelViewModel {
             )
             if Task.isCancelled { return }
             usedMemoryIDs = personalized.usedMemoryIDs
-            if onDevice {
-                let written = try await writeOnDevice(
-                    config: config, systemPrompt: personalized.systemPrompt, source: generationSource,
-                    mode: generationMode, tone: generationTone
+            if onDevice || Self.guardsLocally(mode: generationMode, tone: generationTone, profile: profile) {
+                let written = try await writeGuarded(
+                    onDevice: onDevice, config: config, systemPrompt: personalized.systemPrompt, source: generationSource,
+                    mode: generationMode, tone: generationTone, reasoningEffort: effort
                 ) { [weak self] usage in
                     if self?.tickets.isCurrent(ticket) == true { self?.lastUsage = usage }
                 }

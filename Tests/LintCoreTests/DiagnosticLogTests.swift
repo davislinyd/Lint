@@ -128,5 +128,7 @@ final class DiagnosticLogTests: XCTestCase {
         let outcome = GuardedWritingResult.Outcome.keptSource(issues: [.missing(["MARKER-1"]), .added(["MARKER-2", "x"]), .structureChanged])
         XCTAssertEqual(outcome.diagnosticName, "keptSource(missing×1,added×2,structureChanged)")
         XCTAssertEqual(GuardedWritingResult.Outcome.accepted.diagnosticName, "accepted")
+        let voice = GuardedWritingResult.Outcome.flagged(issues: [.voiceChanged([.addedStockPhrase("kindly"), .lostInformal(["wanna"]), .addedContractions])])
+        XCTAssertEqual(voice.diagnosticName, "flagged(voiceChanged(addedStockPhrase+lostInformal+addedContractions))")
     }
 }

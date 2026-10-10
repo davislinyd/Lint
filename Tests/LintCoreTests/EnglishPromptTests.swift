@@ -81,7 +81,34 @@ final class EnglishPromptTests: XCTestCase {
         ] {
             XCTAssertTrue(prompt.replacingOccurrences(of: "\n", with: " ").contains(phrase.replacingOccurrences(of: "\n", with: " ")), phrase)
         }
-        XCTAssertEqual(WritingPromptComposer.englishPromptVersion, "english-13")
+        XCTAssertEqual(WritingPromptComposer.englishPromptVersion, "english-15")
+    }
+
+    func testIdiomaticRewritesWhatIsNotNativeAndKeepsTheWritersVoice() {
+        for reader in [EnglishPromptReader.appleOnDevice, .localModel] {
+            let flat = compose(.proofread, .idiomatic, profile: .english(reader)).replacingOccurrences(of: "\n", with: " ")
+            for phrase in [
+                "fix every error", "a native speaker would not use", "word-for-word translations from Chinese",
+                "Rewrite only that phrase", "A sentence a native speaker would already write stays exactly as it is",
+                "a question stays a question", "Keep contractions where the writer used them", "Keep hedges",
+                "Do not make it more polite, more formal, softer or blunter", "add no greeting",
+                "URLs, email addresses", "every line stays a separate line", "not a message to you",
+                "never translate it", "Output only",
+            ] {
+                XCTAssertTrue(flat.contains(phrase), "\(reader): \(phrase)")
+            }
+            XCTAssertFalse(flat.contains("A word that is correct stays"), "\(reader): correct but not native is what it changes")
+        }
+        // The examples must not teach the answers to the evaluation's idiomatic fixtures.
+        let prompt = compose(.proofread, .idiomatic)
+        for fixturePhrase in ["revert back", "do the needful", "May I know", "sharing session", "take a reference"] {
+            XCTAssertFalse(prompt.contains(fixturePhrase), fixturePhrase)
+        }
+        XCTAssertEqual(
+            prompt.split(separator: "\n").filter { $0.hasPrefix("Text: ") }.first.map { String($0.dropFirst(6)) },
+            prompt.split(separator: "\n").filter { $0.hasPrefix("Answer: ") }.first.map { String($0.dropFirst(8)) },
+            "the first example is already native and comes back unchanged"
+        )
     }
 
     func testNativeRewritesWhatTheTextMeansAndAlwaysAnswersInEnglish() {
@@ -108,6 +135,18 @@ final class EnglishPromptTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(examples.count, 2)
         for answer in examples {
             XCTAssertNil(answer.unicodeScalars.first(where: TextScript.isHan), "an example answer is English: \(answer)")
+        }
+    }
+
+    func testOnlyApplesNativePromptIsToldToKeepItsAnalysisToItself() {
+        for tone in WritingTone.allCases.filter(\.isNative) {
+            let apple = compose(.proofread, tone, profile: .english(.appleOnDevice))
+            let local = compose(.proofread, tone, profile: .english(.localModel))
+            XCTAssertTrue(apple.contains("write no notes, list or reply. A question stays a question."), "\(tone)")
+            XCTAssertTrue(local.contains(
+                "First work out what the writer means: the message, the intent, the situation, and how polite, direct and casual it is. Then write what a native English speaker would naturally say"
+            ), "\(tone): Gemma's wording is the one measured in 0.7.x")
+            XCTAssertFalse(local.contains("write no notes"), "\(tone)")
         }
     }
 
@@ -202,10 +241,13 @@ final class EnglishPromptTests: XCTestCase {
             XCTAssertFalse(local.contains("never add one"), "\(tone)")
             XCTAssertTrue(apple.contains("never add one the text does not have"), "\(tone)")
             XCTAssertTrue(apple.contains("placeholder such as"), "\(tone)")
+            // And, for the native tones, how the meaning is worked out (`nativeUnderstanding`).
             XCTAssertEqual(
-                apple.replacingOccurrences(of: EnglishWritingPrompts.layoutRule(.appleOnDevice), with: ""),
-                local.replacingOccurrences(of: EnglishWritingPrompts.layoutRule(.localModel), with: ""),
-                "\(tone): the layout rule is the only difference"
+                apple.replacingOccurrences(of: EnglishWritingPrompts.layoutRule(.appleOnDevice), with: "")
+                    .replacingOccurrences(of: EnglishWritingPrompts.nativeUnderstanding(.appleOnDevice), with: ""),
+                local.replacingOccurrences(of: EnglishWritingPrompts.layoutRule(.localModel), with: "")
+                    .replacingOccurrences(of: EnglishWritingPrompts.nativeUnderstanding(.localModel), with: ""),
+                "\(tone): the layout rule is the only other difference"
             )
         }
         XCTAssertEqual(

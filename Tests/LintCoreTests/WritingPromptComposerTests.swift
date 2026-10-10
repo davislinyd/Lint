@@ -63,6 +63,17 @@ final class WritingPromptComposerTests: XCTestCase {
         XCTAssertTrue(prompt.contains("Sounds good"), "the already-correct example is kept")
     }
 
+    func testProofreadIdiomaticRewritesWhatIsNotNativeAndKeepsTheVoice() {
+        let prompt = compose(.proofread, .idiomatic)
+        for phrase in [
+            "語氣：道地", "母語者不會這樣說的詞語或片語", "只重寫那個片語", "一個字都不要改",
+            "問句仍是問句", "保留縮寫", "保留委婉語", "不加招呼語", "中文一字不改", "維持同一語言",
+        ] {
+            XCTAssertTrue(prompt.contains(phrase), phrase)
+        }
+        XCTAssertFalse(prompt.contains("要把整句重寫成母語者的說法"), "rewrites a phrase, not every sentence")
+    }
+
     func testProofreadFormalAsksForWrittenLanguage() {
         let prompt = compose(.proofread, .formal)
         XCTAssertTrue(prompt.contains("語氣：正式"))
@@ -206,9 +217,9 @@ final class WritingPromptComposerTests: XCTestCase {
         XCTAssertTrue(compose(.translate, .preserve).contains("說話風格"))
     }
 
-    func testTranslationHasNoNativeTone() {
+    func testTranslationHasNoNativeOrIdiomaticTone() {
         for language in TranslationLanguage.allCases {
-            for tone in nativeTones {
+            for tone in nativeTones + [.idiomatic] {
                 XCTAssertEqual(
                     WritingPromptComposer.compose(mode: .translate, tone: tone, customPrompt: "", translationLanguage: language),
                     WritingPromptComposer.compose(mode: .translate, tone: .preserve, customPrompt: "", translationLanguage: language),

@@ -1,6 +1,6 @@
 {
-  "version": 8,
-  "about": "Lint's own writing fixtures: English proofreading and tone rewrites (also the English inside mixed Chinese-English text, whose Chinese is left alone), English-to-Traditional-Chinese translation for reference, and the native-speaker tone (Chinese, mixed or broken English in, a native speaker's English out) in its four styles: standard, casual, formal and Gen Z. Every sentence was written for this repository; nothing is taken from a benchmark corpus. They exist to compare engines on Lint's actual workload, not to score a model in general.",
+  "version": 9,
+  "about": "Lint's own writing fixtures: English proofreading and tone rewrites (also the English inside mixed Chinese-English text, whose Chinese is left alone), English-to-Traditional-Chinese translation for reference, and the native-speaker tone (Chinese, mixed or broken English in, a native speaker's English out) in its four styles: standard, casual, formal and Gen Z; and English that is correct but not what a native speaker would say, whose fix has to keep the writer's voice (keepsVoice). Every sentence was written for this repository; nothing is taken from a benchmark corpus. They exist to compare engines on Lint's actual workload, not to score a model in general.",
   "cases": [
     {
       "id": "en-grammar-01",
@@ -1038,7 +1038,8 @@
       "mustFix": [
         "open the light"
       ],
-      "note": "\"turn on the light\"; the comma splice may become two sentences or a semicolon."
+      "note": "\"turn on the light\"; the comma splice may become two sentences or a semicolon.",
+      "keepsVoice": true
     },
     {
       "id": "nat-02",
@@ -1050,7 +1051,8 @@
       "mustFix": [
         "until tomorrow"
       ],
-      "note": "A deadline is \"by tomorrow\"; \"until\" means a duration."
+      "note": "A deadline is \"by tomorrow\"; \"until\" means a duration.",
+      "keepsVoice": true
     },
     {
       "id": "nat-03",
@@ -1062,7 +1064,8 @@
       "mustFix": [
         "a big progress"
       ],
-      "note": "\"progress\" is uncountable: \"made a lot of / good progress\"."
+      "note": "\"progress\" is uncountable: \"made a lot of / good progress\".",
+      "keepsVoice": true
     },
     {
       "id": "nat-04",
@@ -1074,7 +1077,8 @@
       "mustFix": [
         "explain you"
       ],
-      "note": "\"explain the details to you\"."
+      "note": "\"explain the details to you\".",
+      "keepsVoice": true
     },
     {
       "id": "nat-05",
@@ -1086,7 +1090,8 @@
       "mustFix": [
         "good in English"
       ],
-      "note": "\"good at English\"; \"help us (to) review\" is fine either way."
+      "note": "\"good at English\"; \"help us (to) review\" is fine either way.",
+      "keepsVoice": true
     },
     {
       "id": "nat-06",
@@ -1098,7 +1103,8 @@
       "mustFix": [
         "since three years"
       ],
-      "note": "\"for three years\"; \"at this company\" is more natural."
+      "note": "\"for three years\"; \"at this company\" is more natural.",
+      "keepsVoice": true
     },
     {
       "id": "nat-07",
@@ -1110,7 +1116,8 @@
       "mustFix": [
         "was very busy these days"
       ],
-      "note": "\"I've been very busy lately / these days\"."
+      "note": "\"I've been very busy lately / these days\".",
+      "keepsVoice": true
     },
     {
       "id": "nat-08",
@@ -1122,7 +1129,8 @@
       "mustFix": [
         "price is too expensive"
       ],
-      "note": "A price is \"too high\" (or \"it is too expensive\"); the comma splice may be fixed."
+      "note": "A price is \"too high\" (or \"it is too expensive\"); the comma splice may be fixed.",
+      "keepsVoice": true
     },
     {
       "id": "nat-09",
@@ -1134,7 +1142,8 @@
       "mustFix": [
         "server is normal"
       ],
-      "note": "\"working properly / running normally\"."
+      "note": "\"working properly / running normally\".",
+      "keepsVoice": true
     },
     {
       "id": "nat-10",
@@ -1147,7 +1156,8 @@
         "discussed about",
         "agreed it"
       ],
-      "note": "\"discussed the new policy\", \"agreed to it / agreed with it\"."
+      "note": "\"discussed the new policy\", \"agreed to it / agreed with it\".",
+      "keepsVoice": true
     },
     {
       "id": "nat-11",
@@ -1159,7 +1169,8 @@
       "mustFix": [
         "reply me"
       ],
-      "note": "\"reply to me\"."
+      "note": "\"reply to me\".",
+      "keepsVoice": true
     },
     {
       "id": "nat-12",
@@ -1171,7 +1182,8 @@
       "mustFix": [
         "forward to hear from"
       ],
-      "note": "\"looking forward to hearing from you\"."
+      "note": "\"looking forward to hearing from you\".",
+      "keepsVoice": true
     },
     {
       "id": "hold-01",
@@ -1395,7 +1407,8 @@
       "tone": "native",
       "input": "抱歉，這個需求我們這季排不進去，下季再評估看看。",
       "outputLanguage": "en",
-      "note": "Polite decline with a next step. Say it as a native would (\"we won't be able to fit this in this quarter; let's revisit it next quarter\"); keep the decline and the deferral, invent no date or promise."
+      "note": "Polite decline with a next step. Say it as a native would (\"we won't be able to fit this in this quarter; let's revisit it next quarter\"); keep the decline and the deferral, invent no date or promise.",
+      "keepsVoice": true
     },
     {
       "id": "native-02",
@@ -1404,7 +1417,8 @@
       "tone": "native",
       "input": "麻煩你幫我確認一下客戶有沒有收到合約，收到的話請跟我說一聲。",
       "outputLanguage": "en",
-      "note": "A request with a condition: check whether the client got the contract, and tell me if so. Both parts stay."
+      "note": "A request with a condition: check whether the client got the contract, and tell me if so. Both parts stay.",
+      "keepsVoice": true
     },
     {
       "id": "native-03",
@@ -1413,7 +1427,8 @@
       "tone": "native",
       "input": "我覺得這個方案風險太高，建議我們先做小範圍測試，再決定要不要全面上線。",
       "outputLanguage": "en",
-      "note": "An opinion and a suggestion, with its hedge (\"I think\", \"suggest\"). Not turned into an order or softened into a maybe."
+      "note": "An opinion and a suggestion, with its hedge (\"I think\", \"suggest\"). Not turned into an order or softened into a maybe.",
+      "keepsVoice": true
     },
     {
       "id": "native-04",
@@ -1425,7 +1440,8 @@
       "mustPreserve": [
         "3:30"
       ],
-      "note": "Date, time, floor and room. The date may be written out (\"October 21\"); the time, the floor and the request to be on time must survive."
+      "note": "Date, time, floor and room. The date may be written out (\"October 21\"); the time, the floor and the request to be on time must survive.",
+      "keepsVoice": true
     },
     {
       "id": "native-05",
@@ -1434,7 +1450,8 @@
       "tone": "native",
       "input": "這個流程真的很爛，每次都要重填一樣的資料，到底是誰設計的？",
       "outputLanguage": "en",
-      "note": "Frustration. A native would say it with the same heat (\"who designed this?\"); no added softening, no added insult."
+      "note": "Frustration. A native would say it with the same heat (\"who designed this?\"); no added softening, no added insult.",
+      "keepsVoice": true
     },
     {
       "id": "native-06",
@@ -1446,7 +1463,8 @@
       "mustPreserve": [
         "cache invalidation"
       ],
-      "note": "Mixed Chinese and English: one English sentence comes out, the English terms stay, and no Chinese is left."
+      "note": "Mixed Chinese and English: one English sentence comes out, the English terms stay, and no Chinese is left.",
+      "keepsVoice": true
     },
     {
       "id": "native-07",
@@ -1455,7 +1473,8 @@
       "tone": "native",
       "input": "下週一 kickoff 前，可以先把 slide 的 draft 傳給我嗎？我想先 align 一下 messaging。",
       "outputLanguage": "en",
-      "note": "Mixed text with workplace jargon. Natural English (\"before Monday's kickoff\"), a request kept as a request."
+      "note": "Mixed text with workplace jargon. Natural English (\"before Monday's kickoff\"), a request kept as a request.",
+      "keepsVoice": true
     },
     {
       "id": "native-08",
@@ -1468,7 +1487,8 @@
         "what I send",
         "you have receive it or not"
       ],
-      "note": "Broken, translated-from-Chinese English. The meaning (did you get last week's invoice?) is said the way a native would, not patched word by word."
+      "note": "Broken, translated-from-Chinese English. The meaning (did you get last week's invoice?) is said the way a native would, not patched word by word.",
+      "keepsVoice": true
     },
     {
       "id": "native-09",
@@ -1481,7 +1501,8 @@
         "recently, so I suggest",
         "should to upgrade"
       ],
-      "note": "A doubled conjunction and \"should to\". Keep the reason and the recommendation; the server is slow lately and memory should be upgraded soon."
+      "note": "A doubled conjunction and \"should to\". Keep the reason and the recommendation; the server is slow lately and memory should be upgraded soon.",
+      "keepsVoice": true
     },
     {
       "id": "native-10",
@@ -1493,7 +1514,8 @@
       "mustPreserve": [
         "https://wiki.example.com/onboarding/checklist"
       ],
-      "note": "The URL stays exactly; read first, then schedule a time."
+      "note": "The URL stays exactly; read first, then schedule a time.",
+      "keepsVoice": true
     },
     {
       "id": "native-11",
@@ -1503,7 +1525,8 @@
       "input": "- 確認客戶的付款狀態\n- 把發票寄給財務部\n- 下週五前回報進度",
       "outputLanguage": "en",
       "preserveLineStructure": true,
-      "note": "A list stays a list of three lines with its markers; each item is English, and \"by next Friday\" is kept."
+      "note": "A list stays a list of three lines with its markers; each item is English, and \"by next Friday\" is kept.",
+      "keepsVoice": true
     },
     {
       "id": "native-12",
@@ -1513,7 +1536,8 @@
       "input": "Thanks, that works for me. I'll send the draft over by end of day.",
       "outputLanguage": "en",
       "expectUnchanged": true,
-      "note": "Already what a native would write: a native rewrite has nothing to add and must not reword it for the sake of it."
+      "note": "Already what a native would write: a native rewrite has nothing to add and must not reword it for the sake of it.",
+      "keepsVoice": true
     },
     {
       "id": "native-13",
@@ -1523,7 +1547,8 @@
       "input": "Could you take a look at the PR when you get a chance? No rush.",
       "outputLanguage": "en",
       "expectUnchanged": true,
-      "note": "Already how a native would ask; a native rewrite leaves it alone."
+      "note": "Already how a native would ask; a native rewrite leaves it alone.",
+      "keepsVoice": true
     },
     {
       "id": "native-14",
@@ -1533,7 +1558,8 @@
       "input": "Heads up: the deploy is paused until the migration finishes. I'll ping you once it's moving again.",
       "outputLanguage": "en",
       "expectUnchanged": true,
-      "note": "Casual workplace English that is already idiomatic; nothing to rewrite."
+      "note": "Casual workplace English that is already idiomatic; nothing to rewrite.",
+      "keepsVoice": true
     },
     {
       "id": "native-casual-01",
@@ -1654,6 +1680,241 @@
         "you have receive it or not"
       ],
       "note": "Gen Z: a quick, casual check on last week's invoice; not a pile of slang."
+    },
+    {
+      "id": "idio-01",
+      "category": "idiomatic",
+      "mode": "proofread",
+      "tone": "idiomatic",
+      "input": "Kindly revert back to me at the earliest.",
+      "outputLanguage": "en",
+      "mustFix": [
+        "revert back",
+        "at the earliest"
+      ],
+      "keepsVoice": true,
+      "note": "A polite written request: \"get back to me as soon as you can\". Stays a request, adds no greeting or sign-off."
+    },
+    {
+      "id": "idio-02",
+      "category": "idiomatic",
+      "mode": "proofread",
+      "tone": "idiomatic",
+      "input": "lol sorry, I forgot to open the VPN before the call, that's why I dropped.",
+      "outputLanguage": "en",
+      "mustPreserve": [
+        "lol",
+        "VPN",
+        "I forgot"
+      ],
+      "mustFix": [
+        "open the VPN"
+      ],
+      "keepsVoice": true,
+      "note": "\"turn on / connect to the VPN\". Stays a casual chat message: lol, contractions, no apology formula."
+    },
+    {
+      "id": "idio-03",
+      "category": "idiomatic",
+      "mode": "proofread",
+      "tone": "idiomatic",
+      "input": "This tool is really not convenient! Every time I must fill the same form again. Who designed this?",
+      "outputLanguage": "en",
+      "mustFix": [
+        "really not convenient",
+        "I must fill"
+      ],
+      "keepsVoice": true,
+      "note": "An annoyed complaint: \"such a pain\", \"I have to fill out\". Keeps the exclamation, the rhetorical question and the bluntness; not softened into a polite suggestion."
+    },
+    {
+      "id": "idio-04",
+      "category": "idiomatic",
+      "mode": "proofread",
+      "tone": "idiomatic",
+      "input": "I think maybe we can consider to postpone the launch one week, because the testing is not enough.",
+      "outputLanguage": "en",
+      "mustFix": [
+        "consider to postpone",
+        "testing is not enough"
+      ],
+      "keepsVoice": true,
+      "note": "A hedged suggestion: \"push the launch back a week\", \"we haven't tested enough\". Keeps a hedge (I think / maybe); does not become a firm recommendation."
+    },
+    {
+      "id": "idio-05",
+      "category": "idiomatic",
+      "mode": "proofread",
+      "tone": "idiomatic",
+      "input": "May I know when you will be free to have a call with us?",
+      "outputLanguage": "en",
+      "mustFix": [
+        "May I know"
+      ],
+      "keepsVoice": true,
+      "note": "A polite question to a client: \"When would you be available for a call?\". Stays a polite question, adds no greeting or sign-off."
+    },
+    {
+      "id": "idio-06",
+      "category": "idiomatic",
+      "mode": "proofread",
+      "tone": "idiomatic",
+      "input": "Our team will do a sharing session about the new API on Friday, everyone is welcome to join!",
+      "outputLanguage": "en",
+      "mustPreserve": [
+        "API",
+        "Friday"
+      ],
+      "mustFix": [
+        "do a sharing session"
+      ],
+      "keepsVoice": true,
+      "note": "\"host a session / give a talk\". Keeps the upbeat exclamation and the open invitation."
+    },
+    {
+      "id": "idio-07",
+      "category": "idiomatic",
+      "mode": "proofread",
+      "tone": "idiomatic",
+      "input": "Thanks for your help today, you really saved my life 🙏 I owe you one meal.",
+      "outputLanguage": "en",
+      "mustPreserve": [
+        "🙏"
+      ],
+      "mustFix": [
+        "owe you one meal"
+      ],
+      "keepsVoice": true,
+      "note": "\"I owe you lunch / a meal\". Keeps the emoji and the warm, casual thanks."
+    },
+    {
+      "id": "idio-08",
+      "category": "idiomatic",
+      "mode": "proofread",
+      "tone": "idiomatic",
+      "input": "The deployment has been finished and the service is running normally now.",
+      "outputLanguage": "en",
+      "mustFix": [
+        "has been finished"
+      ],
+      "keepsVoice": true,
+      "note": "\"The deployment is done and the service is back to normal\". A neutral status line, no added detail."
+    },
+    {
+      "id": "idio-09",
+      "category": "idiomatic",
+      "mode": "proofread",
+      "tone": "idiomatic",
+      "input": "Sorry for letting you wait so long. The report is still in progress and I will send it to you before 5 pm.",
+      "outputLanguage": "en",
+      "mustPreserve": [
+        "5 pm"
+      ],
+      "mustFix": [
+        "letting you wait"
+      ],
+      "keepsVoice": true,
+      "note": "\"Sorry to keep you waiting\". The writer spells out \"I will\": no contractions added, no extra apology."
+    },
+    {
+      "id": "idio-10",
+      "category": "idiomatic",
+      "mode": "proofread",
+      "tone": "idiomatic",
+      "input": "Please do the needful and update the ticket. Thanks in advance.",
+      "outputLanguage": "en",
+      "mustFix": [
+        "do the needful"
+      ],
+      "keepsVoice": true,
+      "note": "Drop \"do the needful\" (\"Please update the ticket\"). Stays a short request with the writer's own thanks, not a question."
+    },
+    {
+      "id": "idio-11",
+      "category": "idiomatic",
+      "mode": "proofread",
+      "tone": "idiomatic",
+      "input": "Sorry, this request we cannot accept, because it is out of our scope.",
+      "outputLanguage": "en",
+      "mustFix": [
+        "this request we cannot accept"
+      ],
+      "keepsVoice": true,
+      "note": "A clear refusal: \"we cannot take this on; it is outside our scope\". Stays a refusal: no hedge (might, perhaps), no offer the writer did not make, no contractions added."
+    },
+    {
+      "id": "idio-12",
+      "category": "idiomatic",
+      "mode": "proofread",
+      "tone": "idiomatic",
+      "input": "hey, do you have time now? I wanna discuss with you about the release plan",
+      "outputLanguage": "en",
+      "mustPreserve": [
+        "hey",
+        "I wanna"
+      ],
+      "mustFix": [
+        "discuss with you about"
+      ],
+      "keepsVoice": true,
+      "note": "\"talk to you about / go over the release plan\". Stays a quick casual ping: hey, wanna, lowercase, the question."
+    },
+    {
+      "id": "idio-13",
+      "category": "idiomatic",
+      "mode": "proofread",
+      "tone": "idiomatic",
+      "input": "Can you send me the slides? I want to take a reference.",
+      "outputLanguage": "en",
+      "mustFix": [
+        "take a reference"
+      ],
+      "keepsVoice": true,
+      "note": "\"use them as a reference\". Stays a direct, friendly question; \"I'd like to\" would be more formal than the writer."
+    },
+    {
+      "id": "idio-ok-01",
+      "category": "idiomatic-already",
+      "mode": "proofread",
+      "tone": "idiomatic",
+      "input": "ugh, the build broke again 😩 can someone take a look?",
+      "outputLanguage": "en",
+      "expectUnchanged": true,
+      "keepsVoice": true,
+      "note": "Already natural chat: leave it, lowercase and emoji included."
+    },
+    {
+      "id": "idio-ok-02",
+      "category": "idiomatic-already",
+      "mode": "proofread",
+      "tone": "idiomatic",
+      "input": "We regret to inform you that the event has been cancelled due to the weather.",
+      "outputLanguage": "en",
+      "expectUnchanged": true,
+      "keepsVoice": true,
+      "note": "Already natural formal notice (British spelling): leave it."
+    },
+    {
+      "id": "idio-ok-03",
+      "category": "idiomatic-already",
+      "mode": "proofread",
+      "tone": "idiomatic",
+      "input": "Honestly, I'm not sure this is worth the effort. Can we talk it through tomorrow?",
+      "outputLanguage": "en",
+      "expectUnchanged": true,
+      "keepsVoice": true,
+      "note": "Already natural and hedged: leave it."
+    },
+    {
+      "id": "idio-ok-04",
+      "category": "idiomatic-already",
+      "mode": "proofread",
+      "tone": "idiomatic",
+      "input": "Quick question: is the staging server down, or is it just me?",
+      "outputLanguage": "en",
+      "expectUnchanged": true,
+      "keepsVoice": true,
+      "note": "Already natural: leave it."
     }
   ]
 }

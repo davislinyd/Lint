@@ -87,8 +87,11 @@ struct WritingEvalRun: Codable {
 ///
 /// The app's paths are reproduced exactly: Apple gets the English prompts, `WritingPipeline`'s
 /// check and single retry, one fresh session per request and greedy sampling; llama gets the English
-/// prompts with the language line, temperature 0.3 and no guard. `LINT_EVAL_GUARD=0|1` overrides the
+/// prompts with the language line, temperature 0.3 and no guard, except for the tasks the app guards
+/// (`WritingGuardPolicy.guardsLocalModel`, the idiomatic tone). `LINT_EVAL_GUARD=0|1` overrides the
 /// guard, `LINT_EVAL_TEMPERATURE` the temperature, `LINT_EVAL_PROFILE=standard` the prompts.
+/// `LINT_EVAL_TONE=<WritingTone raw value>` runs every case in that tone instead of its own (with
+/// `LINT_EVAL_ONLY`, to compare tones on the same texts); the checks stay the fixture's.
 /// `LINT_EVAL_REMINDERS=zh|en` adds what a user with two remembered habits gets (articles, prepositions
 /// after verbs), picked by the app's retriever and worded in Chinese or in English.
 final class WritingEvalRunTests: XCTestCase {
@@ -112,11 +115,15 @@ final class WritingEvalRunTests: XCTestCase {
         let onDevice = engine == "apple"
         // A GEC model (`llama-completion` + a T5 GGUF) only proofreads with the tone kept, always guarded.
         let gec = engine == "gec"
-        let guarded = gec || (environment["LINT_EVAL_GUARD"].map { $0 == "1" } ?? onDevice)
+        let explicitGuard = environment["LINT_EVAL_GUARD"].map { $0 == "1" }
+        let guarded = gec || (explicitGuard ?? onDevice)
         let only = environment["LINT_EVAL_ONLY"].map { Set($0.split(separator: ",").map(String.init)) }
         // The app sends llama-server 0.3; LINT_EVAL_TEMPERATURE tries another (0 = greedy).
         let temperature = environment["LINT_EVAL_TEMPERATURE"].flatMap(Double.init) ?? 0.3
         let reminders = environment["LINT_EVAL_REMINDERS"]
+        let toneOverride = try environment["LINT_EVAL_TONE"].map { raw in
+            try XCTUnwrap(WritingTone(rawValue: raw), "LINT_EVAL_TONE=\(raw) is not a tone")
+        }
 
         var provider: (any LLMProvider)?
         var corrector: GrammarCorrector?
@@ -154,14 +161,17 @@ final class WritingEvalRunTests: XCTestCase {
         var results: [WritingEvalResult] = []
         for testCase in fixtures.cases where only?.contains(testCase.id) ?? true {
             let mode = testCase.writingMode
-            let tone = testCase.writingTone
+            let tone = toneOverride ?? testCase.writingTone
             if gec, mode != .proofread || tone != .preserve { continue }
+            // As the app: Lint's own model is guarded for the tasks that ask for it.
+            let caseGuarded = guarded || (explicitGuard == nil && profile == .english(.localModel)
+                && WritingGuardPolicy.guardsLocalModel(mode: mode, tone: tone))
             var usage: TokenUsage?
             func generate(_ systemPrompt: String, _ text: String) async throws -> String {
                 let request = ChatRequest(
                     model: model, systemPrompt: systemPrompt, userText: text,
                     // The app caps the on-device answer; llama keeps the app's default.
-                    maxTokens: onDevice ? WritingPipeline.responseTokenLimit(for: text) : 4096,
+                    maxTokens: onDevice || caseGuarded ? WritingPipeline.responseTokenLimit(for: text) : 4096,
                     reasoningEffort: onDevice ? nil : .low,
                     temperature: onDevice ? nil : temperature,
                     transformsUserText: true
@@ -177,7 +187,7 @@ final class WritingEvalRunTests: XCTestCase {
                 return output
             }
 
-            var systemPrompt = testCase.systemPrompt(profile: profile)
+            var systemPrompt = testCase.systemPrompt(profile: profile, tone: tone)
             if let reminders {
                 let habits = MemoryRetriever(memories: Self.learnedHabits).select(for: MemoryRetriever.Query(
                     text: testCase.input, mode: mode, tone: tone, outputLanguage: mode == .translate ? "zh-Hant" : nil
@@ -197,7 +207,7 @@ final class WritingEvalRunTests: XCTestCase {
                     requests = result.corrected
                     outcome = result.keptSource > 0 ? "keptSource" : "accepted"
                     print("[eval] \(testCase.id) gec: \(result.corrected) sent, \(result.keptSource) kept by the guard, \(result.skipped) skipped")
-                } else if guarded {
+                } else if caseGuarded {
                     let budget = onDevice
                         ? AppleFoundationModelProvider.contextSize.map { WritingChunkBudget(contextSize: $0, instructions: systemPrompt) }
                         : nil
@@ -217,7 +227,7 @@ final class WritingEvalRunTests: XCTestCase {
                 } else {
                     // The unguarded path of the app adds the language line itself (the pipeline does it otherwise).
                     let prompt = profile.isEnglish
-                        ? WritingPromptComposer.withLanguageLine(systemPrompt, for: testCase.input, mode: mode, tone: testCase.writingTone) : systemPrompt
+                        ? WritingPromptComposer.withLanguageLine(systemPrompt, for: testCase.input, mode: mode, tone: tone) : systemPrompt
                     output = try await generate(prompt, testCase.input)
                     first = output
                 }
@@ -226,7 +236,7 @@ final class WritingEvalRunTests: XCTestCase {
             }
             let failures = WritingEvalChecks.run(testCase, output: output)
             results.append(WritingEvalResult(
-                id: testCase.id, category: testCase.category, mode: testCase.mode, tone: testCase.tone,
+                id: testCase.id, category: testCase.category, mode: testCase.mode, tone: tone.rawValue,
                 input: testCase.input, note: testCase.note, output: output,
                 seconds: Date().timeIntervalSince(started),
                 failures: failures.map { "\($0.check): \($0.detail)" },
@@ -238,7 +248,9 @@ final class WritingEvalRunTests: XCTestCase {
             print("[eval] \(testCase.id) \(String(format: "%.2f", Date().timeIntervalSince(started)))s \(outcome) \(failures.map(\.check))")
         }
 
-        let promptVersion = [profile.isEnglish ? metadata.promptVersion : nil, reminders.map { "reminders-\($0)" }]
+        let promptVersion = [
+            profile.isEnglish ? metadata.promptVersion : nil, reminders.map { "reminders-\($0)" }, toneOverride.map { "tone-\($0.rawValue)" },
+        ]
             .compactMap { $0 }.joined(separator: "+")
         let run = WritingEvalRun(
             label: label, startedAt: Date(),
@@ -353,8 +365,8 @@ final class WritingEvalReportTests: XCTestCase {
             markdown += "| \(run.label) | \(env.engine) | \(model) | \(env.osVersion) | \(env.promptProfile) \(env.promptVersion ?? "") | \(guardNote) | \(env.hardware) |\n"
         }
         markdown += "\n## Objective checks\n\n"
-        markdown += "| Run | Cases | Any check failed | Errors left (cases / pieces) | Errors left, proofread/preserve (pieces) | Clean sentences changed | Literal lost | Language | Simplified chars | Mainland terms | Lines/lists | Preamble | Retried | Kept source | Flagged | Request failed |\n"
-        markdown += "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|\n"
+        markdown += "| Run | Cases | Any check failed | Errors left (cases / pieces) | Errors left, proofread/preserve (pieces) | Clean sentences changed | Voice changed | Literal lost | Language | Simplified chars | Mainland terms | Lines/lists | Added list | Preamble | Retried | Kept source | Flagged | Request failed |\n"
+        markdown += "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|\n"
         for run in runs {
             let cscr = run.cleanSentenceChangeRate.map { "\($0.changed)/\($0.of) (\(Int((Double($0.changed) / Double($0.of) * 100).rounded()))%)" } ?? "n/a"
             // Out of the pieces in the cases this run answered: a GEC run answers proofread/preserve only.
@@ -369,8 +381,10 @@ final class WritingEvalReportTests: XCTestCase {
             let preserve = pieces { $0.mode == "proofread" && $0.tone == "preserve" }
             markdown += "| \(run.label) | \(run.results.count) | \(run.results.filter { !$0.failures.isEmpty }.count) "
             markdown += "| \(count(run, "fixes")) / \(all.left) of \(all.of) | \(preserve.left) of \(preserve.of) | \(cscr) "
+            let voiced = run.results.filter { result in fixtures.cases.contains { $0.id == result.id && $0.keepsVoice == true } }.count
+            markdown += "| \(count(run, "voice")) of \(voiced) "
             markdown += "| \(count(run, "preserves")) | \(count(run, "language")) | \(count(run, "simplified-chinese")) | \(count(run, "taiwan-wording")) "
-            markdown += "| \(count(run, "line-structure")) | \(count(run, "no-preamble")) "
+            markdown += "| \(count(run, "line-structure")) | \(count(run, "added-list")) | \(count(run, "no-preamble")) "
             markdown += "| \(run.results.filter { $0.outcome == "retried" }.count) | \(run.results.filter { $0.outcome == "keptSource" }.count) "
             markdown += "| \(run.results.filter { $0.outcome == "flagged" }.count) | \(run.results.filter { $0.output.hasPrefix("<<request failed") }.count) |\n"
         }

@@ -88,6 +88,14 @@ final class WritingPromptComposerTests: XCTestCase {
         XCTAssertTrue(prompt.contains("絕不可刪除事實"))
     }
 
+    func testProofreadCasualIsAnEditInTheTextsOwnLanguage() {
+        let prompt = compose(.proofread, .casual)
+        XCTAssertTrue(prompt.contains("語氣：輕鬆"))
+        XCTAssertTrue(prompt.contains("縮寫與日常用字"))
+        for phrase in keepsSourceLanguage { XCTAssertTrue(prompt.contains(phrase), phrase) }
+        XCTAssertTrue(compose(.translate, .casual).contains("目標語言中自然的口語"))
+    }
+
     func testProofreadProfessionalAsksForBusinessCommunication() {
         let prompt = compose(.proofread, .professional)
         XCTAssertTrue(prompt.contains("語氣：專業"))
@@ -118,6 +126,7 @@ final class WritingPromptComposerTests: XCTestCase {
             (.nativeCasual, "語氣：母語人士 · 輕鬆", ["口語", "縮寫"]),
             (.nativeFormal, "語氣：母語人士 · 正式", ["書面", "不用縮寫", "俚語"]),
             (.nativeGenZ, "語氣：母語人士 · Gen Z", ["tbh", "不主動加表情符號", "嚴肅", "不改事實"]),
+            (.nativeConcise, "語氣：母語人士 · 簡潔", ["較少的字", "不是摘要", "絕不可刪除事實"]),
         ]
         for (tone, heading, phrases) in styles {
             let prompt = compose(.proofread, tone)

@@ -81,7 +81,7 @@ final class EnglishPromptTests: XCTestCase {
         ] {
             XCTAssertTrue(prompt.replacingOccurrences(of: "\n", with: " ").contains(phrase.replacingOccurrences(of: "\n", with: " ")), phrase)
         }
-        XCTAssertEqual(WritingPromptComposer.englishPromptVersion, "english-15")
+        XCTAssertEqual(WritingPromptComposer.englishPromptVersion, "english-16")
     }
 
     func testIdiomaticRewritesWhatIsNotNativeAndKeepsTheWritersVoice() {
@@ -148,6 +148,19 @@ final class EnglishPromptTests: XCTestCase {
             ), "\(tone): Gemma's wording is the one measured in 0.7.x")
             XCTAssertFalse(local.contains("write no notes"), "\(tone)")
         }
+    }
+
+    func testCasualAndConciseHaveTheirOwnWording() {
+        for reader in [EnglishPromptReader.appleOnDevice, .localModel] {
+            let casual = compose(.proofread, .casual, profile: .english(reader))
+            XCTAssertTrue(casual.contains("Rewrite the text in a casual tone"), "\(reader)")
+            XCTAssertTrue(casual.contains("Casual means relaxed and conversational"), "\(reader)")
+            XCTAssertTrue(casual.contains("Answer in the language of the text"), "\(reader): an edit, not English from Chinese")
+            let concise = compose(.proofread, .nativeConcise, profile: .english(reader))
+            XCTAssertTrue(concise.contains("Style: concise."), "\(reader)")
+            XCTAssertTrue(concise.contains("Always write the answer in English"), "\(reader)")
+        }
+        XCTAssertTrue(compose(.translate, .casual).contains("Use a casual tone in"))
     }
 
     func testNativeIsNoTranslationTone() {

@@ -17,7 +17,7 @@ public enum WritingPromptComposer {
         translationLanguage: TranslationLanguage = .traditionalChinese
     ) -> String {
         // A tone the task does not offer (native for a translation) is the default one.
-        let tone = mode.supportsTone && !mode.tones.contains(tone) ? WritingTone.preserve : tone
+        let tone = mode.supportsTone && !mode.accepts(tone) ? WritingTone.preserve : tone
         if case .english(let reader) = profile {
             return EnglishWritingPrompts.compose(
                 mode: mode, tone: tone, customPrompt: customPrompt, reader: reader, translationLanguage: translationLanguage
@@ -235,6 +235,11 @@ public enum WritingPromptComposer {
             return translating ? base + "翻譯時，以目標語言中自然的專業語氣表達相同的意思。" : base
         case .idiomatic:
             return "語氣：道地。用母語者真正會用的說法取代不道地的地方，其餘維持原文的正式程度、禮貌、情緒強度、直接程度與說話風格；道地不等於改寫，也不等於華麗。"
+        case .casual:
+            let base = "語氣：輕鬆。像寫給朋友或相處融洽的同事：口語、自然，用縮寫與日常用字，句子短；不用很快過時的流行語。不要加入原文沒有的事實、承諾或意見，也不要改變原文的禮貌程度。"
+            return translating ? base + "翻譯時，以目標語言中自然的口語表達相同的意思。" : base
+        case .nativeConcise:
+            return "語氣：母語人士 · 簡潔。用較少的字表達相同的資訊：刪除贅詞、重複與空洞的客套。簡潔不是摘要：絕不可刪除事實、條件、限制、數字、人名、期限、例外、請求或行動項。"
         case .nativeCasual:
             return "語氣：母語人士 · 輕鬆。像寫給朋友或相處融洽的同事：口語、自然，用縮寫與日常用字，句子短；不用很快過時的流行語。不要加入原文沒有的事實、承諾或意見，也不要改變原文的禮貌程度。"
         case .nativeFormal:

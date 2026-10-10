@@ -22,13 +22,33 @@ public enum WritingMode: String, CaseIterable, Identifiable, Sendable, Codable {
         self != .custom
     }
 
-    /// The tones the task offers, in menu order. A translation goes into the reading language, so
-    /// there is no native English speaker's version of it, and no idiomatic English to make of it.
+    /// The tones the menus offer for the task, in order. A translation goes into the reading language,
+    /// so there is no idiomatic English to make of it.
     public var tones: [WritingTone] {
         switch self {
-        case .proofread: WritingTone.allCases
-        case .translate: WritingTone.allCases.filter { !$0.isNative && $0 != .idiomatic }
+        case .proofread: [.preserve, .idiomatic, .formal, .casual, .concise]
+        case .translate: [.preserve, .formal, .casual, .concise]
         case .custom: []
+        }
+    }
+
+    /// The tones whose prompts can be edited: every tone a request of the task can be written in
+    /// (`WritingTone.effective`), each menu tone followed by what it becomes for Chinese text.
+    public var promptTones: [WritingTone] {
+        switch self {
+        case .proofread: [.preserve, .idiomatic, .native, .formal, .nativeFormal, .casual, .nativeCasual, .concise, .nativeConcise]
+        case .translate: tones
+        case .custom: []
+        }
+    }
+
+    /// Whether the task has a prompt for the tone at all. A translation has none for the tones that
+    /// write English; any other tone of the task, offered or not, is written as asked.
+    public func accepts(_ tone: WritingTone) -> Bool {
+        switch self {
+        case .proofread: true
+        case .translate: !tone.isNative && tone != .idiomatic
+        case .custom: false
         }
     }
 

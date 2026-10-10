@@ -114,26 +114,41 @@ final class WritingSettingsMigrationTests: XCTestCase {
         XCTAssertEqual(WritingSettingsMigration.migrateOverrides([:]), [:])
     }
 
+    func testOverridesOfToneThatAreNoLongerOfferedMoveToTheToneTheyMeanNow() {
+        let migrated = WritingSettingsMigration.migrateRetiredToneOverrides([
+            "proofread|professional": "P", "translate|professional": "T", "proofread|nativeGenZ": "G", "other": "x",
+        ])
+        XCTAssertEqual(migrated["proofread|formal"], "P")
+        XCTAssertEqual(migrated["translate|formal"], "T")
+        XCTAssertEqual(migrated["proofread|nativeCasual"], "G")
+        XCTAssertEqual(migrated["proofread|professional"], "P", "the old key is left in place")
+        XCTAssertEqual(migrated["other"], "x")
+        XCTAssertEqual(WritingSettingsMigration.migrateRetiredToneOverrides(migrated), migrated, "running it again changes nothing")
+        let own = WritingSettingsMigration.migrateRetiredToneOverrides(["proofread|professional": "P", "proofread|formal": "F"])
+        XCTAssertEqual(own["proofread|formal"], "F", "a tone's own override is never overwritten")
+        XCTAssertEqual(WritingSettingsMigration.migrateRetiredToneOverrides([:]), [:])
+    }
+
     // MARK: a tone for each task
 
     func testProofreadAndTranslateRememberTheirTonesIndependently() {
         var memory = WritingToneMemory()
-        memory.set(.professional, for: .proofread)
+        memory.set(.concise, for: .proofread)
         XCTAssertEqual(memory.tone(for: .translate), .preserve)
 
         memory.set(.formal, for: .translate)
-        XCTAssertEqual(memory.tone(for: .proofread), .professional)
+        XCTAssertEqual(memory.tone(for: .proofread), .concise)
         XCTAssertEqual(memory.tone(for: .translate), .formal)
     }
 
     func testGoingFromOneTaskToAnotherAndBackFindsTheToneWhereItWasLeft() {
         var memory = WritingToneMemory()
-        memory.set(.professional, for: .proofread)
+        memory.set(.casual, for: .proofread)
         var seen: [WritingTone] = []
         for mode in [WritingMode.proofread, .translate, .proofread] {
             seen.append(memory.tone(for: mode))
         }
-        XCTAssertEqual(seen, [.professional, .preserve, .professional])
+        XCTAssertEqual(seen, [.casual, .preserve, .casual])
     }
 
     func testCustomHasNoToneToRemember() {

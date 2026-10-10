@@ -27,6 +27,8 @@ struct FloatingPanelView: View {
                 if viewModel.mode.supportsTone {
                     Picker("語氣", selection: $viewModel.tone) {
                         ForEach(viewModel.mode.tones) { tone in
+                            // How much to change (preserve, idiomatic), then the styles.
+                            if tone == .formal { Divider() }
                             Text(tone.title).tag(tone)
                         }
                     }

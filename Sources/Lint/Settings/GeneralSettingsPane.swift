@@ -124,6 +124,11 @@ struct GeneralSettingsPane: View {
                     Text(verbatim: language.englishName).tag(language)
                 }
             }
+            Picker("中英夾雜的文字", selection: Bindable(app.settings).mixedTextHandling) {
+                ForEach(MixedTextHandling.allCases) { handling in
+                    Text(handling.title).tag(handling)
+                }
+            }
         } header: {
             Text("語言")
         } footer: {
@@ -131,6 +136,8 @@ struct GeneralSettingsPane: View {
                 Text("重新啟動 Lint 後才會切換語言；若使用本機模型，重新啟動時模型服務會一併重載。")
                     .sectionNote()
                 Text("「翻譯」模式與建議下方的參考譯文都用翻譯語言，立即生效。Lint 只把英文翻成這個語言，不會翻成英文。")
+                    .sectionNote()
+                Text("校對時，「道地」「正式」「輕鬆」「簡潔」會把中文寫成英文；中英夾雜的文字照這裡的選擇。「保留原語氣」一律只改英文。")
                     .sectionNote()
             }
         }

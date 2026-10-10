@@ -192,6 +192,11 @@
 "語氣" = "Nada";
 "保留原語氣" = "Pertahankan Nada";
 "道地" = "Alami";
+"中文 → 英文" = "Mandarin → Inggris";
+"整段寫成英文" = "Tulis semuanya dalam bahasa Inggris";
+"保留中文，只改英文" = "Pertahankan Mandarin, ubah bahasa Inggris saja";
+"中英夾雜的文字" = "Teks campuran Mandarin dan Inggris";
+"校對時，「道地」「正式」「輕鬆」「簡潔」會把中文寫成英文；中英夾雜的文字照這裡的選擇。「保留原語氣」一律只改英文。" = "Saat mengoreksi, Alami, Formal, Santai, dan Ringkas menulis Mandarin menjadi bahasa Inggris; teks campuran mengikuti pilihan di sini. Pertahankan Nada selalu hanya mengubah bahasa Inggris.";
 "正式" = "Formal";
 "簡潔" = "Ringkas";
 "專業" = "Profesional";

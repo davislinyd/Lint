@@ -21,11 +21,11 @@ struct PromptSettingsPane: View {
                 .pickerStyle(.menu)
                 .fixedSize()
                 .onChange(of: mode) {
-                    if mode.supportsTone, !mode.tones.contains(tone) { tone = .preserve }
+                    if mode.supportsTone, !mode.promptTones.contains(tone) { tone = .preserve }
                 }
                 if mode.supportsTone {
                     Picker("語氣", selection: $tone) {
-                        ForEach(mode.tones) { tone in
+                        ForEach(mode.promptTones) { tone in
                             Text(tone.title).tag(tone)
                         }
                     }

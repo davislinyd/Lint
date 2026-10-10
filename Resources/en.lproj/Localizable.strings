@@ -192,6 +192,11 @@
 "語氣" = "Tone";
 "保留原語氣" = "Preserve Tone";
 "道地" = "Idiomatic";
+"中文 → 英文" = "Chinese → English";
+"整段寫成英文" = "Write it all in English";
+"保留中文，只改英文" = "Keep the Chinese, edit only the English";
+"中英夾雜的文字" = "Mixed Chinese and English";
+"校對時，「道地」「正式」「輕鬆」「簡潔」會把中文寫成英文；中英夾雜的文字照這裡的選擇。「保留原語氣」一律只改英文。" = "When proofreading, Idiomatic, Formal, Casual and Concise write Chinese as English; mixed Chinese and English follows the choice here. Preserve Tone always edits only the English.";
 "正式" = "Formal";
 "簡潔" = "Concise";
 "專業" = "Professional";

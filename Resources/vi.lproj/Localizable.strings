@@ -191,6 +191,7 @@
 "自訂 Prompt" = "Prompt tùy chỉnh";
 "語氣" = "Giọng văn";
 "保留原語氣" = "Giữ giọng văn gốc";
+"道地" = "Tự nhiên";
 "正式" = "Trang trọng";
 "簡潔" = "Ngắn gọn";
 "專業" = "Chuyên nghiệp";
@@ -380,6 +381,7 @@
 "Apple Intelligence 無法產生建議，請再試一次。" = "Apple Intelligence không tạo được gợi ý. Hãy thử lại.";
 "模型的建議改動過多或漏掉了原文內容，所以保留原文。" = "Gợi ý của mô hình thay đổi quá nhiều hoặc làm mất một phần văn bản, nên văn bản gốc được giữ nguyên.";
 "這份結果可能漏掉或改動了原文的部分內容，使用前請先核對。" = "Kết quả này có thể đã làm mất hoặc thay đổi một phần văn bản gốc. Hãy kiểm tra trước khi dùng.";
+"這份結果的語氣可能和原文略有不同，使用前請先核對。" = "Giọng văn của kết quả này có thể hơi khác bản gốc. Hãy kiểm tra trước khi dùng.";
 "Apple Intelligence 可以使用時就用它；不能用時，改用已經設定好的 Lint 本機 AI。不會因此自動下載模型。" = "Dùng Apple Intelligence khi có thể; nếu không, dùng AI cục bộ của Lint nếu đã được thiết lập. Không tự động tải mô hình nào về.";
 "使用 macOS 內建的裝置端模型，不需要另外下載模型。" = "Dùng mô hình trên thiết bị do macOS cung cấp. Không cần tải mô hình riêng.";
 "使用 Lint 下載到這台 Mac 的本機模型，記憶體與磁碟用量較高。" = "Dùng mô hình cục bộ mà Lint tải về máy Mac này. Tốn nhiều bộ nhớ và dung lượng đĩa hơn.";

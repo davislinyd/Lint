@@ -28,6 +28,9 @@ struct WritingEvalCase: Decodable {
     var expectUnchanged: Bool?
     /// A list or an email: the lines have to survive.
     var preserveLineStructure: Bool?
+    /// The tone promises the writer's own voice: the answer may fix wording but has to keep
+    /// questions, exclamations, emoji, contractions, hedges and length (`VoiceCheck`).
+    var keepsVoice: Bool?
     /// For the human reading the report; nothing checks it.
     var note: String
 
@@ -35,10 +38,11 @@ struct WritingEvalCase: Decodable {
     var writingTone: WritingTone { WritingTone(rawValue: tone) ?? .preserve }
 
     /// Exactly the system prompt the app sends for this case with the given engine. The standard
-    /// one has the bubble's "bare text only" line, as a selection suggestion does.
-    func systemPrompt(profile: WritingPromptProfile) -> String {
+    /// one has the bubble's "bare text only" line, as a selection suggestion does. `tone` runs the
+    /// case in another tone than its own, to compare tones on the same text.
+    func systemPrompt(profile: WritingPromptProfile, tone: WritingTone? = nil) -> String {
         let prompt = WritingPromptComposer.compose(
-            mode: writingMode, tone: writingTone, customPrompt: "", profile: profile
+            mode: writingMode, tone: tone ?? writingTone, customPrompt: "", profile: profile
         )
         return profile == .standard ? prompt + "\n回覆只要修正後的全文，不要解釋。" : prompt
     }
@@ -127,6 +131,16 @@ enum WritingEvalChecks {
                 failures.append(Failure(check: "taiwan-wording", detail: mainland.joined(separator: ", ")))
             }
         }
+        // No task turns a text into bullets or numbered notes it did not have.
+        if WritingOutputGuard.listLines(in: output) > WritingOutputGuard.listLines(in: input) {
+            failures.append(Failure(check: "added-list", detail: "list lines the text did not have"))
+        }
+        if testCase.keepsVoice == true {
+            let changes = VoiceCheck.changes(from: input, to: output)
+            if !changes.isEmpty {
+                failures.append(Failure(check: "voice", detail: changes.map(\.description).joined(separator: ", ")))
+            }
+        }
         if testCase.expectUnchanged == true, output != input {
             failures.append(Failure(check: "unchanged", detail: "text that was already correct was rewritten"))
         }
@@ -173,14 +187,8 @@ enum WritingEvalChecks {
     }
 
     /// n't, 'm, 're, 've, 'll, 'd, and the 's of it's, that's, let's and the like. A possessive is not one.
-    private static let contractionPattern = try! NSRegularExpression(
-        pattern: #"\b(?:\w+n['\u2019]t|i['\u2019]m|\w+['\u2019](?:re|ve|ll|d)|(?:it|that|let|there|here|what|he|she|who|how|where|when)['\u2019]s)\b"#,
-        options: [.caseInsensitive]
-    )
-
     static func contractions(in text: String) -> [String] {
-        let range = NSRange(text.startIndex..., in: text)
-        return contractionPattern.matches(in: text, range: range).compactMap { Range($0.range, in: text).map { String(text[$0]) } }
+        VoiceCheck.contractions(in: text)
     }
 
     static func languageFailure(_ expected: WritingEvalCase.Language, in output: String) -> String? {

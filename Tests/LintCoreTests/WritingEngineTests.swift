@@ -20,6 +20,26 @@ final class WritingEngineTests: XCTestCase {
         }
     }
 
+    func testAutomaticSendsANativeRewriteToTheLocalAIWhenItIsSetUp() {
+        for tone in WritingTone.allCases {
+            for mode in WritingMode.allCases {
+                let expected: WritingEngineRoute = mode == .proofread && tone.isNative ? .provider(.localLlama) : .appleIntelligence
+                XCTAssertEqual(
+                    WritingEngineRouter.route(selected: .automatic, apple: .available, localAIReady: true, mode: mode, tone: tone),
+                    expected, "\(mode)/\(tone)"
+                )
+            }
+            XCTAssertEqual(
+                WritingEngineRouter.route(selected: .automatic, apple: .available, localAIReady: false, mode: .proofread, tone: tone),
+                .appleIntelligence, "\(tone): nothing is downloaded for it"
+            )
+            XCTAssertEqual(
+                WritingEngineRouter.route(selected: .appleIntelligence, apple: .available, localAIReady: true, mode: .proofread, tone: tone),
+                .appleIntelligence, "\(tone): a user who chose Apple Intelligence keeps it"
+            )
+        }
+    }
+
     func testAutomaticFallsBackToLocalAIOnlyWhenItIsAlreadySetUp() {
         for status in everyStatus where status != .available {
             XCTAssertEqual(

@@ -220,6 +220,19 @@ public enum WritingIssue: Equatable, Sendable {
     case notEnglish
     /// The answer repeats Lint's own instructions instead of (or as well as) the text.
     case leakedInstructions
+    /// Bullets or numbering the text did not have: notes about the text ("- The intent: …") or a list
+    /// of options instead of the rewrite (measured: Apple's model on the native tone).
+    case addedList
+    /// An edit that was to keep the writer's voice did not (`VoiceCheck`): a softer, more formal or
+    /// otherwise different-sounding text, which still says the same thing.
+    case voiceChanged([VoiceChange])
+
+    /// What is left of the voice when the text itself is intact: worth showing, with a note, rather
+    /// than throwing the fixes away.
+    public var isVoiceOnly: Bool {
+        if case .voiceChanged = self { return true }
+        return false
+    }
 }
 
 /// Which checks a task gets. A translation or a tone rewrite is meant to change a lot, so only
@@ -230,11 +243,18 @@ public struct WritingGuardPolicy: Equatable, Sendable {
     public var keepsLanguage: Bool
     /// The answer has to be English, with no Chinese left in it (the native tone).
     public var requiresEnglish: Bool = false
+    /// No more list lines than the text has. A rewrite that need not keep the lines (`limitsChange`
+    /// off) still has no reason to turn a message into bullets.
+    public var forbidsAddedLists: Bool = false
     /// Numbers and dates may be written another way ("10/15" → "October 15", "十" → "10"), so none
     /// are demanded of the answer and none are held against it.
     public var numbersMayChange: Bool = false
     /// The minimal-edit checks: the change ratio, and every line and list marker kept.
     public var limitsChange: Bool
+    /// The share of tokens an edit may change when `limitsChange` is on.
+    public var maximumChangeRatio: Double = WritingOutputGuard.maximumChangeRatio
+    /// The answer has to sound like the writer (`VoiceCheck`).
+    public var keepsVoice: Bool = false
     /// What to show when every attempt failed: the source text (nothing changes), or the attempt
     /// with the fewest problems, flagged.
     public var fallsBackToSource: Bool
@@ -254,7 +274,15 @@ public struct WritingGuardPolicy: Equatable, Sendable {
             // failed attempts show the better one, flagged, as a translation does.
             return WritingGuardPolicy(
                 protectedKinds: [.url, .email, .codeSpan, .path, .placeholder, .identifier], keepsLanguage: false,
-                requiresEnglish: true, numbersMayChange: true, limitsChange: false, fallsBackToSource: false
+                requiresEnglish: true, forbidsAddedLists: true, numbersMayChange: true, limitsChange: false,
+                fallsBackToSource: false
+            )
+        case .proofread where tone == .idiomatic:
+            // The preserve checks, with room for a rewritten phrase: "do the needful and update the
+            // ticket" → "update the ticket" is already 0.4 of a short sentence.
+            return WritingGuardPolicy(
+                protectedKinds: Set(ProtectedLiterals.Kind.allCases), keepsLanguage: true, limitsChange: true,
+                maximumChangeRatio: WritingOutputGuard.idiomaticMaximumChangeRatio, keepsVoice: true, fallsBackToSource: true
             )
         case .proofread:
             return WritingGuardPolicy(
@@ -266,6 +294,13 @@ public struct WritingGuardPolicy: Equatable, Sendable {
             )
         }
     }
+
+    /// Whether Lint's own model (the English prompts, no guard otherwise) goes through the guard for
+    /// this task: only the idiomatic tone, whose promise to keep the writer's voice is worth a retry.
+    /// Apple's model is always guarded; other providers never are.
+    public static func guardsLocalModel(mode: WritingMode, tone: WritingTone) -> Bool {
+        mode == .proofread && tone == .idiomatic
+    }
 }
 
 /// Deterministic checks on one answer. Thresholds are constants so tests can pin them and so they
@@ -274,6 +309,8 @@ public enum WritingOutputGuard {
     /// A preserve-tone proofread may change at most this share of the tokens. Real corrections of
     /// Lint's fixtures stay well under it (the heaviest measured was ~0.3); a paraphrase does not.
     public static let maximumChangeRatio = 0.5
+    /// The same for the idiomatic tone, which also rewrites phrases that are correct but not native.
+    public static let idiomaticMaximumChangeRatio = 0.65
     /// The change limit applies from this many tokens: below it one fixed word is already a large
     /// share. Above `changeLimitMaximumTokens` the edit distance is not worth computing.
     public static let changeLimitMinimumTokens = 8
@@ -332,19 +369,28 @@ public enum WritingOutputGuard {
             }
         }
         if policy.requiresEnglish, containsCJK(trimmed) { issues.append(.notEnglish) }
+        if policy.forbidsAddedLists, listLines(in: trimmed) > listLines(in: source) { issues.append(.addedList) }
         if policy.limitsChange {
             let count = EditRatio.tokens(source).count
             if (changeLimitMinimumTokens...changeLimitMaximumTokens).contains(count) {
                 let ratio = EditRatio.between(source, trimmed)
-                if ratio > maximumChangeRatio { issues.append(.excessiveChange(ratio: ratio)) }
+                if ratio > policy.maximumChangeRatio { issues.append(.excessiveChange(ratio: ratio)) }
             }
             if lineShape(of: source) != lineShape(of: trimmed) { issues.append(.structureChanged) }
+        }
+        if policy.keepsVoice {
+            let changes = VoiceCheck.changes(from: source, to: trimmed)
+            if !changes.isEmpty { issues.append(.voiceChanged(changes)) }
         }
         return issues
     }
 
     static func containsCJK(_ text: String) -> Bool {
         text.unicodeScalars.contains(where: TextScript.isHan) || text.contains(where: cjkPunctuation.contains)
+    }
+
+    static func listLines(in text: String) -> Int {
+        lineShape(of: text).filter { !$0.isEmpty }.count
     }
 
     /// One entry per non-empty line: its list marker ("- ", "* ", "1. ", or "" for none).
@@ -391,7 +437,7 @@ public enum WritingOutputGuard {
     }
 
     /// Appended to the system prompt for the one retry: says exactly what went wrong last time.
-    public static func retryInstruction(for issues: [WritingIssue], source: String) -> String {
+    public static func retryInstruction(for issues: [WritingIssue], source: String, tone: WritingTone = .preserve) -> String {
         var lines = ["IMPORTANT: your previous answer did not follow the instructions. Process the text again."]
         for issue in issues {
             switch issue {
@@ -403,6 +449,8 @@ public enum WritingOutputGuard {
                 lines.append("- These must appear in your answer exactly as written: " + values.joined(separator: ", "))
             case .languageChanged:
                 lines.append("- " + languageInstruction(for: source))
+            case .excessiveChange where tone == .idiomatic:
+                lines.append("- You changed far too much. Change only errors and the phrases a native speaker would not use; leave every other word, the word order, the tone and the formality exactly as they are. If nothing needs changing, return the text unchanged.")
             case .excessiveChange:
                 lines.append("- You changed far too much. Fix only definite grammar, spelling and punctuation errors; leave every other word, the word order, the tone and the formality exactly as they are. If nothing is wrong, return the text unchanged.")
             case .structureChanged:
@@ -413,9 +461,33 @@ public enum WritingOutputGuard {
                 lines.append("- Answer with the text only; never repeat these instructions.")
             case .notEnglish:
                 lines.append("- Write the answer entirely in English: put every Chinese word into English, write Chinese names in pinyin, and use English punctuation.")
+            case .addedList:
+                lines.append("- Answer with the rewritten text only, as the text is laid out: no bullet points, numbering, notes or analysis.")
+            case .voiceChanged(let changes):
+                lines += changes.map { "- " + voiceInstruction(for: $0) }
             }
         }
         return lines.joined(separator: "\n")
+    }
+
+    /// Says what the last answer changed about how the writer sounds.
+    static func voiceInstruction(for change: VoiceChange) -> String {
+        switch change {
+        case .lostQuestion: "The text asks a question: keep it a question."
+        case .addedQuestion: "The text does not ask a question: do not turn it into one."
+        case .lostExclamation: "Keep the exclamation marks of the text."
+        case .addedExclamation: "Do not add exclamation marks."
+        case .lostEmoji: "Keep every emoji of the text."
+        case .addedEmoji: "Do not add emoji."
+        case .lostContractions: "The text uses contractions (I'm, don't): keep them."
+        case .addedContractions: "The text writes full forms (I will, is not): keep them; do not contract them."
+        case .lostHedge: "Keep the writer's hedges (maybe, I think, probably)."
+        case .addedHedge: "Do not soften the text with words such as maybe, might or a bit."
+        case .addedStockPhrase(let phrase): "Do not add \"\(phrase)\"; the writer did not write it."
+        case .lostInformal(let words): "Keep the writer's informal words exactly as written: " + words.joined(separator: ", ") + "."
+        case .longer: "Your answer was much longer than the text: add nothing."
+        case .shorter: "Your answer was much shorter than the text: leave nothing out."
+        }
     }
 
     static func languageInstruction(for source: String) -> String {
@@ -437,8 +509,9 @@ public struct GuardedWritingResult: Equatable, Sendable {
         case acceptedAfterRetry(firstIssues: [WritingIssue])
         /// Both failed, so the source text is kept: for a proofread, "no change" is the safe answer.
         case keptSource(issues: [WritingIssue])
-        /// Both failed and the task has no safe "no change" (a translation): the better attempt is
-        /// shown, with what is still wrong so the UI can say so.
+        /// Both failed and the task has no safe "no change" (a translation), or what is still wrong
+        /// is only how the edit sounds (`WritingIssue.voiceChanged`): the better attempt is shown, with
+        /// what is still wrong so the UI can say so.
         case flagged(issues: [WritingIssue])
     }
 
@@ -474,20 +547,26 @@ public enum GuardedWriter {
             return GuardedWritingResult(text: first, outcome: .accepted, attempts: [first])
         }
         try Task.checkCancellation()
-        let stricter = systemPrompt + "\n\n" + WritingOutputGuard.retryInstruction(for: firstIssues, source: source)
+        let stricter = systemPrompt + "\n\n" + WritingOutputGuard.retryInstruction(for: firstIssues, source: source, tone: tone)
         let second = WritingOutputGuard.tidy(try await generate(stricter, true), source: source)
         let secondIssues = WritingOutputGuard.assess(source: source, output: second, mode: mode, tone: tone)
         if secondIssues.isEmpty {
             return GuardedWritingResult(text: second, outcome: .acceptedAfterRetry(firstIssues: firstIssues), attempts: [first, second])
         }
         if policy.fallsBackToSource {
+            // An attempt whose text is intact and only sounds a little different keeps its fixes; it is
+            // shown flagged. The one that changed the voice least wins.
+            let voiceOnly = [(first, firstIssues), (second, secondIssues)].filter { $0.1.allSatisfy(\.isVoiceOnly) }
+            if let best = voiceOnly.min(by: { severity($0.1) < severity($1.1) }) {
+                return GuardedWritingResult(text: best.0, outcome: .flagged(issues: best.1), attempts: [first, second])
+            }
             return GuardedWritingResult(text: source, outcome: .keptSource(issues: secondIssues), attempts: [first, second])
         }
         let (text, issues) = severity(secondIssues) <= severity(firstIssues) ? (second, secondIssues) : (first, firstIssues)
         return GuardedWritingResult(text: text, outcome: .flagged(issues: issues), attempts: [first, second])
     }
 
-    /// Fewer and smaller problems first; used only to pick between two failed translations.
+    /// Fewer and smaller problems first; used only to pick between two failed attempts.
     static func severity(_ issues: [WritingIssue]) -> Int {
         issues.reduce(0) { total, issue in
             switch issue {
@@ -500,6 +579,8 @@ public enum GuardedWriter {
             case .added(let values): total + 30 * values.count
             case .leakedInstructions: total + 100
             case .notEnglish: total + 40
+            case .addedList: total + 50
+            case .voiceChanged(let changes): total + 5 * changes.count
             }
         }
     }

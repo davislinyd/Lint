@@ -192,6 +192,30 @@ extension WritingIssue {
         case .added(let items): "added×\(items.count)"
         case .leakedInstructions: "leakedInstructions"
         case .notEnglish: "notEnglish"
+        case .addedList: "addedList"
+        case .voiceChanged(let changes): "voiceChanged(\(changes.map(\.diagnosticName).joined(separator: "+")))"
+        }
+    }
+}
+
+extension VoiceChange {
+    /// The kind of change only: a stock phrase or an informal word is never logged.
+    var diagnosticName: String {
+        switch self {
+        case .lostQuestion: "lostQuestion"
+        case .addedQuestion: "addedQuestion"
+        case .lostExclamation: "lostExclamation"
+        case .addedExclamation: "addedExclamation"
+        case .lostEmoji: "lostEmoji"
+        case .addedEmoji: "addedEmoji"
+        case .lostContractions: "lostContractions"
+        case .addedContractions: "addedContractions"
+        case .lostHedge: "lostHedge"
+        case .addedHedge: "addedHedge"
+        case .addedStockPhrase: "addedStockPhrase"
+        case .lostInformal: "lostInformal"
+        case .longer: "longer"
+        case .shorter: "shorter"
         }
     }
 }

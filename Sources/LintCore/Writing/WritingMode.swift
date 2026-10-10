@@ -23,11 +23,11 @@ public enum WritingMode: String, CaseIterable, Identifiable, Sendable, Codable {
     }
 
     /// The tones the task offers, in menu order. A translation goes into the reading language, so
-    /// there is no native English speaker's version of it.
+    /// there is no native English speaker's version of it, and no idiomatic English to make of it.
     public var tones: [WritingTone] {
         switch self {
         case .proofread: WritingTone.allCases
-        case .translate: WritingTone.allCases.filter { !$0.isNative }
+        case .translate: WritingTone.allCases.filter { !$0.isNative && $0 != .idiomatic }
         case .custom: []
         }
     }

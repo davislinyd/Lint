@@ -24,7 +24,28 @@ public enum WritingEngineRouter {
     ///   if it is already set up. Nothing is ever downloaded because Apple Intelligence is missing.
     /// - `.appleIntelligence`: only Apple Intelligence; when it is unavailable, say why.
     /// - anything else: that provider, as before.
+    ///
+    /// Under Automatic, a native-speaker rewrite (`WritingTone.isNative`) goes to Lint's local AI when
+    /// it is set up, even if Apple Intelligence is available: measured, Apple's model replies to the
+    /// text instead of rewriting it in about 3 of 29 English texts even with its own prompt and the
+    /// guard. A user who chose Apple Intelligence keeps it.
     public static func route(
+        selected: ProviderKind, apple: AppleIntelligenceStatus, localAIReady: Bool,
+        mode: WritingMode? = nil, tone: WritingTone? = nil
+    ) -> WritingEngineRoute {
+        let route = baseRoute(selected: selected, apple: apple, localAIReady: localAIReady)
+        if selected == .automatic, route == .appleIntelligence, localAIReady, prefersLocalModel(mode: mode, tone: tone) {
+            return .provider(.localLlama)
+        }
+        return route
+    }
+
+    /// The tasks that go to Lint's local AI rather than Apple Intelligence when both are ready.
+    public static func prefersLocalModel(mode: WritingMode?, tone: WritingTone?) -> Bool {
+        mode == .proofread && tone?.isNative == true
+    }
+
+    private static func baseRoute(
         selected: ProviderKind, apple: AppleIntelligenceStatus, localAIReady: Bool
     ) -> WritingEngineRoute {
         switch selected {

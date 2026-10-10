@@ -8,9 +8,9 @@ import XCTest
 final class WritingEvalFixtureTests: XCTestCase {
     func testTheFixturesCoverLintsWorkloadAndAreWellFormed() throws {
         let fixtures = try WritingEvalFixtures.load()
-        XCTAssertEqual(fixtures.version, 8)
-        XCTAssertGreaterThanOrEqual(fixtures.cases.count, 60, "the set is meant to be about 60-140 cases")
-        XCTAssertLessThanOrEqual(fixtures.cases.count, 140)
+        XCTAssertEqual(fixtures.version, 9)
+        XCTAssertGreaterThanOrEqual(fixtures.cases.count, 60, "the set is meant to be about 60-160 cases")
+        XCTAssertLessThanOrEqual(fixtures.cases.count, 160)
         XCTAssertEqual(Set(fixtures.cases.map(\.id)).count, fixtures.cases.count, "ids are unique")
 
         let categories = Set(fixtures.cases.map(\.category))
@@ -23,7 +23,7 @@ final class WritingEvalFixtureTests: XCTestCase {
             "ip-address", "shell-command", "code-identifier", "currency", "file-path", "product-names",
             "english-natural", "english-holdout", "mixed-english",
             "native-zh", "native-mixed", "native-english", "native-urls", "native-list", "native-already-english",
-            "native-casual", "native-formal", "native-genz",
+            "native-casual", "native-formal", "native-genz", "idiomatic", "idiomatic-already",
         ] {
             XCTAssertTrue(categories.contains(wanted), "no fixture for \(wanted)")
         }
@@ -62,6 +62,12 @@ final class WritingEvalFixtureTests: XCTestCase {
                 XCTAssertEqual(testCase.outputLanguage, expected, "\(testCase.id): only English is proofread")
             }
         }
+        // Correct English that a native speaker would not write, in every register: the fix has to
+        // keep the voice, so each one is checked for it.
+        let idiomatic = fixtures.cases.filter { $0.category == "idiomatic" }
+        XCTAssertGreaterThanOrEqual(idiomatic.count, 10)
+        XCTAssertTrue(idiomatic.allSatisfy { $0.keepsVoice == true && !($0.mustFix ?? []).isEmpty })
+        XCTAssertGreaterThanOrEqual(fixtures.cases.filter { $0.category == "idiomatic-already" && $0.expectUnchanged == true }.count, 4)
         XCTAssertGreaterThanOrEqual(
             fixtures.cases.filter { $0.expectUnchanged == true }.count, 15,
             "enough already-correct text for the clean sentence change rate to mean something"
@@ -114,6 +120,31 @@ final class WritingEvalFixtureTests: XCTestCase {
                 .contains { $0.check == "fixes" }
         )
         XCTAssertGreaterThanOrEqual(fixtures.cases.filter { $0.category == "english-natural" }.count, 10)
+    }
+
+    func testAFixThatChangesTheVoiceIsCaught() throws {
+        let fixtures = try WritingEvalFixtures.load()
+        let complaint = try XCTUnwrap(fixtures.cases.first { $0.id == "idio-03" })
+        XCTAssertTrue(WritingEvalChecks.run(
+            complaint, output: "This tool is such a pain! I have to fill out the same form every single time. Who designed this?"
+        ).isEmpty)
+        let softened = WritingEvalChecks.run(
+            complaint, output: "This tool could be more convenient. I have to fill out the same form each time, so perhaps the design could be revisited."
+        )
+        XCTAssertEqual(softened.map(\.check), ["voice"])
+        XCTAssertEqual(softened.first?.detail, "question lost, exclamation lost, hedge added")
+        let grammar = try XCTUnwrap(fixtures.cases.first { $0.id == "en-grammar-01" })
+        XCTAssertNil(grammar.keepsVoice, "only the tones that promise the voice are held to it")
+    }
+
+    func testNotesInsteadOfTheTextAreCaught() throws {
+        let fixtures = try WritingEvalFixtures.load()
+        let native = try XCTUnwrap(fixtures.cases.first { $0.id == "native-06" })
+        XCTAssertTrue(
+            WritingEvalChecks.run(native, output: "- The intent: a status update.\n- The tone: neutral.").contains { $0.check == "added-list" }
+        )
+        let list = try XCTUnwrap(fixtures.cases.first { $0.category == "native-list" })
+        XCTAssertFalse(WritingEvalChecks.run(list, output: list.input).contains { $0.check == "added-list" })
     }
 
     func testTraditionalChineseOutputIsCheckedForSimplifiedCharactersAndMainlandTerms() throws {

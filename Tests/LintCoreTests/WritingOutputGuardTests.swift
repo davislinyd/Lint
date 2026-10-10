@@ -114,6 +114,45 @@ final class WritingOutputGuardTests: XCTestCase {
         )
     }
 
+    func testIdiomaticHasRoomForARewrittenPhraseButNotForAParaphrase() {
+        let source = "May I know when you will be free to have a call with us?"
+        let idiomatic = "When would you be available for a call with us?"
+        XCTAssertTrue(
+            WritingOutputGuard.assess(source: source, output: idiomatic, mode: .proofread, tone: .preserve)
+                .contains { if case .excessiveChange = $0 { true } else { false } },
+            "more than a correction"
+        )
+        XCTAssertEqual(WritingOutputGuard.assess(source: source, output: idiomatic, mode: .proofread, tone: .idiomatic), [])
+        let paraphrase = "Could you let us know a convenient time for a quick phone discussion sometime soon?"
+        XCTAssertTrue(
+            WritingOutputGuard.assess(source: source, output: paraphrase, mode: .proofread, tone: .idiomatic)
+                .contains { if case .excessiveChange = $0 { true } else { false } }
+        )
+        let policy = try! XCTUnwrap(WritingGuardPolicy.for(mode: .proofread, tone: .idiomatic))
+        XCTAssertTrue(policy.keepsLanguage && policy.limitsChange && policy.fallsBackToSource)
+        XCTAssertEqual(policy.protectedKinds, Set(ProtectedLiterals.Kind.allCases), "numbers and acronyms stay, as in preserve")
+        XCTAssertEqual(policy.maximumChangeRatio, WritingOutputGuard.idiomaticMaximumChangeRatio)
+        XCTAssertEqual(WritingGuardPolicy.for(mode: .proofread, tone: .preserve)?.maximumChangeRatio, WritingOutputGuard.maximumChangeRatio)
+    }
+
+    func testOnlyIdiomaticGuardsLintsOwnModel() {
+        for mode in WritingMode.allCases {
+            for tone in WritingTone.allCases {
+                XCTAssertEqual(
+                    WritingGuardPolicy.guardsLocalModel(mode: mode, tone: tone), mode == .proofread && tone == .idiomatic, "\(mode)/\(tone)"
+                )
+            }
+        }
+    }
+
+    func testTheRetryForAnIdiomaticEditStillAllowsNativePhrasing() {
+        let issues = [WritingIssue.excessiveChange(ratio: 0.8)]
+        let idiomatic = WritingOutputGuard.retryInstruction(for: issues, source: "x", tone: .idiomatic)
+        XCTAssertTrue(idiomatic.contains("the phrases a native speaker would not use"))
+        XCTAssertFalse(idiomatic.contains("Fix only definite grammar"))
+        XCTAssertTrue(WritingOutputGuard.retryInstruction(for: issues, source: "x").contains("Fix only definite grammar"))
+    }
+
     func testTheChangeLimitLeavesVeryShortTextAlone() {
         XCTAssertEqual(
             WritingOutputGuard.assess(source: "thx bro", output: "Thanks, bro.", mode: .proofread, tone: .preserve), [],
@@ -330,6 +369,41 @@ final class WritingOutputGuardTests: XCTestCase {
         XCTAssertEqual(invented, [.added(["bob@example.com"])])
     }
 
+    func testANativeRewriteThatTurnsTheTextIntoBulletsIsCaught() {
+        let notes = "- The message: A build failed again.\n- The intent: A request for assistance.\n\nCan someone check the build?"
+        XCTAssertTrue(
+            WritingOutputGuard.assess(source: "ugh, the build broke again 😩 can someone take a look?", output: notes, mode: .proofread, tone: .native)
+                .contains(.addedList)
+        )
+        XCTAssertEqual(
+            WritingOutputGuard.assess(source: "Please reply me as soon as possible.", output: "1. Please get back to me ASAP.", mode: .proofread, tone: .nativeCasual),
+            [.addedList], "one numbered line is a list too"
+        )
+        XCTAssertFalse(
+            WritingOutputGuard.assess(
+                source: "- 確認客戶的付款狀態\n- 把發票寄給財務部", output: "- Check the client's payment status\n- Send the invoice to finance",
+                mode: .proofread, tone: .native
+            ).contains(.addedList), "the text's own list stays a list"
+        )
+        XCTAssertFalse(
+            WritingOutputGuard.assess(source: "這週我比較忙，下週再約可以嗎？", output: "I'm swamped this week.\nCould we meet next week instead?", mode: .proofread, tone: .native)
+                .contains(.addedList), "a native rewrite may split lines"
+        )
+    }
+
+    func testANativeRewriteWithNotesIsRetriedAsPlainText() async throws {
+        let source = "May I know when you will be free to have a call with us?"
+        let answered = "- I'll check my calendar and get back to you soon.\n- I'm tied up right now, so let me know a good window for us."
+        let rewrite = "When would you be free for a call with us?"
+        let script = Script([answered, rewrite])
+        let result = try await GuardedWriter.run(source: source, mode: .proofread, tone: .native, systemPrompt: "P") {
+            script.next($0, $1)
+        }
+        XCTAssertEqual(result.text, rewrite)
+        XCTAssertEqual(result.outcome, .acceptedAfterRetry(firstIssues: [.addedList]))
+        XCTAssertTrue(script.prompts[1].contains("no bullet points, numbering, notes or analysis"))
+    }
+
     func testTheRetryForANativeRewriteSaysToWriteEnglish() {
         let lines = WritingOutputGuard.retryInstruction(for: [.notEnglish], source: "我已經把報告寄給客戶了。")
         XCTAssertTrue(lines.contains("entirely in English"))
@@ -463,6 +537,76 @@ final class WritingOutputGuardTests: XCTestCase {
         }
         XCTAssertEqual(result.outcome, .accepted)
         XCTAssertEqual(script.prompts.count, 1)
+    }
+
+    // MARK: - The writer's voice (idiomatic)
+
+    private let fullForms = "Sorry for letting you wait so long. I will send the report before 5 pm."
+    private let contracted = "Sorry to keep you waiting so long. I'll send the report before 5 pm."
+    private let keptVoice = "Sorry to keep you waiting so long. I will send the report before 5 pm."
+
+    func testOnlyIdiomaticIsHeldToTheWritersVoice() {
+        XCTAssertEqual(
+            WritingOutputGuard.assess(source: fullForms, output: contracted, mode: .proofread, tone: .idiomatic),
+            [.voiceChanged([.addedContractions])]
+        )
+        XCTAssertEqual(WritingOutputGuard.assess(source: fullForms, output: keptVoice, mode: .proofread, tone: .idiomatic), [])
+        for tone in WritingTone.allCases where tone != .idiomatic {
+            XCTAssertFalse(
+                WritingOutputGuard.assess(source: fullForms, output: contracted, mode: .proofread, tone: tone).contains { $0.isVoiceOnly },
+                "\(tone)"
+            )
+        }
+    }
+
+    func testAVoiceChangeIsRetriedWithWhatChanged() async throws {
+        let script = Script([contracted, keptVoice])
+        let result = try await GuardedWriter.run(source: fullForms, mode: .proofread, tone: .idiomatic, systemPrompt: "P") {
+            script.next($0, $1)
+        }
+        XCTAssertEqual(result.text, keptVoice)
+        XCTAssertEqual(result.outcome, .acceptedAfterRetry(firstIssues: [.voiceChanged([.addedContractions])]))
+        XCTAssertTrue(script.prompts[1].contains("The text writes full forms (I will, is not): keep them"), script.prompts[1])
+    }
+
+    func testAnEditThatOnlySoundsDifferentKeepsItsFixesFlagged() async throws {
+        let moreContracted = "Sorry to keep you waiting so long! I'll send the report before 5 pm."
+        let script = Script([moreContracted, contracted])
+        let result = try await GuardedWriter.run(source: fullForms, mode: .proofread, tone: .idiomatic, systemPrompt: "P") {
+            script.next($0, $1)
+        }
+        XCTAssertEqual(result.text, contracted, "the attempt that changed the voice least")
+        XCTAssertEqual(result.outcome, .flagged(issues: [.voiceChanged([.addedContractions])]))
+    }
+
+    func testAVoiceChangeDoesNotRescueAnAnswerThatLostContent() async throws {
+        let lostTime = "Sorry to keep you waiting so long. I'll send the report soon."
+        let script = Script([lostTime, lostTime])
+        let result = try await GuardedWriter.run(source: fullForms, mode: .proofread, tone: .idiomatic, systemPrompt: "P") {
+            script.next($0, $1)
+        }
+        XCTAssertEqual(result.text, fullForms, "a lost time is not a matter of tone")
+        guard case .keptSource = result.outcome else { return XCTFail("\(result.outcome)") }
+
+        let rewritten = "Apologies for the delay; the report will reach you before 5 pm, without fail."
+        let fallback = Script([contracted, rewritten])
+        let better = try await GuardedWriter.run(source: fullForms, mode: .proofread, tone: .idiomatic, systemPrompt: "P") {
+            fallback.next($0, $1)
+        }
+        XCTAssertEqual(better.text, contracted, "the first answer, whose only problem was its voice")
+        XCTAssertEqual(better.outcome, .flagged(issues: [.voiceChanged([.addedContractions])]))
+    }
+
+    func testEveryVoiceChangeHasARetryInstruction() {
+        let changes: [VoiceChange] = [
+            .lostQuestion, .addedQuestion, .lostExclamation, .addedExclamation, .lostEmoji, .addedEmoji,
+            .lostContractions, .addedContractions, .lostHedge, .addedHedge, .addedStockPhrase("kindly"),
+            .lostInformal(["wanna", "lol"]), .longer(ratio: 2), .shorter(ratio: 0.4),
+        ]
+        let instruction = WritingOutputGuard.retryInstruction(for: [.voiceChanged(changes)], source: fullForms, tone: .idiomatic)
+        XCTAssertEqual(instruction.split(separator: "\n").count, changes.count + 1)
+        XCTAssertTrue(instruction.contains("Do not add \"kindly\""))
+        XCTAssertTrue(instruction.contains("wanna, lol"))
     }
 
     func testEveryAttemptIsTidiedBeforeItIsJudged() async throws {

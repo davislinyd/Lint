@@ -32,6 +32,13 @@ public enum WritingPromptComposer {
                 toneInstruction(tone, for: .proofread),
                 numbered(commonRules),
             ].joined(separator: "\n\n")
+        case .proofread where tone == .idiomatic:
+            return [
+                idiomaticTask,
+                priority,
+                toneInstruction(tone, for: .proofread),
+                numbered(commonRules + [sourceLanguageRule, minimalEditRule(tone: tone)]),
+            ].joined(separator: "\n\n")
         case .proofread:
             return [
                 proofreadTask(tone: tone),
@@ -144,6 +151,37 @@ public enum WritingPromptComposer {
         return lines.joined(separator: "\n")
     }
 
+    /// Idiomatic: the text's own English, with what a native speaker would not say rewritten and the
+    /// writer's voice kept exactly.
+    private static let idiomaticTask = """
+        你是英語母語的資深編輯，專門潤飾非母語人士寫的英文。
+
+        任務：讓文字讀起來像母語者寫的，同時完全保留作者自己的語氣。
+
+        要改的：
+        - 所有文法、拼寫、標點錯誤。
+        - 母語者不會這樣說的詞語或片語：中文直譯、錯誤的詞語搭配、非母語的套語（例如用 I have a doubt 表示「我有個問題」）。只重寫那個片語；片語單獨改不通時才重寫那一句。
+        - 母語者本來就會這樣寫的句子，一個字都不要改。
+
+        不能改的（作者的語氣）：
+        - 問句仍是問句，請求仍是請求，驚嘆仍是驚嘆。
+        - 作者用縮寫（I'm、don't）就保留縮寫，寫完整形式（I will、do not）就保留完整形式。
+        - 保留委婉語（maybe、I think）、強烈的用字、俚語、縮寫、表情符號，以及原文的大小寫與英式或美式拼法。
+        - 不要變得更客氣、更正式、更委婉或更直接；不加招呼語、結尾敬語、道謝或任何資訊。
+
+        中英夾雜時只修改英文部分，中文一字不改，也不要把任何部分翻成另一種語言。
+
+        範例（只示範改法，不要在輸出中重複範例）：
+        原文：honestly not sure it's worth it, can we talk tmrw?
+        輸出：honestly not sure it's worth it, can we talk tmrw?
+
+        原文：Wow, your demo is very successful! Can you share the slides to me?
+        輸出：Wow, your demo went really well! Can you share the slides with me?
+
+        原文：I will give you feedback until Friday, because this week I am very busy.
+        輸出：I will get you feedback by Friday, because I am very busy this week.
+        """
+
     /// Native: the text's meaning, in any language, said the way a native English speaker would say it.
     private static let nativeTask = """
         你是英語母語的資深寫手。
@@ -195,6 +233,8 @@ public enum WritingPromptComposer {
         case .professional:
             let base = "語氣：專業。用自然、清楚、禮貌、具體的措辭，適合寄給同事、主管或客戶；避免情緒化指責、模糊的歸咎、過度隨便的用語與過度奉承；除非情境真的需要，避免罐頭式商務套語（例如「希望此信找到您安好」）。不要新增原文沒有的承諾、請求、期限或事實。"
             return translating ? base + "翻譯時，以目標語言中自然的專業語氣表達相同的意思。" : base
+        case .idiomatic:
+            return "語氣：道地。用母語者真正會用的說法取代不道地的地方，其餘維持原文的正式程度、禮貌、情緒強度、直接程度與說話風格；道地不等於改寫，也不等於華麗。"
         case .nativeCasual:
             return "語氣：母語人士 · 輕鬆。像寫給朋友或相處融洽的同事：口語、自然，用縮寫與日常用字，句子短；不用很快過時的流行語。不要加入原文沒有的事實、承諾或意見，也不要改變原文的禮貌程度。"
         case .nativeFormal:

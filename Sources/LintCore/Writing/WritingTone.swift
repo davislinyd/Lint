@@ -2,6 +2,8 @@ import Foundation
 
 /// How the writing should sound, apart from what is being done to it. `preserve` keeps the text's
 /// own formality, politeness, directness and emotional intensity; it is not a "normal" register.
+/// `idiomatic` keeps all of that too, and also rewrites what is correct but not how a native speaker
+/// would put it ("revert back", word-for-word translations), proofreading only.
 /// `native` is the one tone that is not a modifier of the text's own words: it takes what the text
 /// means, in any language, and says it the way a native English speaker would (proofreading only).
 /// The three after it are the same, in a style: casual, formal, or the way a Gen Z speaker texts. They
@@ -9,6 +11,7 @@ import Foundation
 /// are kept apart per style.
 public enum WritingTone: String, CaseIterable, Identifiable, Sendable, Codable {
     case preserve
+    case idiomatic
     case formal
     case concise
     case professional
@@ -23,13 +26,14 @@ public enum WritingTone: String, CaseIterable, Identifiable, Sendable, Codable {
     public var isNative: Bool {
         switch self {
         case .native, .nativeCasual, .nativeFormal, .nativeGenZ: true
-        case .preserve, .formal, .concise, .professional: false
+        case .preserve, .idiomatic, .formal, .concise, .professional: false
         }
     }
 
     public var title: String {
         switch self {
         case .preserve: String(localized: "保留原語氣")
+        case .idiomatic: String(localized: "道地")
         case .formal: String(localized: "正式")
         case .concise: String(localized: "簡潔")
         case .professional: String(localized: "專業")

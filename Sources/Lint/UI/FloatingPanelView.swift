@@ -58,6 +58,17 @@ struct FloatingPanelView: View {
                     .font(.caption)
                     .foregroundStyle(.orange)
             }
+            if let advice = viewModel.unchangedAdvice {
+                HStack(spacing: 10) {
+                    Text(advice.message)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    if advice == .tryIdiomatic {
+                        Button("改用「道地」") { viewModel.retry() }
+                            .controlSize(.small)
+                    }
+                }
+            }
             if let error = viewModel.errorMessage {
                 Text(error)
                     .font(.caption)

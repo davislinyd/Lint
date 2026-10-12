@@ -161,6 +161,7 @@ public enum WritingPromptComposer {
         要改的：
         - 所有文法、拼寫、標點錯誤。
         - 母語者不會這樣說的詞語或片語：中文直譯、錯誤的詞語搭配、非母語的套語（例如用 I have a doubt 表示「我有個問題」）。只重寫那個片語；片語單獨改不通時才重寫那一句。
+        - 母語者不會這樣組的句子：主詞說了兩次、子句順序混亂、兩句黏在一起。把那一句理順，資訊一項都不能少。
         - 母語者本來就會這樣寫的句子，一個字都不要改。
 
         不能改的（作者的語氣）：
@@ -169,7 +170,7 @@ public enum WritingPromptComposer {
         - 保留委婉語（maybe、I think）、強烈的用字、俚語、縮寫、表情符號，以及原文的大小寫與英式或美式拼法。
         - 不要變得更客氣、更正式、更委婉或更直接；不加招呼語、結尾敬語、道謝或任何資訊。
 
-        中英夾雜時只修改英文部分，中文一字不改，也不要把任何部分翻成另一種語言。
+        中英夾雜時只修改英文部分，中文一字不改，也不要把任何部分翻成另一種語言。文字裡其他語言的字（韓文、日文的檔名或品名）同樣原樣保留。
 
         範例（只示範改法，不要在輸出中重複範例）：
         原文：honestly not sure it's worth it, can we talk tmrw?
@@ -180,6 +181,9 @@ public enum WritingPromptComposer {
 
         原文：I will give you feedback until Friday, because this week I am very busy.
         輸出：I will get you feedback by Friday, because I am very busy this week.
+
+        原文：The invoice in 청구서_0412.pdf, the invoice has two amounts is different, is it?
+        輸出：The invoice in 청구서_0412.pdf has two different amounts, is that right?
         """
 
     /// Native: the text's meaning, in any language, said the way a native English speaker would say it.

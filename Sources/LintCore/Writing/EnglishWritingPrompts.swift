@@ -37,7 +37,7 @@ public enum EnglishPromptReader: Equatable, Sendable {
 extension WritingPromptComposer {
     /// Recorded with every evaluation run; bump it whenever an English prompt changes, so that
     /// results before and after the change are not compared as if they were the same.
-    public static let englishPromptVersion = "english-16"
+    public static let englishPromptVersion = "english-17"
 
     /// `prompt` with one line naming the language of `text`, for proofreading only: a small model
     /// drifts into another language unless told which one the text is in. Not for the native tone,
@@ -146,6 +146,10 @@ enum EnglishWritingPrompts {
     /// Idiomatic: what preserve corrects, and also what is correct but not how a native speaker would
     /// say it, while the writer's voice stays exactly as it is (`VoiceCheck` lists what that means).
     /// Its examples use phrasings the evaluation fixtures do not.
+    /// Measured (english-16) on a sentence that said its subject twice around a Korean file name: every
+    /// run changed only the closing tag question, and one in four translated the Korean product name.
+    /// With the rule for a tangled sentence, its example and the rule for other-language words
+    /// (english-17), three runs in four rebuilt the sentence and all kept the Korean.
     static func idiomatic(_ reader: EnglishPromptReader) -> String {
         """
         You are a native English editor polishing a non-native speaker's text. The user's message is that \
@@ -154,7 +158,9 @@ enum EnglishWritingPrompts {
         - fix every error of grammar, spelling and punctuation;
         - replace every word or phrase a native speaker would not use: word-for-word translations from \
         Chinese, wrong word combinations, and non-native formulas such as "I have a doubt" for a question. \
-        Rewrite only that phrase, or its sentence when the phrase cannot be fixed alone.
+        Rewrite only that phrase, or its sentence when the phrase cannot be fixed alone;
+        - untangle a sentence a native speaker would not build that way: a subject said twice, clauses \
+        in a confusing order, a run-on. Rewrite it so it reads cleanly, with every piece of information kept.
         A sentence a native speaker would already write stays exactly as it is.
         Keep the writer's voice exactly: a question stays a question, a request a request, an \
         exclamation an exclamation. Keep contractions where the writer used them and full forms (I will, \
@@ -162,7 +168,8 @@ enum EnglishWritingPrompts {
         the writer's own capitalization and British or American spelling. Do not make it more polite, more formal, softer or blunter, and add no greeting, \
         sign-off, thanks or information.
         Keep names, numbers, dates, times, URLs, email addresses, file paths, commands, code and \
-        technical terms exactly as written.
+        technical terms exactly as written. Words in another language (a Korean or Japanese file or \
+        product name) stay as written too.
         \(layoutRule(reader))
         Answer in the language of the text; never translate it.
 
@@ -173,6 +180,8 @@ enum EnglishWritingPrompts {
         Answer: Wow, your demo went really well! Can you share the slides with me?
         Text: I will give you feedback until Friday, because this week I am very busy.
         Answer: I will get you feedback by Friday, because I am very busy this week.
+        Text: The invoice in 청구서_0412.pdf, the invoice has two amounts is different, is it?
+        Answer: The invoice in 청구서_0412.pdf has two different amounts, is that right?
         Text: 這個我們討論過了，the conclusion is the price will keep.
         Answer: 這個我們討論過了，the conclusion is that the price will stay the same.
 

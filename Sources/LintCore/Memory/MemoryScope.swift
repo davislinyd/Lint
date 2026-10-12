@@ -7,10 +7,11 @@ enum MemoryScope {
     typealias Scope = (mode: WritingMode?, tone: WritingTone?)
 
     /// Plain proofreading is the baseline that everything else is measured against: what is remembered
-    /// there applies everywhere. Another task keeps its own, and so does another tone, but the default
-    /// tone (`preserve`) narrows nothing: it is no register of its own.
+    /// there applies everywhere, whether the edit only corrected (`preserve`) or also made the wording
+    /// idiomatic (`WritingTone.correctsOnly`). Another task keeps its own, and so does another tone,
+    /// but `preserve` narrows nothing: it is no register of its own.
     static func of(mode: WritingMode, tone: WritingTone) -> Scope {
-        if mode == .proofread, tone == .preserve { return (nil, nil) }
+        if mode == .proofread, tone.correctsOnly { return (nil, nil) }
         return (mode, tone == .preserve ? nil : tone)
     }
 

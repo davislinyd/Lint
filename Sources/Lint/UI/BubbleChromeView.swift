@@ -75,6 +75,11 @@ final class BubbleChromeView: NSView {
         statusLabel.font = .systemFont(ofSize: 11)
         statusLabel.textColor = .systemOrange
         statusLabel.isHidden = true
+        // A note is a sentence: let it wrap instead of clipping at the card's width.
+        statusLabel.cell?.wraps = true
+        statusLabel.cell?.usesSingleLineMode = false
+        statusLabel.lineBreakMode = .byWordWrapping
+        statusLabel.maximumNumberOfLines = 3
 
         bodyLabel.font = .systemFont(ofSize: 14)
         bodyLabel.textColor = .labelColor
@@ -194,6 +199,11 @@ final class BubbleChromeView: NSView {
             statusLabel.isHidden = false
             statusLabel.textColor = .systemOrange
             statusLabel.stringValue = note
+        } else if let advice = viewModel.unchangedAdvice {
+            // Not a warning: the answer is the text itself, and this says so.
+            statusLabel.isHidden = false
+            statusLabel.textColor = .secondaryLabelColor
+            statusLabel.stringValue = advice.message
         } else {
             statusLabel.isHidden = true
             statusLabel.stringValue = ""
@@ -231,7 +241,8 @@ final class BubbleChromeView: NSView {
 
         let canReplace = !viewModel.resultText.isEmpty
         replaceButton.title = String(localized: "取代 ⏎")
-        rewriteButton.title = String(localized: "重寫 R")
+        // The same request would only come back unchanged again: R retries in the idiomatic tone.
+        rewriteButton.title = viewModel.unchangedAdvice == .tryIdiomatic ? String(localized: "改用道地 R") : String(localized: "重寫 R")
         closeButton.title = String(localized: "關閉 esc")
         replaceButton.isEnabled = canReplace
         rewriteButton.isEnabled = !viewModel.originalText.isEmpty && !viewModel.isStreaming
@@ -285,7 +296,8 @@ final class BubbleChromeView: NSView {
 
         // Buttons + gaps + side padding (~取代 ⏎ / 重寫 R / 關閉 esc).
         let b1 = (String(localized: "取代 ⏎") as NSString).size(withAttributes: [.font: buttonFont]).width + 24
-        let b2 = (String(localized: "重寫 R") as NSString).size(withAttributes: [.font: buttonFont]).width + 24
+        let rewriteTitle = viewModel.unchangedAdvice == .tryIdiomatic ? String(localized: "改用道地 R") : String(localized: "重寫 R")
+        let b2 = (rewriteTitle as NSString).size(withAttributes: [.font: buttonFont]).width + 24
         let b3 = (String(localized: "關閉 esc") as NSString).size(withAttributes: [.font: buttonFont]).width + 16
         let buttonsW = b1 + 8 + b2 + 8 + b3 + horizontalPad
 

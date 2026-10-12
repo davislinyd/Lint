@@ -192,6 +192,10 @@
 "語氣" = "Tone";
 "保留原語氣" = "Preserve Tone";
 "道地" = "Idiomatic";
+"沒有發現需要修正的錯誤。想讓說法更自然，可以改用「道地」。" = "No errors found. For more natural wording, try Idiomatic.";
+"這段文字不需要修改。" = "This text needs no changes.";
+"改用「道地」" = "Use Idiomatic";
+"改用道地 R" = "Idiomatic R";
 "中文 → 英文" = "Chinese → English";
 "整段寫成英文" = "Write it all in English";
 "保留中文，只改英文" = "Keep the Chinese, edit only the English";

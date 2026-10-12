@@ -192,6 +192,10 @@
 "語氣" = "Nada";
 "保留原語氣" = "Pertahankan Nada";
 "道地" = "Alami";
+"沒有發現需要修正的錯誤。想讓說法更自然，可以改用「道地」。" = "Tidak ada kesalahan yang perlu diperbaiki. Untuk ungkapan yang lebih alami, coba Alami.";
+"這段文字不需要修改。" = "Teks ini tidak perlu diubah.";
+"改用「道地」" = "Gunakan Alami";
+"改用道地 R" = "Alami R";
 "中文 → 英文" = "Mandarin → Inggris";
 "整段寫成英文" = "Tulis semuanya dalam bahasa Inggris";
 "保留中文，只改英文" = "Pertahankan Mandarin, ubah bahasa Inggris saja";

@@ -192,6 +192,10 @@
 "語氣" = "Tom";
 "保留原語氣" = "Manter o Tom";
 "道地" = "Natural";
+"沒有發現需要修正的錯誤。想讓說法更自然，可以改用「道地」。" = "Nenhum erro encontrado. Para uma redação mais natural, experimente Natural.";
+"這段文字不需要修改。" = "Este texto não precisa de alterações.";
+"改用「道地」" = "Usar Natural";
+"改用道地 R" = "Natural R";
 "中文 → 英文" = "Chinês → Inglês";
 "整段寫成英文" = "Escrever tudo em inglês";
 "保留中文，只改英文" = "Manter o chinês e editar só o inglês";

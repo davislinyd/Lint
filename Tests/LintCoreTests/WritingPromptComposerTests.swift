@@ -68,6 +68,7 @@ final class WritingPromptComposerTests: XCTestCase {
         for phrase in [
             "語氣：道地", "母語者不會這樣說的詞語或片語", "只重寫那個片語", "一個字都不要改",
             "問句仍是問句", "保留縮寫", "保留委婉語", "不加招呼語", "中文一字不改", "維持同一語言",
+            "主詞說了兩次", "把那一句理順", "其他語言的字",
         ] {
             XCTAssertTrue(prompt.contains(phrase), phrase)
         }

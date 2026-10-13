@@ -192,6 +192,10 @@
 "語氣" = "Giọng văn";
 "保留原語氣" = "Giữ giọng văn gốc";
 "道地" = "Tự nhiên";
+"沒有發現需要修正的錯誤。想讓說法更自然，可以改用「道地」。" = "Không tìm thấy lỗi cần sửa. Để diễn đạt tự nhiên hơn, hãy thử Tự nhiên.";
+"這段文字不需要修改。" = "Đoạn văn này không cần sửa.";
+"改用「道地」" = "Dùng Tự nhiên";
+"改用道地 R" = "Tự nhiên R";
 "中文 → 英文" = "Tiếng Trung → Tiếng Anh";
 "整段寫成英文" = "Viết toàn bộ bằng tiếng Anh";
 "保留中文，只改英文" = "Giữ tiếng Trung, chỉ sửa tiếng Anh";

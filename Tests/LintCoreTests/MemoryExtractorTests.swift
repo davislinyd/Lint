@@ -295,7 +295,9 @@ final class MemoryExtractorTests: XCTestCase {
             )
             seen.formUnion(keys(extract(.editedAndAccepted, sample)))
         }
-        XCTAssertEqual(seen.count, WritingTone.allCases.count, "plain proofreading and each tone keep their own")
+        // Preserve and idiomatic both only correct, so they share the one memory that applies everywhere.
+        XCTAssertEqual(seen.count, WritingTone.allCases.count - 1, "plain proofreading and each tone keep their own")
+        XCTAssertFalse(seen.contains("vocabulary:en:proofread|idiomatic:large>huge"), "idiomatic is plain proofreading")
         XCTAssertTrue(seen.contains("vocabulary:en:proofread|native:large>huge"), "so does the native tone")
         XCTAssertTrue(seen.contains("vocabulary:en:proofread|nativeGenZ:large>huge"), "and each native style")
         XCTAssertTrue(seen.contains("vocabulary:en:large>huge"), "plain proofreading stays global")
@@ -331,6 +333,14 @@ final class MemoryExtractorTests: XCTestCase {
         }
         let plain = feedback(original: "I have meeting tomorrow.", generated: "I have a meeting tomorrow.")
         XCTAssertEqual(keys(extract(.accepted, plain)), ["grammar:en:articles"])
+        // The idiomatic tone corrects too, and is the tone proofreading starts in: what the writer
+        // accepts there is learned from, and applies everywhere, exactly as in the preserve tone.
+        let idiomatic = feedback(.proofread, tone: .idiomatic, original: "I have meeting tomorrow.", generated: "I have a meeting tomorrow.")
+        let learned = extract(.accepted, idiomatic)
+        XCTAssertEqual(keys(learned), ["grammar:en:articles"])
+        XCTAssertNil(learned.first?.modeScope)
+        XCTAssertNil(learned.first?.toneScope)
+        XCTAssertEqual(WritingTone.allCases.filter(\.correctsOnly), [.preserve, .idiomatic])
     }
 
     func testTranslatingInAnyToneRemembersNothingFromTheModelsRewrite() {

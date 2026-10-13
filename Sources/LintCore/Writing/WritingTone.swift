@@ -34,6 +34,12 @@ public enum WritingTone: String, CaseIterable, Identifiable, Sendable, Codable {
         }
     }
 
+    /// Corrects the text without giving it another register. What the writer accepts in these tones is
+    /// a correction they needed, so Lint learns from it and what it learns applies in every tone.
+    public var correctsOnly: Bool {
+        self == .preserve || self == .idiomatic
+    }
+
     public var title: String {
         switch self {
         case .preserve: String(localized: "保留原語氣")
@@ -58,7 +64,9 @@ public struct WritingToneMemory: Equatable, Sendable {
 
     /// A tone that is not in the task's menu is remembered as the menu tone it belongs to
     /// (`WritingTone.menuTone`), so a tone saved by an earlier version still means what it did.
-    public init(proofread: WritingTone = .preserve, translate: WritingTone = .preserve) {
+    public init(
+        proofread: WritingTone = WritingMode.proofread.defaultTone, translate: WritingTone = WritingMode.translate.defaultTone
+    ) {
         self.proofread = Self.offered(proofread.menuTone, for: .proofread)
         self.translate = Self.offered(translate.menuTone, for: .translate)
     }

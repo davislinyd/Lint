@@ -1,6 +1,6 @@
 {
-  "version": 10,
-  "about": "Lint's own writing fixtures: English proofreading and tone rewrites (also the English inside mixed Chinese-English text, whose Chinese is left alone), English-to-Traditional-Chinese translation for reference, and the native-speaker tone (Chinese, mixed or broken English in, a native speaker's English out) in its styles (standard, casual, formal, Gen Z and concise); and English that is correct but not what a native speaker would say, whose fix has to keep the writer's voice (keepsVoice). Every sentence was written for this repository; nothing is taken from a benchmark corpus. They exist to compare engines on Lint's actual workload, not to score a model in general.",
+  "version": 11,
+  "about": "Lint's own writing fixtures: English proofreading and tone rewrites (also the English inside mixed Chinese-English text, whose Chinese is left alone), English-to-Traditional-Chinese translation for reference, and the native-speaker tone (Chinese, mixed or broken English in, a native speaker's English out) in its styles (standard, casual, formal, Gen Z and concise); and English that is correct but not what a native speaker would say, whose fix has to keep the writer's voice (keepsVoice), including sentences built wrong (a subject said twice, clauses out of order) around file and product names in another script. Every sentence was written for this repository; nothing is taken from a benchmark corpus. They exist to compare engines on Lint's actual workload, not to score a model in general.",
   "cases": [
     {
       "id": "en-grammar-01",
@@ -2006,6 +2006,98 @@
       "input": "這份報告我已經從頭到尾仔細看過一遍了，基本上沒有什麼太大的問題，只有第三頁的數字好像需要再確認一下。",
       "outputLanguage": "en",
       "note": "Concise English: I've read the report; it looks fine, but the numbers on page 3 need checking. Keeps page 3."
+    },
+    {
+      "id": "struct-01",
+      "category": "idiomatic-structure",
+      "mode": "proofread",
+      "tone": "idiomatic",
+      "input": "AI said the request item in the quotation file Daehan-20260115_SSD 견적(테스트코리아).xls, the request item \"삼성 SSD 1TB 중고\" is second-hand, is it?",
+      "outputLanguage": "en",
+      "mustPreserve": [
+        "삼성 SSD 1TB 중고",
+        "Daehan-20260115_SSD 견적(테스트코리아).xls",
+        "second-hand"
+      ],
+      "mustFix": [
+        ", the request item \""
+      ],
+      "keepsVoice": true,
+      "note": "The subject is said twice: one sentence, e.g. AI said the request item \"…\" in the quotation file … is second-hand, is that right? The Korean file and product names stay exactly as written, and it stays a question."
+    },
+    {
+      "id": "struct-02",
+      "category": "idiomatic-structure",
+      "mode": "proofread",
+      "tone": "idiomatic",
+      "input": "The server we deployed it yesterday, the server is keep restarting every ten minutes, we still not find the reason.",
+      "outputLanguage": "en",
+      "mustFix": [
+        "we deployed it yesterday",
+        "is keep restarting",
+        "we still not find"
+      ],
+      "keepsVoice": true,
+      "note": "Three clauses run together around a repeated subject: \"The server we deployed yesterday keeps restarting every ten minutes, and we still haven't found the reason.\" Every fact kept."
+    },
+    {
+      "id": "struct-03",
+      "category": "idiomatic-structure",
+      "mode": "proofread",
+      "tone": "idiomatic",
+      "input": "For the budget of next quarter, because the vendor price is not yet come, so we cannot yet finalize it.",
+      "outputLanguage": "en",
+      "mustFix": [
+        "is not yet come",
+        ", so we"
+      ],
+      "keepsVoice": true,
+      "note": "Topic first, then because … so: \"We cannot finalize next quarter's budget yet because the vendor's pricing has not come in.\" Stays a plain statement with full forms."
+    },
+    {
+      "id": "struct-04",
+      "category": "idiomatic-structure",
+      "mode": "proofread",
+      "tone": "idiomatic",
+      "input": "The meeting room on the fifth floor, the meeting room is already booked by another team until 3 pm, is it?",
+      "outputLanguage": "en",
+      "mustPreserve": [
+        "3 pm"
+      ],
+      "mustFix": [
+        ", the meeting room is"
+      ],
+      "keepsVoice": true,
+      "note": "The subject is said twice: \"The meeting room on the fifth floor is already booked by another team until 3 pm, isn't it?\" Stays a question; 3 pm kept."
+    },
+    {
+      "id": "struct-05",
+      "category": "idiomatic-structure",
+      "mode": "proofread",
+      "tone": "idiomatic",
+      "input": "About the file レポート_0314.xlsx, in the file the delivery date is written wrong, should be March 14 not March 4.",
+      "outputLanguage": "en",
+      "mustPreserve": [
+        "レポート_0314.xlsx",
+        "March 14",
+        "March 4"
+      ],
+      "mustFix": [
+        "in the file the delivery date is written wrong"
+      ],
+      "keepsVoice": true,
+      "note": "Topic-comment order: \"The delivery date in レポート_0314.xlsx is wrong; it should be March 14, not March 4.\" The Japanese file name and both dates stay."
+    },
+    {
+      "id": "struct-ok-01",
+      "category": "idiomatic-already",
+      "mode": "proofread",
+      "tone": "idiomatic",
+      "input": "The vendor confirmed that the item \"삼성 SSD 1TB\" in 견적서_0115.xlsx is new, so we can go ahead with the order.",
+      "outputLanguage": "en",
+      "expectUnchanged": true,
+      "keepsVoice": true,
+      "note": "Already a well-built sentence, Korean names and all: leave it."
     }
   ]
 }

@@ -283,7 +283,8 @@ final class SettingsStore {
             defaults.dictionary(forKey: Keys.systemPromptOverrides) as? [String: String] ?? [:]
         lastMode = LegacyWritingMode.resolve(defaults.string(forKey: Keys.lastMode) ?? "")?.mode ?? .proofread
         tones = WritingToneMemory(
-            proofread: WritingTone(rawValue: defaults.string(forKey: Keys.proofreadTone) ?? "") ?? .preserve,
+            // Never picked: the task's default. A tone the user picked, preserve included, stays.
+            proofread: WritingTone(rawValue: defaults.string(forKey: Keys.proofreadTone) ?? "") ?? WritingMode.proofread.defaultTone,
             translate: WritingTone(rawValue: defaults.string(forKey: Keys.translateTone) ?? "") ?? .preserve
         )
         reasoningEffort = ReasoningEffort(rawValue: defaults.string(forKey: Keys.reasoningEffort) ?? "") ?? .low

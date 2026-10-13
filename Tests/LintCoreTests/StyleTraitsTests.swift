@@ -84,6 +84,7 @@ final class StyleTraitsTests: XCTestCase {
     func testOnlyTheTonesThatKeepTheWritersVoiceAreObserved() {
         for tone in WritingTone.allCases {
             XCTAssertEqual(StyleTraits.isObserved(tone), tone == .preserve || tone == .idiomatic, "\(tone)")
+            XCTAssertEqual(StyleTraits.isObserved(tone), tone.correctsOnly, "\(tone): the tones memory learns corrections from")
         }
     }
 

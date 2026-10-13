@@ -31,10 +31,10 @@ enum StyleProfile {
 /// A trait only counts where the suggestion touched it. That is what keeps the model's own style
 /// from confirming itself: a text the model left alone says nothing.
 enum StyleTraits {
-    /// The tones that keep the writer's own voice. Any other changes the register on purpose, so what
-    /// becomes of a contraction there says nothing about the user.
+    /// The tones that only correct (`WritingTone.correctsOnly`). Any other changes the register on
+    /// purpose, so what becomes of a contraction there says nothing about the user.
     static func isObserved(_ tone: WritingTone) -> Bool {
-        tone == .preserve || tone == .idiomatic
+        tone.correctsOnly
     }
 
     /// For each trait the suggestion touched: true when `sent` has the user's own way, false when it

@@ -582,6 +582,13 @@ final class MemoryExtractorTests: XCTestCase {
         formal.sent = true
         XCTAssertTrue(extract(.dismissed, formal).isEmpty, "a tone rewrites by design")
 
+        var idiomatic = feedback(.proofread, tone: .idiomatic, original: original, generated: generated, final: original)
+        idiomatic.sent = true
+        XCTAssertEqual(
+            keys(extract(.dismissed, idiomatic)), ["keep:en:big>large"],
+            "idiomatic only corrects, like preserve: what is learned there applies everywhere"
+        )
+
         var cut = feedback(original: "This is very big", generated: "This is very large", final: "This is very bi")
         cut.sent = true
         XCTAssertTrue(extract(.dismissed, cut).isEmpty, "the end of what was read is not to be trusted")

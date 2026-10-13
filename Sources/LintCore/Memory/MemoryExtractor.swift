@@ -143,12 +143,13 @@ struct MemoryExtractor: Sendable {
     }
 
     /// What a suggestion says that was looked at and not used, once the text was sent: a change whose
-    /// original words were sent untouched was not wanted. Only for plain proofreading, since another
-    /// tone rewrites by design and turning that down says nothing about its words. A word or phrase
+    /// original words were sent untouched was not wanted. Only for plain proofreading
+    /// (`WritingTone.correctsOnly`), since another tone gives the text another register by design and
+    /// turning that down says nothing about its words. A word or phrase
     /// becomes a memory to leave it alone; an article or a preposition that stayed only counts against
     /// the memory that asks for that fix.
     private func rejections(in feedback: MemoryFeedback) -> Extraction? {
-        guard feedback.sent, feedback.mode == .proofread, feedback.tone == .preserve,
+        guard feedback.sent, feedback.mode == .proofread, feedback.tone.correctsOnly,
               let generated = feedback.generatedText
         else { return nil }
         let source = trimmed(feedback.originalText)

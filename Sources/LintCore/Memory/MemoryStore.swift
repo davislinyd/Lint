@@ -56,8 +56,13 @@ protocol MemoryStore: Sendable {
     /// Drops events older than `cutoff`, then everything but the newest `maxCount`.
     func pruneEvents(keepingLast maxCount: Int, olderThan cutoff: Date) async throws
 
+    /// Adds to the counter kept under `key`, after fading what it holds to `now`; one transaction.
+    func bumpStat(key: String, positive: Double, negative: Double, at now: Date) async throws
+    /// The counters whose key starts with `prefix`, as they were last written.
+    func observationStats(prefix: String) async throws -> [String: DecayedCounter]
+
     func stats() async throws -> MemoryStats
-    /// Removes every memory and event, and scrubs the freed pages from the file.
+    /// Removes every memory, event and counter, and scrubs the freed pages from the file.
     func resetAll() async throws
 }
 

@@ -158,6 +158,16 @@ struct SQLiteMemoryStore: MemoryStore {
                 t.add(column: "erased_count", .integer).notNull().defaults(to: 0)
             }
         }
+        // Observation mode counts how suggestions fared: a key (an app's bundle ID, say) and two
+        // numbers that fade. Never any text.
+        migrator.registerMigration("v6_observation") { db in
+            try db.create(table: "observation_stat") { t in
+                t.column("key", .text).primaryKey()
+                t.column("positive", .double).notNull()
+                t.column("negative", .double).notNull()
+                t.column("updated_at", .double).notNull()
+            }
+        }
         return migrator
     }
 
@@ -465,6 +475,42 @@ struct SQLiteMemoryStore: MemoryStore {
         }
     }
 
+    func bumpStat(key: String, positive: Double, negative: Double, at now: Date) async throws {
+        try await dbQueue.write { db in
+            let row = try Row.fetchOne(
+                db, sql: "SELECT positive, negative, updated_at FROM observation_stat WHERE key = ?", arguments: [key]
+            )
+            var counter = row.map { Self.counter($0).faded(to: now) } ?? DecayedCounter(updatedAt: now)
+            counter.positive += positive
+            counter.negative += negative
+            try db.execute(
+                sql: "INSERT OR REPLACE INTO observation_stat (key, positive, negative, updated_at) VALUES (?, ?, ?, ?)",
+                arguments: [key, counter.positive, counter.negative, counter.updatedAt.timeIntervalSince1970]
+            )
+        }
+    }
+
+    func observationStats(prefix: String) async throws -> [String: DecayedCounter] {
+        try await dbQueue.read { db in
+            var counters: [String: DecayedCounter] = [:]
+            for row in try Row.fetchAll(
+                db,
+                sql: "SELECT key, positive, negative, updated_at FROM observation_stat WHERE substr(key, 1, length(?)) = ?",
+                arguments: [prefix, prefix]
+            ) {
+                counters[row["key"]] = Self.counter(row)
+            }
+            return counters
+        }
+    }
+
+    private static func counter(_ row: Row) -> DecayedCounter {
+        DecayedCounter(
+            positive: row["positive"], negative: row["negative"],
+            updatedAt: Date(timeIntervalSince1970: row["updated_at"])
+        )
+    }
+
     func stats() async throws -> MemoryStats {
         try await dbQueue.read { db in
             var counts: [MemoryState: Int] = [:]
@@ -517,6 +563,7 @@ struct SQLiteMemoryStore: MemoryStore {
             try db.execute(sql: "DELETE FROM feedback_event")
             try db.execute(sql: "DELETE FROM dream_run")
             try db.execute(sql: "DELETE FROM dream_veto")
+            try db.execute(sql: "DELETE FROM observation_stat")
         }
         try await dbQueue.vacuum()
     }

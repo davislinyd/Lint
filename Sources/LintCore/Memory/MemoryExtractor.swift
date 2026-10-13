@@ -160,7 +160,7 @@ struct MemoryExtractor: Sendable {
 
         let result: (old: String, new: String, userChoice: Bool)
         switch action {
-        case .regenerated:
+        case .regenerated, .dismissed:
             return nil
         case .accepted:
             result = (original, suggestion, false)

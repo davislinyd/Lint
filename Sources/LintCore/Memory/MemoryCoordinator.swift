@@ -25,6 +25,9 @@ public actor MemoryCoordinator {
     /// Memory is on, so dreaming may run in the background.
     private var organizingAllowed = false
 
+    /// Key of the counter of how suggestions fared in one app, followed by its bundle ID.
+    private static let appStatPrefix = "app:"
+
     /// Longest instruction a memory keeps, however it was edited.
     public static let maxInstructionLength = MemoryPolicy.maxInstructionLength
 
@@ -97,6 +100,49 @@ public actor MemoryCoordinator {
         } catch {
             DiagnosticLog.shared.log("memory", "could not record feedback: \(DiagnosticLog.describe(error))")
         }
+    }
+
+    /// Records how the suggestions in a followed field fared (`FieldSessionTracker`): one count for
+    /// the app the field is in and, for a suggestion that was looked at and not used, an event.
+    /// Nothing is kept unless memory and observation mode are both on.
+    public func recordObservation(_ outcome: SessionOutcome, config: MemoryConfig) async {
+        guard config.enabled, config.observation else { return }
+        if outcome.result == .dismissed {
+            let suggestion = outcome.suggestion
+            await recordFeedback(MemoryFeedback(
+                gesture: .dismissed, mode: .proofread, tone: suggestion.tone,
+                originalText: suggestion.original, generatedText: suggestion.suggestion,
+                finalText: outcome.sentText ?? "", provider: suggestion.provider, model: suggestion.model,
+                usedMemoryIDs: suggestion.usedMemoryIDs, sent: outcome.sentText != nil
+            ), config: config)
+        }
+        guard let store = openStore(create: true) else { return }
+        let adopted = outcome.result == .adopted
+        do {
+            try await store.bumpStat(
+                key: Self.appStatPrefix + outcome.app, positive: adopted ? 1 : 0, negative: adopted ? 0 : 1, at: clock()
+            )
+        } catch {
+            DiagnosticLog.shared.log("memory", "could not count an observation: \(DiagnosticLog.describe(error))")
+        }
+    }
+
+    /// How the suggestions in followed fields fared lately, over every app: adopted (`positive`)
+    /// and not (`negative`). Reads whatever is on disk, also while observation mode is off.
+    public func adoption() async -> DecayedCounter {
+        let now = clock()
+        var sum = DecayedCounter(updatedAt: now)
+        guard let store = openStore(create: false) else { return sum }
+        do {
+            for counter in try await store.observationStats(prefix: Self.appStatPrefix).values {
+                let current = counter.faded(to: now)
+                sum.positive += current.positive
+                sum.negative += current.negative
+            }
+        } catch {
+            DiagnosticLog.shared.log("memory", "could not read the observations: \(DiagnosticLog.describe(error))")
+        }
+        return sum
     }
 
     /// `prompt` with the memories relevant to `text` added at its end, and the memories used.
@@ -289,7 +335,7 @@ public actor MemoryCoordinator {
         }
     }
 
-    /// Wipes all memories and events, also while memory is off.
+    /// Wipes all memories, events and counters, also while memory is off.
     public func resetAll() async {
         guard let store = openStore(create: false) else { return }
         do {

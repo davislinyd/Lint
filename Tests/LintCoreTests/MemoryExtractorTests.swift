@@ -242,6 +242,7 @@ final class MemoryExtractorTests: XCTestCase {
     func testRegeneratingAndMissingSuggestionsTeachNothing() {
         let sample = feedback(original: "I have meeting.", generated: "I have a meeting.")
         XCTAssertTrue(extract(.regenerated, sample).isEmpty)
+        XCTAssertTrue(extract(.dismissed, sample).isEmpty)
         XCTAssertTrue(extract(.accepted, feedback(original: "I have meeting.", generated: nil)).isEmpty)
     }
 

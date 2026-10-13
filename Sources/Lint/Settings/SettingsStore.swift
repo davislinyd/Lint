@@ -61,6 +61,7 @@ final class SettingsStore {
         static let fastMode = "app.lint.fastMode"
         /// On-disk key. The name stays so a switch that is already on stays on.
         static let memoryEnabled = "app.lint.learning.enabled"
+        static let observationEnabled = "app.lint.observation.enabled"
         static let localServerAutoStart = "app.lint.localServer.autoStart"
         static let localServerBinaryPath = "app.lint.localServer.binaryPath"
         static let localRuntimeSource = "app.lint.localServer.runtimeSource"
@@ -164,6 +165,11 @@ final class SettingsStore {
     /// Memory is opt-in; while off, nothing is recorded and prompts are untouched.
     var memoryEnabled: Bool {
         didSet { defaults.set(memoryEnabled, forKey: Keys.memoryEnabled) }
+    }
+    /// Observation mode follows a suggestion to the text that is sent. Opt-in, and it only does
+    /// anything while memory is on.
+    var observationEnabled: Bool {
+        didSet { defaults.set(observationEnabled, forKey: Keys.observationEnabled) }
     }
     /// With the local llama.cpp provider, launch llama-server if nothing is listening.
     var localServerAutoStart: Bool {
@@ -311,6 +317,7 @@ final class SettingsStore {
             fastMode = defaults.bool(forKey: Keys.fastMode)
         }
         memoryEnabled = defaults.bool(forKey: Keys.memoryEnabled)
+        observationEnabled = defaults.bool(forKey: Keys.observationEnabled)
         if defaults.object(forKey: Keys.localServerAutoStart) == nil {
             localServerAutoStart = true
         } else {
@@ -530,7 +537,7 @@ final class SettingsStore {
     }
 
     var memoryConfig: MemoryConfig {
-        MemoryConfig(enabled: memoryEnabled)
+        MemoryConfig(enabled: memoryEnabled, observation: memoryEnabled && observationEnabled)
     }
 
     /// Lint launches and talks to its own llama-server for a request that goes to the local llama.cpp

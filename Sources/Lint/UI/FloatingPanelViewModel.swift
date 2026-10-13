@@ -51,6 +51,7 @@ final class FloatingPanelViewModel {
     private let capture: TextCaptureService
     private let llm: LLMService
     private let memory: MemoryCoordinator
+    private let observer: FieldObserver
     private let localAI: LocalAISetupCoordinator
     private let appleIntelligence: any AppleIntelligenceAvailabilityChecking
     /// Only the newest request may put its answer on screen (see `WritingRequestTickets`).
@@ -72,7 +73,11 @@ final class FloatingPanelViewModel {
         /// What a translation was written in; nil for the other tasks.
         let translationLanguage: TranslationLanguage?
     }
-    private var generated: GeneratedSuggestion?
+    private var generated: GeneratedSuggestion? {
+        didSet { generatedIsObserved = generated.map(observeOpened) ?? false }
+    }
+    /// Observation mode follows the suggestion on screen, so what is done with it is reported.
+    private var generatedIsObserved = false
 
     // Background prefetch while the selection chip is visible.
     private var prefetchTask: Task<Void, Never>?
@@ -88,6 +93,8 @@ final class FloatingPanelViewModel {
     private var prefetchNote: String?
     private var prefetchIsSuggestion = true
     private var prefetchAttachedToUI = false
+    /// Observation mode was told that this prefetch is waiting behind the ready chip.
+    private var prefetchReadyReported = false
     /// Gloss of the finished prefetch, fetched in the background so the bubble opens complete.
     private var prefetchTranslationTask: Task<Void, Never>?
     private var prefetchTranslation: (language: TranslationLanguage, text: String)?
@@ -105,6 +112,7 @@ final class FloatingPanelViewModel {
         self.capture = capture
         self.llm = llm
         self.memory = memory
+        self.observer = FieldObserver(settings: settings, memory: memory)
         self.localAI = localAI
         self.appleIntelligence = appleIntelligence
         loadSelectionFromSettings()
@@ -241,7 +249,39 @@ final class FloatingPanelViewModel {
         prefetchNote = nil
         prefetchIsSuggestion = true
         prefetchAttachedToUI = false
+        prefetchReadyReported = false
         onPrefetchStateChange?()
+    }
+
+    /// The chip over `result` says a suggestion is ready: one the user can see is there and has not
+    /// looked at. Observation mode is told once per prefetch, and only of plain proofreading.
+    func readyChipShown(for result: TextCaptureService.CaptureResult) {
+        guard isPrefetchReady, !prefetchReadyReported, prefetchIsSuggestion,
+              let key = prefetchKey, key.mode == .proofread, key.source == result.text
+        else { return }
+        prefetchReadyReported = true
+        observer.suggestionReady(
+            ObservedSuggestion(
+                original: key.source, suggestion: prefetchBuffer, tone: key.tone,
+                provider: prefetchProvider.rawValue, model: settings.model, usedMemoryIDs: prefetchUsedMemoryIDs
+            ),
+            for: result
+        )
+    }
+
+    /// Tells observation mode that a finished suggestion is on screen. Only proofreading is
+    /// followed, and only a suggestion for the text Lint captured in a field: not one for text
+    /// typed into the panel. Returns whether it is followed.
+    private func observeOpened(_ generated: GeneratedSuggestion) -> Bool {
+        guard generated.mode == .proofread, let captured = capture.lastCapture, captured.text == generated.source
+        else { return false }
+        return observer.opened(
+            ObservedSuggestion(
+                original: generated.source, suggestion: generated.text, tone: generated.tone,
+                provider: generated.provider.rawValue, model: settings.model, usedMemoryIDs: generated.usedMemoryIDs
+            ),
+            for: captured
+        )
     }
 
     /// Chip click: reuse prefetch if it matches, otherwise stream fresh.
@@ -383,6 +423,7 @@ final class FloatingPanelViewModel {
         pb.clearContents()
         pb.setString(resultText, forType: .string)
         recordFeedback(.copied)
+        if generatedIsObserved { observer.copied() }
     }
 
     @discardableResult
@@ -392,6 +433,7 @@ final class FloatingPanelViewModel {
             return message
         }
         recordFeedback(.replaced)
+        if generatedIsObserved { observer.replaced(written: resultText) }
         return nil
     }
 

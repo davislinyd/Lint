@@ -4,6 +4,7 @@ import SwiftUI
 struct MemorySettingsPane: View {
     var app: AppModel
     @State private var stats = MemoryStats.empty
+    @State private var adoption = DecayedCounter(updatedAt: .now)
     @State private var confirmReset = false
     @State private var showMemories = false
     @State private var dreaming = false
@@ -19,6 +20,27 @@ struct MemorySettingsPane: View {
                 )
             } footer: {
                 Text("關閉時，Lint 的行為與沒有這個功能時完全相同。")
+                    .sectionNote()
+            }
+
+            Section {
+                SettingsToggle(
+                    title: "觀察模式",
+                    detail: "Lint 給過建議後，會繼續讀取那個輸入框的文字，直到你送出（輸入框清空）、輸入框消失，或 10 分鐘沒有動靜，藉此知道建議有沒有被採用。讀到的文字只留在記憶體裡，不會寫入磁碟；存下來的只有各 App 的採用次數與不含文字的紀錄。不會讀取密碼欄位與密碼管理 App。",
+                    isOn: Bindable(app.settings).observationEnabled
+                )
+                .disabled(!app.settings.memoryEnabled)
+                if app.settings.memoryEnabled, app.settings.observationEnabled {
+                    LabeledContent("近期採用率") {
+                        if adoption.total >= 1 {
+                            Text("\((adoption.positive / adoption.total).formatted(.percent.precision(.fractionLength(0))))（約 \(Int(adoption.total.rounded())) 次建議）")
+                        } else {
+                            Text("尚無資料")
+                        }
+                    }
+                }
+            } footer: {
+                Text("需要先啟用記憶。")
                     .sectionNote()
             }
 
@@ -82,12 +104,16 @@ struct MemorySettingsPane: View {
         .formStyle(.grouped)
         .task {
             stats = await app.memory.stats()
+            adoption = await app.memory.adoption()
         }
         .onChange(of: app.settings.memoryEnabled) {
             Task {
                 await app.memory.prepare(config: app.settings.memoryConfig)
                 stats = await app.memory.stats()
             }
+        }
+        .onChange(of: app.settings.observationEnabled) {
+            Task { adoption = await app.memory.adoption() }
         }
         .sheet(isPresented: $showMemories) {
             Task { stats = await app.memory.stats() }
@@ -99,6 +125,7 @@ struct MemorySettingsPane: View {
                 Task {
                     await app.memory.resetAll()
                     stats = await app.memory.stats()
+                    adoption = await app.memory.adoption()
                 }
             }
         } message: {

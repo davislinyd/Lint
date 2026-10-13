@@ -1005,6 +1005,71 @@ final class MemoryStoreTests: XCTestCase {
         XCTAssertEqual([run?.rememberedCount, run?.forgottenCount, run?.erasedCount], [0, 0, 0])
     }
 
+    // MARK: observation
+
+    func testAV5DatabaseUpgradesAndTheCountersStartEmpty() async throws {
+        let url = try makeTempDirectory().appendingPathComponent("LintLearning.sqlite")
+        let saved = memory()
+        do {
+            let queue = try DatabaseQueue(path: url.path)
+            try SQLiteMemoryStore.migrator.migrate(queue, upTo: "v5_dream_forgetting")
+        }
+        do {
+            // The build before observation mode wrote this memory.
+            var before = DatabaseMigrator()
+            for name in ["v1_learning", "v2_drop_examples", "v3_dreaming", "v4_writing_tone", "v5_dream_forgetting"] {
+                before.registerMigration(name) { _ in }
+            }
+            XCTAssertNoThrow(try before.migrate(DatabaseQueue(path: url.path)))
+        }
+
+        let store = try SQLiteMemoryStore(url: url)
+        try await store.saveMemory(saved)
+
+        XCTAssertEqual(try count("observation_stat", in: url), 0)
+        let counters = try await store.observationStats(prefix: "")
+        XCTAssertTrue(counters.isEmpty)
+        let loaded = try await store.memory(id: saved.id)
+        XCTAssertEqual(loaded, saved)
+    }
+
+    func testACounterFadesBeforeItIsAddedTo() async throws {
+        let store = try SQLiteMemoryStore(url: nil)
+        let start = Date(timeIntervalSince1970: 1_800_000_000)
+        let later = start.addingTimeInterval(30 * 86_400)
+        try await store.bumpStat(key: "app:com.example.chat", positive: 4, negative: 2, at: start)
+        try await store.bumpStat(key: "app:com.example.chat", positive: 1, negative: 0, at: later)
+
+        let counter = try await store.observationStats(prefix: "app:")["app:com.example.chat"]
+        XCTAssertEqual(try XCTUnwrap(counter).positive, 3, accuracy: 1e-9)
+        XCTAssertEqual(try XCTUnwrap(counter).negative, 1, accuracy: 1e-9)
+        XCTAssertEqual(counter?.updatedAt, later)
+    }
+
+    func testCountersAreReadByTheStartOfTheirKeyTakenLiterally() async throws {
+        let store = try SQLiteMemoryStore(url: nil)
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        for key in ["app:com.example.a_b", "app:com.example.axb", "trait:noTerminalPeriod"] {
+            try await store.bumpStat(key: key, positive: 1, negative: 0, at: now)
+        }
+        let apps = try await store.observationStats(prefix: "app:")
+        XCTAssertEqual(Set(apps.keys), ["app:com.example.a_b", "app:com.example.axb"])
+        let underscore = try await store.observationStats(prefix: "app:com.example.a_")
+        XCTAssertEqual(Set(underscore.keys), ["app:com.example.a_b"], "_ and % are not wildcards")
+        let percent = try await store.observationStats(prefix: "app:%")
+        XCTAssertTrue(percent.isEmpty)
+    }
+
+    func testResetAllClearsTheCounters() async throws {
+        let (store, url) = try makeFileStore()
+        try await store.bumpStat(key: "app:com.example.chat", positive: 1, negative: 0, at: Date())
+        XCTAssertEqual(try count("observation_stat", in: url), 1)
+
+        try await store.resetAll()
+
+        XCTAssertEqual(try count("observation_stat", in: url), 0)
+    }
+
     func testADreamRunKeepsWhatItRememberedForgotAndErased() async throws {
         let store = try SQLiteMemoryStore(url: nil)
         var run = dreamRun()

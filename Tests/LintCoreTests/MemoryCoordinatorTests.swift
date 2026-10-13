@@ -1457,4 +1457,87 @@ final class MemoryCoordinatorTests: XCTestCase {
         XCTAssertEqual([proven.count(.candidate), proven.count(.active), proven.count(.archived)], [0, 1, 1])
         XCTAssertEqual(proven.count(.specific), 2)
     }
+
+    // MARK: observation
+
+    private let observing = MemoryConfig(enabled: true, observation: true)
+
+    private func outcome(_ result: SessionOutcome.Result, sent: String? = nil) -> SessionOutcome {
+        SessionOutcome(
+            app: "com.example.chat", result: result, ending: sent == nil ? .timedOut : .sent,
+            suggestion: ObservedSuggestion(
+                original: "zq-source-text discuss about", suggestion: "zq-suggestion-text discuss",
+                tone: .preserve, provider: "localLlama", model: "qwen"
+            ),
+            written: nil, sentText: sent
+        )
+    }
+
+    func testAnObservationIsIgnoredUnlessMemoryAndObservationAreBothOn() async throws {
+        let url = try makeStoreURL()
+        let coordinator = MemoryCoordinator(storeURL: url, hmacKey: testKey())
+        await coordinator.recordObservation(outcome(.dismissed), config: MemoryConfig(enabled: false, observation: true))
+        await coordinator.recordObservation(outcome(.adopted), config: MemoryConfig(enabled: true))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: url.path))
+        let adoption = await coordinator.adoption()
+        XCTAssertEqual(adoption.total, 0)
+    }
+
+    func testEverySessionCountsOnceForItsAppAndOnlyADismissalLeavesAnEvent() async throws {
+        let coordinator = MemoryCoordinator(storeURL: nil, hmacKey: testKey())
+        await coordinator.recordObservation(outcome(.adopted), config: observing)
+        await coordinator.recordObservation(outcome(.ignored, sent: "zq-source-text discuss about"), config: observing)
+        var events = await coordinator.stats().eventCount
+        XCTAssertEqual(events, 0)
+
+        await coordinator.recordObservation(outcome(.dismissed, sent: "zq-sent-text discuss about"), config: observing)
+        await coordinator.recordObservation(outcome(.dismissed, sent: "zq-sent-text discuss about"), config: observing)
+        events = await coordinator.stats().eventCount
+        XCTAssertEqual(events, 1, "the same dismissal within a day is one event")
+
+        let adoption = await coordinator.adoption()
+        XCTAssertEqual(adoption.positive, 1, accuracy: 1e-6)
+        XCTAssertEqual(adoption.negative, 3, accuracy: 1e-6, "every session counts for its app")
+    }
+
+    func testObservationsTeachNothingYetAndLeaveThePromptAlone() async throws {
+        let coordinator = MemoryCoordinator(storeURL: nil, hmacKey: testKey())
+        await coordinator.recordObservation(outcome(.dismissed, sent: "zq-source-text discuss about"), config: observing)
+        await coordinator.recordObservation(outcome(.adopted, sent: "zq-suggestion-text discuss"), config: observing)
+
+        let memories = await coordinator.memories()
+        XCTAssertTrue(memories.isEmpty)
+        let prompt = await coordinator.personalize(
+            prompt: "Fix the text.", for: "we should discuss about the plan", mode: .proofread, config: observing
+        )
+        XCTAssertEqual(prompt, PersonalizedPrompt(systemPrompt: "Fix the text.", usedMemoryIDs: []))
+    }
+
+    func testWhatWasObservedNeverReachesTheFile() async throws {
+        let url = try makeStoreURL()
+        let coordinator = MemoryCoordinator(storeURL: url, hmacKey: testKey())
+        await coordinator.recordObservation(outcome(.dismissed, sent: "zq-sent-text discuss about"), config: observing)
+
+        let file = try Data(contentsOf: url)
+        XCTAssertNotNil(file.range(of: Data("app:com.example.chat".utf8)), "the app is what the count is kept under")
+        for secret in ["zq-source-text", "zq-suggestion-text", "zq-sent-text"] {
+            XCTAssertNil(file.range(of: Data(secret.utf8)), "\(secret) must not be stored")
+        }
+    }
+
+    func testAdoptionFadesAndResetClearsIt() async throws {
+        let clock = TestClock()
+        let coordinator = MemoryCoordinator(storeURL: nil, hmacKey: testKey(), clock: clock.reader)
+        await coordinator.recordObservation(outcome(.adopted), config: observing)
+        await coordinator.recordObservation(outcome(.ignored), config: observing)
+        clock.advance(days: 30)
+
+        let faded = await coordinator.adoption()
+        XCTAssertEqual(faded.positive, 0.5, accuracy: 1e-6)
+        XCTAssertEqual(faded.negative, 0.5, accuracy: 1e-6)
+
+        await coordinator.resetAll()
+        let cleared = await coordinator.adoption()
+        XCTAssertEqual(cleared.total, 0)
+    }
 }

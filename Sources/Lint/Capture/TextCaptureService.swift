@@ -207,6 +207,19 @@ final class TextCaptureService {
         lastCapture = result
     }
 
+    /// The whole text of the field a capture came from, read again later to follow a suggestion to
+    /// what is sent (`FieldObserver`). Nil without an Accessibility element, and for a secure field.
+    static func readValue(of capture: CaptureResult) -> String? {
+        guard AccessibilityPermission.isTrusted, let element = capture.axElement, !isSecureElement(element)
+        else { return nil }
+        return readStringAttribute(element, kAXValueAttribute as String)
+    }
+
+    static func sameField(_ lhs: CaptureResult, _ rhs: CaptureResult) -> Bool {
+        guard let element = lhs.axElement else { return false }
+        return sameElement(element, rhs.axElement)
+    }
+
     /// Replace previously captured selection. Returns error message or nil on success.
     /// Every write comes from `ReplaceDecision` and goes only over the checked text: the one occurrence in
     /// the field value, a selection that reads as the original, or, without an Accessibility target, a

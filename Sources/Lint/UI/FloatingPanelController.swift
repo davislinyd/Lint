@@ -174,6 +174,9 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
         guard let chipView else { return }
         if viewModel.isPrefetchReady {
             chipView.setTitle(String(localized: "已就緒"))
+            if chipPanel?.isVisible == true, let pendingChipCapture {
+                viewModel.readyChipShown(for: pendingChipCapture)
+            }
         } else if viewModel.isPrefetching {
             chipView.setTitle(String(localized: "準備中"))
         } else {

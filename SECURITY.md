@@ -16,6 +16,8 @@ Lint uses Accessibility to read text in the app you are using. With the default 
 
 Both background watches can be turned off in Settings → General; the hotkeys keep working. Secure fields are skipped. Password managers (1Password, Bitwarden, KeePassXC) and the system Passwords and Keychain Access apps are not read. A banking page open in a browser is not on that list. Text that is checked, including text prepared in the background, goes to the model you chose. A local model keeps it on this Mac. A model that runs anywhere else receives it.
 
+**Observation mode** (Settings → Memory; off by default, and it needs Memory to be on): after Lint has made a suggestion in a field, it keeps reading that one field every 100 ms until its text is sent (the field empties), the field goes away, Lint makes a suggestion in another field, or nothing has changed in it for 10 minutes. It does this to learn whether the suggestion was used. What it reads is compared in RAM and dropped when it stops following the field; it is never written to disk and never sent to a model. What is kept, in `LintLearning.sqlite`: for each app, under its bundle ID, a count of how often a suggestion was used or not, which fades with time; and for a suggestion that was opened and not used, an event of keyed hashes without any text. Only proofreading suggestions are followed, and secure fields and the apps listed above are never read. Turning the mode off stops the reading at once, and Reset Memory Database deletes the counts.
+
 Lint 用輔助功能讀取你正在使用的 App 裡的文字。預設設定下：
 
 - 你選取文字（8 個字以上）時，Lint 會在背景先為它準備建議。
@@ -23,6 +25,8 @@ Lint 用輔助功能讀取你正在使用的 App 裡的文字。預設設定下�
 - `⌥⌘K` 會讀焦點欄位，檢查其中的選取或游標所在的段落。欄位讀不到文字時，會全選並複製整個欄位。`⌥⌘L` 讀取選取範圍，輔助功能讀不到時用 ⌘C 複製。
 
 兩種背景監看都可以在「設定 → 一般」關閉，快捷鍵照常可用。安全輸入框會略過。密碼管理器（1Password、Bitwarden、KeePassXC）以及系統的「密碼」與「鑰匙圈存取」不會被讀取。開在瀏覽器裡的網頁銀行不在這份名單上。被檢查的文字，包含在背景準備的，會送到你選的模型。本機模型讓文字留在這台 Mac；在其他地方執行的模型會收到這些文字。
+
+**觀察模式**（「設定 → 記憶」；預設關閉，且需先啟用記憶）：Lint 在某個輸入框給過建議後，會每 100 毫秒繼續讀取那一個輸入框，直到文字送出（輸入框清空）、輸入框消失、Lint 在另一個輸入框給了建議，或 10 分鐘沒有變動為止，用來了解建議有沒有被採用。讀到的文字只在記憶體裡比對，停止追蹤時就丟棄；不會寫入磁碟，也不會送給模型。保存在 `LintLearning.sqlite` 的只有：各 App（以 bundle ID 為鍵）採用與未採用建議的次數，會隨時間淡出；以及「打開後沒有採用」的建議的帶金鑰雜湊事件，不含任何文字。只追蹤校對的建議；安全輸入框與上面列出的 App 一律不讀。關閉觀察模式會立刻停止讀取，「重設記憶資料庫」會刪除這些次數。
 
 ## Update checks
 

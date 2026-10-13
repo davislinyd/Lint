@@ -102,6 +102,25 @@ final class StyleTraitsTests: XCTestCase {
         XCTAssertFalse(ObservationAdjuster.holds(counter(0, 0), held: false))
     }
 
+    func testAnAppGoesQuietWhenManySuggestionsThereWereNeverUsed() {
+        XCTAssertTrue(ObservationAdjuster.isQuiet(counter(0, 30)))
+        XCTAssertTrue(ObservationAdjuster.isQuiet(counter(0.9, 29.6)), "thirty today, a few hours ago; one used long ago")
+        XCTAssertFalse(ObservationAdjuster.isQuiet(counter(0, 29.4)), "not often enough")
+        XCTAssertFalse(ObservationAdjuster.isQuiet(counter(1, 80)), "one was used")
+        XCTAssertFalse(ObservationAdjuster.isQuiet(counter(0, 0)))
+    }
+
+    func testTheToneUsedInAnAppMostOfTheTimeIsItsOwn() {
+        XCTAssertEqual(ObservationAdjuster.tone(from: [.formal: 3]), .formal)
+        XCTAssertEqual(ObservationAdjuster.tone(from: [.formal: 2.6]), .formal, "three, faded a little")
+        XCTAssertEqual(ObservationAdjuster.tone(from: [.formal: 8, .casual: 2]), .formal)
+        XCTAssertNil(ObservationAdjuster.tone(from: [.formal: 2.4]), "not used often enough")
+        XCTAssertNil(ObservationAdjuster.tone(from: [.formal: 7, .casual: 3]), "not most of the time")
+        XCTAssertNil(ObservationAdjuster.tone(from: [.formal: 4, .casual: 4]))
+        XCTAssertNil(ObservationAdjuster.tone(from: [:]))
+        XCTAssertNil(ObservationAdjuster.tone(from: [.formal: 0]))
+    }
+
     func testATraitThatHoldsIsOnlyDroppedWellBelowTheBar() {
         XCTAssertTrue(ObservationAdjuster.holds(counter(7, 3), held: true), "between the two bars it stays")
         XCTAssertTrue(ObservationAdjuster.holds(counter(6, 4), held: true))

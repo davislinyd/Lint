@@ -12,6 +12,8 @@ final class SelectionMonitor {
     private let onSuggest: (TextCaptureService.CaptureResult) -> Void
     private let onCleared: () -> Void
     private let onTyping: () -> Void
+    /// An app where nothing is prepared unless it is asked for (observation mode, `AppAdjustment.quiet`).
+    private let isQuietApp: (String?) -> Bool
     /// While true, ignore input changes (bubble is interacting).
     var isPaused = false
     private var loopTask: Task<Void, Never>?
@@ -32,13 +34,15 @@ final class SelectionMonitor {
         capture: TextCaptureService,
         onSuggest: @escaping (TextCaptureService.CaptureResult) -> Void,
         onCleared: @escaping () -> Void = {},
-        onTyping: @escaping () -> Void = {}
+        onTyping: @escaping () -> Void = {},
+        isQuietApp: @escaping (String?) -> Bool = { _ in false }
     ) {
         self.settings = settings
         self.capture = capture
         self.onSuggest = onSuggest
         self.onCleared = onCleared
         self.onTyping = onTyping
+        self.isQuietApp = isQuietApp
     }
 
     func applyWatchSettings() {
@@ -96,7 +100,7 @@ final class SelectionMonitor {
         if frontBundle == Bundle.main.bundleIdentifier {
             return
         }
-        if LiveCheckPolicy.isDenylisted(frontBundle) {
+        if LiveCheckPolicy.isDenylisted(frontBundle) || isQuietApp(frontBundle) {
             scheduleClearIfNeeded()
             return
         }

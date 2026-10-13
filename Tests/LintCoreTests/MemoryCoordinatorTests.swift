@@ -1744,4 +1744,89 @@ final class MemoryCoordinatorTests: XCTestCase {
         guard case .finished(_, _, _, _, _, let adjusted) = outcome else { return XCTFail("\(outcome)") }
         XCTAssertEqual(adjusted, 0)
     }
+
+    // MARK: per app
+
+    private func used(_ app: String, tone: WritingTone, _ object: String) -> SessionOutcome {
+        SessionOutcome(
+            app: app, result: .adopted, ending: .timedOut,
+            suggestion: ObservedSuggestion(
+                original: "I need a big \(object).", suggestion: "I need a large \(object).", tone: tone,
+                provider: "localLlama", model: "qwen"
+            ),
+            written: nil, sentText: nil
+        )
+    }
+
+    func testTheToneOfSuggestionsThatWereUsedInAnAppBecomesItsOwnWhenDreaming() async throws {
+        let coordinator = learner()
+        for object in ["house", "office", "garage"] {
+            await coordinator.recordObservation(used("com.example.mail", tone: .formal, object), config: observing)
+            // Chinese text under Idiomatic is written by the native tone: it counts for Idiomatic.
+            await coordinator.recordObservation(used("com.example.chat", tone: .native, object), config: observing)
+        }
+        await coordinator.recordObservation(outcome(.dismissed), config: observing)
+        var adjustments = await coordinator.appAdjustments()
+        XCTAssertTrue(adjustments.isEmpty, "only a dream writes them")
+
+        _ = await coordinator.dream(config: observing)
+        adjustments = await coordinator.appAdjustments()
+        XCTAssertEqual(adjustments, [
+            AppAdjustment(app: "com.example.chat", tone: .idiomatic), AppAdjustment(app: "com.example.mail", tone: .formal),
+        ])
+    }
+
+    func testWhatTheUserTakesBackIsForgottenWithTheCountsBehindIt() async throws {
+        let coordinator = learner()
+        for index in 0..<30 {
+            var ignored = outcome(.ignored)
+            ignored.app = "com.example.mail"
+            ignored.suggestion.original = "zq-source-text discuss about \(index)"
+            await coordinator.recordObservation(ignored, config: observing)
+        }
+        for object in ["house", "office", "garage"] {
+            await coordinator.recordObservation(used("com.example.chat", tone: .formal, object), config: observing)
+        }
+        _ = await coordinator.dream(config: observing)
+        var adjustments = await coordinator.appAdjustments()
+        XCTAssertEqual(adjustments, [
+            AppAdjustment(app: "com.example.chat", tone: .formal), AppAdjustment(app: "com.example.mail", quiet: true),
+        ])
+
+        // ⌥⌘K in the quiet app, and a tone picked by hand in the other.
+        await coordinator.forget(app: "com.example.mail", quiet: true, tone: false)
+        await coordinator.forget(app: "com.example.chat", quiet: false, tone: true)
+        await coordinator.forget(app: "com.example.unknown", quiet: true, tone: true)
+        adjustments = await coordinator.appAdjustments()
+        XCTAssertTrue(adjustments.isEmpty)
+
+        _ = await coordinator.dream(config: observing)
+        adjustments = await coordinator.appAdjustments()
+        XCTAssertTrue(adjustments.isEmpty, "not learned again from the same counts")
+        let adoption = await coordinator.adoption()
+        XCTAssertEqual(adoption.positive, 3, accuracy: 1e-6, "the other app's counts are untouched")
+        XCTAssertEqual(adoption.negative, 0, accuracy: 1e-6)
+    }
+
+    func testForgettingOnlyOneThingKeepsTheCountsOfTheOther() async throws {
+        let coordinator = learner()
+        for object in ["house", "office"] {
+            await coordinator.recordObservation(used("com.example.chat", tone: .casual, object), config: observing)
+        }
+        // ⌥⌘K there: how the sessions went is forgotten, which tone was used is not.
+        await coordinator.forget(app: "com.example.chat", quiet: true, tone: false)
+        var adoption = await coordinator.adoption()
+        XCTAssertEqual(adoption.total, 0, accuracy: 1e-6)
+        await coordinator.recordObservation(used("com.example.chat", tone: .casual, "garage"), config: observing)
+        _ = await coordinator.dream(config: observing)
+        var adjustments = await coordinator.appAdjustments()
+        XCTAssertEqual(adjustments, [AppAdjustment(app: "com.example.chat", tone: .casual)], "three times in all")
+
+        // A tone picked by hand: the tone is forgotten, how the sessions went is not.
+        await coordinator.forget(app: "com.example.chat", quiet: false, tone: true)
+        adjustments = await coordinator.appAdjustments()
+        XCTAssertTrue(adjustments.isEmpty)
+        adoption = await coordinator.adoption()
+        XCTAssertEqual(adoption.positive, 1, accuracy: 1e-6)
+    }
 }

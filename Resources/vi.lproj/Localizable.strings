@@ -209,6 +209,9 @@
 "觀察模式" = "Chế độ quan sát";
 "Lint 給過建議後，會繼續讀取那個輸入框的文字，直到你送出（輸入框清空）、輸入框消失，或 10 分鐘沒有動靜，藉此知道建議有沒有被採用、哪些改動你不想要。讀到的文字只留在記憶體裡，不會寫入磁碟；存下來的只有各 App 的採用次數、不含文字的紀錄，以及和其他記憶一樣的簡短規則。不會讀取密碼欄位與密碼管理 App。" = "Sau khi đưa ra gợi ý, Lint tiếp tục đọc ô nhập đó cho đến khi bạn gửi văn bản (ô nhập trống), ô nhập biến mất hoặc không có gì thay đổi trong 10 phút, để biết gợi ý có được dùng hay không và thay đổi nào bạn không muốn. Văn bản đọc được chỉ nằm trong RAM và không bao giờ được ghi xuống đĩa; chỉ lưu số lần gợi ý được dùng theo từng ứng dụng, các bản ghi không chứa văn bản và những quy tắc ngắn giống các ghi nhớ khác. Không bao giờ đọc ô mật khẩu và ứng dụng quản lý mật khẩu.";
 "需要先啟用記憶。" = "Cần bật Bộ nhớ trước.";
+"不自動準備建議" = "Không tự chuẩn bị gợi ý";
+"語氣：%@" = "Giọng văn: %@";
+"某個 App 裡的建議從未被採用時，Lint 不再自動為它準備建議；在那裡按 ⌥⌘K 檢查一次就會恢復。某個 App 裡多半採用同一種語氣時，那裡的自動建議會改用那種語氣；手動選語氣就會取消。" = "Khi gợi ý trong một ứng dụng chưa từng được dùng, Lint thôi tự chuẩn bị gợi ý ở đó; kiểm tra một lần bằng ⌥⌘K ở đó sẽ bật lại. Khi một giọng văn được dùng hầu hết trong một ứng dụng, gợi ý tự động ở đó sẽ viết theo giọng văn ấy; tự chọn giọng văn sẽ hủy điều này.";
 "近期採用率" = "Tỷ lệ dùng gợi ý gần đây";
 "%@（約 %lld 次建議）" = "%@ (khoảng %lld gợi ý)";
 "尚無資料" = "Chưa có dữ liệu";

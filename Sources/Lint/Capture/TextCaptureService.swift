@@ -16,6 +16,11 @@ final class TextCaptureService {
         /// Read with ⌘A then ⌘C because the field exposes no text: the text is the whole field.
         var selectedAll = false
 
+        /// Bundle ID of the app the text was captured in.
+        var sourceBundleID: String? {
+            sourceAppPID.flatMap { NSRunningApplication(processIdentifier: $0)?.bundleIdentifier }
+        }
+
         /// Where Replace would write, for the diagnostic log: never the text.
         var diagnosticTarget: String {
             let range = selectedRange.map { "\($0.location)+\($0.length)" } ?? "none"

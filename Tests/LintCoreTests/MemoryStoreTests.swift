@@ -1095,6 +1095,60 @@ final class MemoryStoreTests: XCTestCase {
         XCTAssertEqual(run?.adjustedCount, 0)
     }
 
+    func testAV7DatabaseUpgradesAndNoAppIsAdjustedYet() async throws {
+        let url = try makeTempDirectory().appendingPathComponent("LintLearning.sqlite")
+        do {
+            let queue = try DatabaseQueue(path: url.path)
+            try SQLiteMemoryStore.migrator.migrate(queue, upTo: "v7_adjustments")
+        }
+        let store = try SQLiteMemoryStore(url: url)
+        XCTAssertEqual(try count("app_adjustment", in: url), 0)
+        let adjustments = try await store.appAdjustments()
+        XCTAssertTrue(adjustments.isEmpty)
+    }
+
+    func testAnAppAdjustmentIsKeptReplacedAndRemovedOnceItAsksForNothing() async throws {
+        let (store, url) = try makeFileStore()
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        try await store.saveAppAdjustment(AppAdjustment(app: "com.example.chat", quiet: true), at: now)
+        try await store.saveAppAdjustment(AppAdjustment(app: "com.example.mail", tone: .formal), at: now)
+        var all = try await store.appAdjustments()
+        XCTAssertEqual(all, [
+            AppAdjustment(app: "com.example.chat", quiet: true), AppAdjustment(app: "com.example.mail", tone: .formal),
+        ])
+
+        try await store.saveAppAdjustment(AppAdjustment(app: "com.example.chat", quiet: true, tone: .casual), at: now)
+        try await store.saveAppAdjustment(AppAdjustment(app: "com.example.mail"), at: now)
+        all = try await store.appAdjustments()
+        XCTAssertEqual(all, [AppAdjustment(app: "com.example.chat", quiet: true, tone: .casual)])
+
+        // A tone from a newer build is no tone here; the rest of the row still counts.
+        let queue = try DatabaseQueue(path: url.path)
+        try await queue.write { db in
+            try db.execute(sql: "UPDATE app_adjustment SET tone = 'whimsical'")
+        }
+        all = try await store.appAdjustments()
+        XCTAssertEqual(all, [AppAdjustment(app: "com.example.chat", quiet: true)])
+
+        try await store.resetAll()
+        XCTAssertEqual(try count("app_adjustment", in: url), 0)
+    }
+
+    func testACounterIsRemovedByItsKeyAndSeveralByTheStartOfTheirs() async throws {
+        let store = try SQLiteMemoryStore(url: nil)
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        for key in [
+            "app:com.example.notes", "app:com.example.notes.helper",
+            "apptone:com.example.notes:formal", "apptone:com.example.notes:casual", "apptone:com.example.notes.helper:formal",
+        ] {
+            try await store.bumpStat(key: key, positive: 1, negative: 0, at: now)
+        }
+        try await store.deleteStat(key: "app:com.example.notes")
+        try await store.deleteStats(prefix: "apptone:com.example.notes:")
+        let left = try await store.observationStats(prefix: "")
+        XCTAssertEqual(Set(left.keys), ["app:com.example.notes.helper", "apptone:com.example.notes.helper:formal"])
+    }
+
     func testDeletingTheStyleProfileIsRememberedLikeDeletingARule() async throws {
         let store = try SQLiteMemoryStore(url: nil)
         let profile = memory(key: StyleProfile.dedupKey)

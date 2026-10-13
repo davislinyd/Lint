@@ -23,6 +23,9 @@ final class AppModel: NSObject, NSWindowDelegate {
     private var settingsWindow: NSWindow?
     private var localAISetupWindow: NSWindow?
     private var selectionMonitor: SelectionMonitor?
+    /// What Lint does differently per app (observation mode), by bundle ID, as dreaming last wrote
+    /// it. Empty while the mode is off: nothing is adjusted then.
+    private(set) var appAdjustments: [String: AppAdjustment] = [:]
 
     override init() {
         let keychain = KeychainStore()
@@ -43,6 +46,8 @@ final class AppModel: NSObject, NSWindowDelegate {
         super.init()
         viewModel.onOpenLocalAISetup = { [weak self] in self?.presentLocalAISetup() }
         viewModel.onOpenModelSettings = { [weak self] in self?.openSettings() }
+        viewModel.learnedTone = { [weak self] bundle in bundle.flatMap { self?.appAdjustments[$0] }?.tone }
+        viewModel.onToneChosen = { [weak self] bundle in self?.forgetAdjustment(for: bundle, quiet: false, tone: true) }
         let monitor = SelectionMonitor(
             settings: settings,
             capture: capture,
@@ -56,6 +61,9 @@ final class AppModel: NSObject, NSWindowDelegate {
             },
             onTyping: { [weak self] in
                 self?.panel.viewModel.warmUpIfIdle()
+            },
+            isQuietApp: { [weak self] bundle in
+                bundle.flatMap { self?.appAdjustments[$0] }?.quiet ?? false
             }
         )
         self.selectionMonitor = monitor
@@ -77,8 +85,34 @@ final class AppModel: NSObject, NSWindowDelegate {
             }
         }
         monitor.applyWatchSettings()
-        Task { await self.memory.prepare(config: self.settings.memoryConfig) }
+        Task {
+            await self.memory.prepare(config: self.settings.memoryConfig)
+            await self.refreshAppAdjustments()
+        }
         Task { await self.ensureLocalServerIfNeeded() }
+    }
+
+    /// Reads what Lint does differently per app. Dreaming writes it in the background, so this is
+    /// read again every minute (`startPolling`), and at once after the user changed something.
+    func refreshAppAdjustments() async {
+        guard settings.memoryConfig.observation else {
+            appAdjustments = [:]
+            return
+        }
+        appAdjustments = Dictionary(
+            await memory.appAdjustments().map { ($0.app, $0) }, uniquingKeysWith: { first, _ in first }
+        )
+    }
+
+    /// The user wants this app back to normal (see `MemoryCoordinator.forget`). Applied at once.
+    func forgetAdjustment(for bundle: String?, quiet: Bool, tone: Bool) {
+        guard let bundle, var adjustment = appAdjustments[bundle] else { return }
+        guard (quiet && adjustment.quiet) || (tone && adjustment.tone != nil) else { return }
+        if quiet { adjustment.quiet = false }
+        if tone { adjustment.tone = nil }
+        appAdjustments[bundle] = adjustment.quiet || adjustment.tone != nil ? adjustment : nil
+        DiagnosticLog.shared.log("observe", "forgot quiet=\(quiet) tone=\(tone) app=\(bundle)")
+        Task { await memory.forget(app: bundle, quiet: quiet, tone: tone) }
     }
 
     /// Apple Intelligence takes the requests: Lint's local AI is neither checked nor started for it.
@@ -210,8 +244,10 @@ final class AppModel: NSObject, NSWindowDelegate {
         panel.run()
     }
 
-    /// ⌥⌘K — run the pending chip / focused field check without clicking.
+    /// ⌥⌘K — run the pending chip / focused field check without clicking. Asking for a suggestion in
+    /// an app that had gone quiet says that Lint is wanted there again.
     func runCheckHotkey() {
+        forgetAdjustment(for: NSWorkspace.shared.frontmostApplication?.bundleIdentifier, quiet: true, tone: false)
         panel.activateCheckFromHotkey(capture: capture)
     }
 
@@ -239,10 +275,13 @@ final class AppModel: NSObject, NSWindowDelegate {
 
     func startPolling() {
         Task { [weak self] in
+            var seconds = 0
             while let self {
                 self.accessibilityTrusted = AccessibilityPermission.isTrusted
                 self.localAI.setAccessibilityTrusted(self.accessibilityTrusted)
                 self.updates.installIfWaiting(panelVisible: self.panel.isVisible)
+                seconds += 1
+                if seconds % 60 == 0 { await self.refreshAppAdjustments() }
                 try? await Task.sleep(for: .seconds(1))
             }
         }

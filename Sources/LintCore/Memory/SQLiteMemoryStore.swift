@@ -175,6 +175,15 @@ struct SQLiteMemoryStore: MemoryStore {
                 t.add(column: "adjusted_count", .integer).notNull().defaults(to: 0)
             }
         }
+        // What Lint does differently in an app: a bundle ID, a flag and the name of a tone.
+        migrator.registerMigration("v8_app_adjustments") { db in
+            try db.create(table: "app_adjustment") { t in
+                t.column("app", .text).primaryKey()
+                t.column("quiet", .boolean).notNull()
+                t.column("tone", .text)
+                t.column("updated_at", .double).notNull()
+            }
+        }
         return migrator
     }
 
@@ -512,6 +521,43 @@ struct SQLiteMemoryStore: MemoryStore {
         }
     }
 
+    func deleteStat(key: String) async throws {
+        try await dbQueue.write { db in
+            try db.execute(sql: "DELETE FROM observation_stat WHERE key = ?", arguments: [key])
+        }
+    }
+
+    func deleteStats(prefix: String) async throws {
+        try await dbQueue.write { db in
+            try db.execute(
+                sql: "DELETE FROM observation_stat WHERE substr(key, 1, length(?)) = ?", arguments: [prefix, prefix]
+            )
+        }
+    }
+
+    func appAdjustments() async throws -> [AppAdjustment] {
+        try await dbQueue.read { db in
+            try Row.fetchAll(db, sql: "SELECT app, quiet, tone FROM app_adjustment ORDER BY app").map { row in
+                let tone: String? = row["tone"]
+                // A tone this build does not know is no tone: the app falls back to the chosen one.
+                return AppAdjustment(app: row["app"], quiet: row["quiet"], tone: tone.flatMap(WritingTone.init(rawValue:)))
+            }
+        }
+    }
+
+    func saveAppAdjustment(_ adjustment: AppAdjustment, at now: Date) async throws {
+        try await dbQueue.write { db in
+            if adjustment.isEmpty {
+                try db.execute(sql: "DELETE FROM app_adjustment WHERE app = ?", arguments: [adjustment.app])
+            } else {
+                try db.execute(
+                    sql: "INSERT OR REPLACE INTO app_adjustment (app, quiet, tone, updated_at) VALUES (?, ?, ?, ?)",
+                    arguments: [adjustment.app, adjustment.quiet, adjustment.tone?.rawValue, now.timeIntervalSince1970]
+                )
+            }
+        }
+    }
+
     private static func counter(_ row: Row) -> DecayedCounter {
         DecayedCounter(
             positive: row["positive"], negative: row["negative"],
@@ -572,6 +618,7 @@ struct SQLiteMemoryStore: MemoryStore {
             try db.execute(sql: "DELETE FROM dream_run")
             try db.execute(sql: "DELETE FROM dream_veto")
             try db.execute(sql: "DELETE FROM observation_stat")
+            try db.execute(sql: "DELETE FROM app_adjustment")
         }
         try await dbQueue.vacuum()
     }

@@ -1107,6 +1107,78 @@ final class DreamCoordinatorTests: XCTestCase {
     }
 }
 
+extension DreamCoordinatorTests {
+    // MARK: per app
+
+    private func sessions(_ app: String, used: Double, unused: Double, in store: SQLiteMemoryStore) async throws {
+        try await store.bumpStat(key: ObservationKey.app(app), positive: used, negative: unused, at: DreamFixtures.now)
+    }
+
+    private func adoptions(_ app: String, _ tone: WritingTone, _ count: Double, in store: SQLiteMemoryStore) async throws {
+        try await store.bumpStat(key: ObservationKey.appTone(app, tone), positive: count, negative: 0, at: DreamFixtures.now)
+    }
+
+    private func pass(_ store: SQLiteMemoryStore) async throws -> [AppAdjustment] {
+        let fixed = DreamFixtures.now
+        _ = await MemoryDreamCoordinator(store: store, clock: { fixed }).run()
+        return try await store.appAdjustments()
+    }
+
+    func testAnAppWhoseSuggestionsWereNeverUsedGoesQuiet() async throws {
+        let store = try SQLiteMemoryStore(url: nil)
+        try await sessions("com.example.chat", used: 0, unused: 30, in: store)
+        try await sessions("com.example.mail", used: 2, unused: 60, in: store)
+        try await sessions("com.example.notes", used: 0, unused: 12, in: store)
+
+        let adjustments = try await pass(store)
+        XCTAssertEqual(adjustments, [AppAdjustment(app: "com.example.chat", quiet: true)])
+    }
+
+    func testAQuietAppStaysQuietUntilASuggestionIsUsedThere() async throws {
+        let store = try SQLiteMemoryStore(url: nil)
+        try await sessions("com.example.chat", used: 0, unused: 30, in: store)
+        _ = try await pass(store)
+
+        // The counts fade (nothing is prepared there any more), and the app stays quiet.
+        let later = DreamFixtures.now.addingTimeInterval(90 * 86_400)
+        _ = await MemoryDreamCoordinator(store: store, clock: { later }).run()
+        var adjustments = try await store.appAdjustments()
+        XCTAssertEqual(adjustments, [AppAdjustment(app: "com.example.chat", quiet: true)])
+
+        // Asked for with the hotkey and used: wanted there after all.
+        try await store.bumpStat(key: ObservationKey.app("com.example.chat"), positive: 1, negative: 0, at: later)
+        _ = await MemoryDreamCoordinator(store: store, clock: { later }).run()
+        adjustments = try await store.appAdjustments()
+        XCTAssertTrue(adjustments.isEmpty)
+    }
+
+    func testTheToneUsedInAnAppMostOfTheTimeBecomesItsOwnForAsLongAsTheCountsSaySo() async throws {
+        let store = try SQLiteMemoryStore(url: nil)
+        try await adoptions("com.example.mail", .formal, 4, in: store)
+        try await adoptions("com.example.chat", .casual, 2, in: store)
+        try await adoptions("com.example.notes", .formal, 3, in: store)
+        try await adoptions("com.example.notes", .concise, 3, in: store)
+        var adjustments = try await pass(store)
+        XCTAssertEqual(adjustments, [AppAdjustment(app: "com.example.mail", tone: .formal)])
+
+        try await adoptions("com.example.chat", .casual, 1, in: store)
+        try await adoptions("com.example.mail", .casual, 12, in: store)
+        adjustments = try await pass(store)
+        XCTAssertEqual(adjustments, [AppAdjustment(app: "com.example.chat", tone: .casual)], "mail has no tone of its own now")
+
+        try await adoptions("com.example.mail", .casual, 20, in: store)
+        try await sessions("com.example.mail", used: 0, unused: 40, in: store)
+        adjustments = try await pass(store)
+        XCTAssertEqual(adjustments, [
+            AppAdjustment(app: "com.example.chat", tone: .casual),
+            AppAdjustment(app: "com.example.mail", quiet: true, tone: .casual),
+        ])
+
+        let memories = try await store.memories()
+        XCTAssertTrue(memories.isEmpty, "nothing here is a memory")
+    }
+}
+
 private extension WritingMemory {
     /// Not seen for so long that it is forgotten, though its trace is still there to be recognised.
     mutating func fadedBelowTheBar() {

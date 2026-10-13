@@ -61,6 +61,14 @@ protocol MemoryStore: Sendable {
     func bumpStat(key: String, positive: Double, negative: Double, at now: Date) async throws
     /// The counters whose key starts with `prefix`, as they were last written.
     func observationStats(prefix: String) async throws -> [String: DecayedCounter]
+    /// Removes the counter kept under exactly `key`.
+    func deleteStat(key: String) async throws
+    /// Removes the counters whose key starts with `prefix`.
+    func deleteStats(prefix: String) async throws
+    /// What is done differently per app, by bundle ID.
+    func appAdjustments() async throws -> [AppAdjustment]
+    /// Inserts or replaces what is done for one app; one that asks for nothing is removed.
+    func saveAppAdjustment(_ adjustment: AppAdjustment, at now: Date) async throws
 
     func stats() async throws -> MemoryStats
     /// Removes every memory, event and counter, and scrubs the freed pages from the file.

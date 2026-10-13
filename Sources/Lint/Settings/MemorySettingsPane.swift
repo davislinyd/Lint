@@ -1,3 +1,4 @@
+import AppKit
 import LintCore
 import SwiftUI
 
@@ -38,10 +39,26 @@ struct MemorySettingsPane: View {
                             Text("尚無資料")
                         }
                     }
+                    ForEach(adjustments) { adjustment in
+                        LabeledContent(Self.appName(adjustment.app)) {
+                            HStack {
+                                Text(Self.summary(of: adjustment))
+                                    .foregroundStyle(.secondary)
+                                Button("移除") {
+                                    app.forgetAdjustment(for: adjustment.app, quiet: true, tone: true)
+                                }
+                            }
+                        }
+                    }
                 }
             } footer: {
-                Text("需要先啟用記憶。")
-                    .sectionNote()
+                if adjustments.isEmpty {
+                    Text("需要先啟用記憶。")
+                        .sectionNote()
+                } else {
+                    Text("某個 App 裡的建議從未被採用時，Lint 不再自動為它準備建議；在那裡按 ⌥⌘K 檢查一次就會恢復。某個 App 裡多半採用同一種語氣時，那裡的自動建議會改用那種語氣；手動選語氣就會取消。")
+                        .sectionNote()
+                }
             }
 
             Section("記憶") {
@@ -113,7 +130,10 @@ struct MemorySettingsPane: View {
             }
         }
         .onChange(of: app.settings.observationEnabled) {
-            Task { adoption = await app.memory.adoption() }
+            Task {
+                adoption = await app.memory.adoption()
+                await app.refreshAppAdjustments()
+            }
         }
         .sheet(isPresented: $showMemories) {
             Task { stats = await app.memory.stats() }
@@ -124,6 +144,7 @@ struct MemorySettingsPane: View {
             Button("重設", role: .destructive) {
                 Task {
                     await app.memory.resetAll()
+                    await app.refreshAppAdjustments()
                     stats = await app.memory.stats()
                     adoption = await app.memory.adoption()
                 }
@@ -133,10 +154,32 @@ struct MemorySettingsPane: View {
         }
     }
 
+    /// What Lint does differently per app, by the app's name.
+    private var adjustments: [AppAdjustment] {
+        guard app.settings.memoryEnabled, app.settings.observationEnabled else { return [] }
+        return app.appAdjustments.values.sorted {
+            Self.appName($0.app).localizedCaseInsensitiveCompare(Self.appName($1.app)) == .orderedAscending
+        }
+    }
+
+    /// The name the app goes by, or its bundle ID when it is not installed any more.
+    private static func appName(_ bundle: String) -> String {
+        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundle) else { return bundle }
+        return FileManager.default.displayName(atPath: url.path)
+    }
+
+    private static func summary(of adjustment: AppAdjustment) -> String {
+        [
+            adjustment.quiet ? String(localized: "不自動準備建議") : nil,
+            adjustment.tone.map { String(localized: "語氣：\($0.title)") },
+        ].compactMap { $0 }.joined(separator: " · ")
+    }
+
     private func dreamNow() {
         Task {
             dreaming = true
             dreamOutcome = await app.memory.dream(config: app.settings.memoryConfig)
+            await app.refreshAppAdjustments()
             stats = await app.memory.stats()
             dreaming = false
         }

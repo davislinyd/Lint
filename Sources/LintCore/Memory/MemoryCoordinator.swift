@@ -25,9 +25,6 @@ public actor MemoryCoordinator {
     /// Memory is on, so dreaming may run in the background.
     private var organizingAllowed = false
 
-    /// Key of the counter of how suggestions fared in one app, followed by its bundle ID.
-    private static let appStatPrefix = "app:"
-
     /// Longest instruction a memory keeps, however it was edited.
     public static let maxInstructionLength = MemoryPolicy.maxInstructionLength
 
@@ -139,8 +136,15 @@ public actor MemoryCoordinator {
         let now = clock()
         do {
             try await store.bumpStat(
-                key: Self.appStatPrefix + outcome.app, positive: adopted ? 1 : 0, negative: adopted ? 0 : 1, at: now
+                key: ObservationKey.app(outcome.app), positive: adopted ? 1 : 0, negative: adopted ? 0 : 1, at: now
             )
+            // The tone of a suggestion that was used: the one that keeps being used in an app
+            // becomes that app's own.
+            if adopted {
+                try await store.bumpStat(
+                    key: ObservationKey.appTone(outcome.app, suggestion.tone.menuTone), positive: 1, negative: 0, at: now
+                )
+            }
             // The user's own ways of writing that the suggestion would have changed, and whether the
             // text was sent with them. Dreaming turns the counts into the style profile.
             if let sent = outcome.sentText, StyleTraits.isObserved(suggestion.tone) {
@@ -164,7 +168,7 @@ public actor MemoryCoordinator {
         var sum = DecayedCounter(updatedAt: now)
         guard let store = openStore(create: false) else { return sum }
         do {
-            for counter in try await store.observationStats(prefix: Self.appStatPrefix).values {
+            for counter in try await store.observationStats(prefix: ObservationKey.app).values {
                 let current = counter.faded(to: now)
                 sum.positive += current.positive
                 sum.negative += current.negative
@@ -173,6 +177,39 @@ public actor MemoryCoordinator {
             DiagnosticLog.shared.log("memory", "could not read the observations: \(DiagnosticLog.describe(error))")
         }
         return sum
+    }
+
+    /// What Lint does differently per app, as dreaming last wrote it. Reads whatever is on disk;
+    /// whether it is applied is for the caller to decide (only while observation mode is on).
+    public func appAdjustments() async -> [AppAdjustment] {
+        guard let store = openStore(create: false) else { return [] }
+        do {
+            return try await store.appAdjustments()
+        } catch {
+            DiagnosticLog.shared.log("memory", "could not read the app adjustments: \(DiagnosticLog.describe(error))")
+            return []
+        }
+    }
+
+    /// The user wants an app back to normal: asked for a suggestion in a quiet app (`quiet`), chose
+    /// a tone themselves (`tone`), or removed the adjustment in Settings (both). The counts behind
+    /// what is forgotten go too, so that it is not learned again from them at the next dream.
+    public func forget(app: String, quiet: Bool, tone: Bool) async {
+        guard let store = openStore(create: false) else { return }
+        do {
+            var adjustment = try await store.appAdjustments().first { $0.app == app } ?? AppAdjustment(app: app)
+            if quiet {
+                adjustment.quiet = false
+                try await store.deleteStat(key: ObservationKey.app(app))
+            }
+            if tone {
+                adjustment.tone = nil
+                try await store.deleteStats(prefix: ObservationKey.appTones(app))
+            }
+            try await store.saveAppAdjustment(adjustment, at: clock())
+        } catch {
+            DiagnosticLog.shared.log("memory", "could not forget an app adjustment: \(DiagnosticLog.describe(error))")
+        }
     }
 
     /// `prompt` with the memories relevant to `text` added at its end, and the memories used.

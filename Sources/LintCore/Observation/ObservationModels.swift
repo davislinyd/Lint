@@ -136,6 +136,39 @@ public struct SessionOutcome: Sendable, Equatable {
     public var sentText: String?
 }
 
+/// What Lint does differently in one app, learned from how its suggestions fared there
+/// (`ObservationAdjuster`). Only applied while observation mode is on.
+public struct AppAdjustment: Sendable, Equatable, Identifiable {
+    /// Bundle ID.
+    public var app: String
+    /// No suggestion is prepared there unless it is asked for: none was ever used.
+    public var quiet: Bool
+    /// The tone automatic suggestions are written in there, because it is the one used there.
+    public var tone: WritingTone?
+
+    public var id: String { app }
+
+    public init(app: String, quiet: Bool = false, tone: WritingTone? = nil) {
+        self.app = app
+        self.quiet = quiet
+        self.tone = tone
+    }
+
+    var isEmpty: Bool { !quiet && tone == nil }
+}
+
+/// The keys the counts of observation mode are kept under.
+enum ObservationKey {
+    /// How the suggestions in one app fared: used (`positive`) or not (`negative`).
+    static let app = "app:"
+    /// How often a suggestion in one tone was used in one app (`positive`).
+    static let appTone = "apptone:"
+
+    static func app(_ bundle: String) -> String { app + bundle }
+    static func appTones(_ bundle: String) -> String { "\(appTone)\(bundle):" }
+    static func appTone(_ bundle: String, _ tone: WritingTone) -> String { appTones(bundle) + tone.rawValue }
+}
+
 /// Two counts that fade, so that they say how something went lately: "for" and "against".
 public struct DecayedCounter: Sendable, Equatable {
     public var positive: Double

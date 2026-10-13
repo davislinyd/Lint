@@ -54,8 +54,7 @@ final class FieldObserver {
             return false
         }
         guard !suggestion.changesNothing,
-              let pid = capture.sourceAppPID, pid != ProcessInfo.processInfo.processIdentifier,
-              let app = NSRunningApplication(processIdentifier: pid)?.bundleIdentifier,
+              let app = capture.sourceBundleID, app != Bundle.main.bundleIdentifier,
               !LiveCheckPolicy.isDenylisted(app),
               let value = TextCaptureService.readValue(of: capture),
               let located = suggestion.located(

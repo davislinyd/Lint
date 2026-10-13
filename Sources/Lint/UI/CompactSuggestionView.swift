@@ -35,6 +35,11 @@ struct CompactSuggestionView: View {
                     .font(.caption)
                     .foregroundStyle(.orange)
             }
+            if let advice = viewModel.unchangedAdvice {
+                Text(advice.message)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
 
             if let error = viewModel.errorMessage {
                 Text(error)

@@ -402,8 +402,22 @@ final class FloatingPanelViewModel {
         statusNote = nil
     }
 
+    /// Run it again. When the preserve tone answered with the text as it is, the same request would
+    /// only say so again: the retry is in the idiomatic tone instead (`UnchangedAdvice.tryIdiomatic`).
     func retry() {
+        if unchangedAdvice == .tryIdiomatic {
+            tone = .idiomatic
+        }
         generateFromOriginal()
+    }
+
+    /// Set while a finished suggestion on screen is the text itself; nil once the text or the result
+    /// is edited, and when the guard kept the source (its own note says why).
+    var unchangedAdvice: UnchangedAdvice? {
+        guard !isStreaming, errorMessage == nil, let generated,
+              generated.source == originalText, generated.text == resultText
+        else { return nil }
+        return UnchangedAdvice.advice(source: generated.source, answer: generated.text, mode: generated.mode, tone: generated.tone)
     }
 
     /// A finished suggestion is on screen, so it can be handed to the full panel to edit.
@@ -422,7 +436,8 @@ final class FloatingPanelViewModel {
     /// Run the model on whatever is currently in `originalText` (selection or typed).
     func generateFromOriginal() {
         // Running again on the same text, mode and tone is a rejection; a new text, mode or tone is not.
-        if let generated, generated.source == originalText, generated.mode == mode, generated.tone == tone {
+        // The suggestion records the tone it was written in, which for Chinese text is not the menu tone.
+        if let generated, generated.source == originalText, generated.mode == mode, generated.tone.menuTone == tone {
             recordFeedback(.regenerated)
         }
         streamTask?.cancel()

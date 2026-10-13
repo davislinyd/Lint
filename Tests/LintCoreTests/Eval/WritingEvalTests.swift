@@ -8,9 +8,9 @@ import XCTest
 final class WritingEvalFixtureTests: XCTestCase {
     func testTheFixturesCoverLintsWorkloadAndAreWellFormed() throws {
         let fixtures = try WritingEvalFixtures.load()
-        XCTAssertEqual(fixtures.version, 10)
-        XCTAssertGreaterThanOrEqual(fixtures.cases.count, 60, "the set is meant to be about 60-160 cases")
-        XCTAssertLessThanOrEqual(fixtures.cases.count, 160)
+        XCTAssertEqual(fixtures.version, 11)
+        XCTAssertGreaterThanOrEqual(fixtures.cases.count, 60, "the set is meant to be about 60-170 cases")
+        XCTAssertLessThanOrEqual(fixtures.cases.count, 170)
         XCTAssertEqual(Set(fixtures.cases.map(\.id)).count, fixtures.cases.count, "ids are unique")
 
         let categories = Set(fixtures.cases.map(\.category))
@@ -23,7 +23,7 @@ final class WritingEvalFixtureTests: XCTestCase {
             "ip-address", "shell-command", "code-identifier", "currency", "file-path", "product-names",
             "english-natural", "english-holdout", "mixed-english",
             "native-zh", "native-mixed", "native-english", "native-urls", "native-list", "native-already-english",
-            "native-casual", "native-formal", "native-genz", "idiomatic", "idiomatic-already", "tone-casual", "native-concise",
+            "native-casual", "native-formal", "native-genz", "idiomatic", "idiomatic-already", "idiomatic-structure", "tone-casual", "native-concise",
         ] {
             XCTAssertTrue(categories.contains(wanted), "no fixture for \(wanted)")
         }
@@ -68,6 +68,11 @@ final class WritingEvalFixtureTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(idiomatic.count, 10)
         XCTAssertTrue(idiomatic.allSatisfy { $0.keepsVoice == true && !($0.mustFix ?? []).isEmpty })
         XCTAssertGreaterThanOrEqual(fixtures.cases.filter { $0.category == "idiomatic-already" && $0.expectUnchanged == true }.count, 4)
+        // Sentences built wrong, some around names in another script that the fix has to leave alone.
+        let structure = fixtures.cases.filter { $0.category == "idiomatic-structure" }
+        XCTAssertGreaterThanOrEqual(structure.count, 5)
+        XCTAssertTrue(structure.allSatisfy { $0.writingTone == .idiomatic && $0.keepsVoice == true && !($0.mustFix ?? []).isEmpty })
+        XCTAssertGreaterThanOrEqual(structure.filter { !ProtectedLiterals.extract(from: $0.input, kinds: [.foreignWord]).isEmpty }.count, 2)
         XCTAssertGreaterThanOrEqual(
             fixtures.cases.filter { $0.expectUnchanged == true }.count, 15,
             "enough already-correct text for the clean sentence change rate to mean something"

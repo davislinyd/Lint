@@ -245,8 +245,9 @@ struct MemoryExtractor: Sendable {
             result = final == suggestion ? (original, suggestion, false) : (suggestion, final, true)
         }
         // A tone change or a translation rewrites the text by design, so only the user's own
-        // edits say anything about them. Plain proofreading is the only task that is not one.
-        if !result.userChoice, !(feedback.mode == .proofread && feedback.tone == .preserve) { return nil }
+        // edits say anything about them. Plain proofreading (`WritingTone.correctsOnly`) is the only
+        // task that is not one.
+        if !result.userChoice, !(feedback.mode == .proofread && feedback.tone.correctsOnly) { return nil }
         return result
     }
 

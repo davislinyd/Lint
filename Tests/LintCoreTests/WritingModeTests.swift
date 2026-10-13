@@ -23,6 +23,19 @@ final class WritingModeTests: XCTestCase {
         ])
     }
 
+    func testProofreadingStartsIdiomaticUntilTheUserPicksATone() {
+        XCTAssertEqual(WritingMode.proofread.defaultTone, .idiomatic)
+        XCTAssertEqual(WritingMode.translate.defaultTone, .preserve)
+        XCTAssertEqual(WritingMode.custom.defaultTone, .preserve)
+        let untouched = WritingToneMemory()
+        XCTAssertEqual(untouched.tone(for: .proofread), .idiomatic)
+        XCTAssertEqual(untouched.tone(for: .translate), .preserve)
+        XCTAssertEqual(WritingToneMemory(proofread: .preserve).tone(for: .proofread), .preserve, "a tone the user picked stays, preserve included")
+        for mode in [WritingMode.proofread, .translate] {
+            XCTAssertTrue(mode.tones.contains(mode.defaultTone), "\(mode)")
+        }
+    }
+
     func testTheMenusOfferFiveTones() {
         XCTAssertEqual(WritingMode.proofread.tones, [.preserve, .idiomatic, .formal, .casual, .concise])
         XCTAssertEqual(WritingMode.translate.tones, [.preserve, .formal, .casual, .concise], "no idiomatic English to make of a translation")

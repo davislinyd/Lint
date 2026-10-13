@@ -131,8 +131,67 @@ final class WritingOutputGuardTests: XCTestCase {
         let policy = try! XCTUnwrap(WritingGuardPolicy.for(mode: .proofread, tone: .idiomatic))
         XCTAssertTrue(policy.keepsLanguage && policy.limitsChange && policy.fallsBackToSource)
         XCTAssertEqual(policy.protectedKinds, Set(ProtectedLiterals.Kind.allCases), "numbers and acronyms stay, as in preserve")
-        XCTAssertEqual(policy.maximumChangeRatio, WritingOutputGuard.idiomaticMaximumChangeRatio)
-        XCTAssertEqual(WritingGuardPolicy.for(mode: .proofread, tone: .preserve)?.maximumChangeRatio, WritingOutputGuard.maximumChangeRatio)
+        XCTAssertEqual(policy.maximumNewWordShare, WritingOutputGuard.idiomaticMaximumNewWordShare)
+        XCTAssertNil(WritingGuardPolicy.for(mode: .proofread, tone: .preserve)?.maximumNewWordShare, "preserve stays a minimal edit")
+    }
+
+    // MARK: - A tangled sentence (idiomatic)
+
+    /// A subject said twice around a Korean file name and product name; made up, like every fixture.
+    private let tangled = "AI said the request item in the quotation file Daehan-20260115_SSD 견적(테스트코리아).xls, the request item \"삼성 SSD 1TB 중고\" is second-hand, is it?"
+    private let rebuilt = "AI said the request item \"삼성 SSD 1TB 중고\" in the quotation file Daehan-20260115_SSD 견적(테스트코리아).xls is second-hand, is that correct?"
+
+    func testAnIdiomaticEditMayPutASentenceInAnotherOrder() {
+        XCTAssertEqual(WritingOutputGuard.assess(source: tangled, output: rebuilt, mode: .proofread, tone: .idiomatic), [])
+        XCTAssertGreaterThan(EditRatio.between(tangled, rebuilt), 0.4, "by edit distance a moved phrase is nearly a rewrite")
+        XCTAssertLessThan(WordNovelty.share(of: rebuilt, notIn: tangled), 0.1, "by its words it is the writer's own sentence")
+        let paraphrase = "According to the AI, the drive listed in the vendor's spreadsheet appears to be a used unit rather than a new one. Could you confirm?"
+        XCTAssertTrue(
+            WritingOutputGuard.assess(source: tangled, output: paraphrase, mode: .proofread, tone: .idiomatic)
+                .contains { if case .excessiveChange = $0 { true } else { false } }
+        )
+        XCTAssertEqual(
+            WritingOutputGuard.assess(
+                source: "Kindly revert back to me at the earliest.", output: "Please get back to me as soon as possible.",
+                mode: .proofread, tone: .idiomatic
+            ), [], "a short text is mostly its one rewritten phrase"
+        )
+    }
+
+    func testTheShareOfNewWordsIgnoresOrderCaseAndPunctuation() {
+        XCTAssertEqual(WordNovelty.share(of: "The report, please: send it today!", notIn: "please send the report today it"), 0)
+        XCTAssertEqual(WordNovelty.share(of: "send send send", notIn: "send it"), 2.0 / 3.0, "a word counts as often as the text has it")
+        XCTAssertEqual(WordNovelty.share(of: "Deliver the file", notIn: "send the report"), 2.0 / 3.0)
+        XCTAssertEqual(WordNovelty.share(of: "…", notIn: "anything"), 0, "no words, nothing new")
+        XCTAssertEqual(WordNovelty.words("It's second-hand, isn't it?"), ["it's", "second", "hand", "isn't", "it"])
+    }
+
+    func testWordsInAnotherScriptAreKeptAsWritten() {
+        XCTAssertEqual(
+            ProtectedLiterals.extract(from: "See 견적(테스트코리아).xls and \"삼성 SSD\", メモ, 發票, Привет, café and naïve.", kinds: [.foreignWord]),
+            ["견적", "테스트코리아", "삼성", "メモ", "發票", "Привет"], "accented Latin is Latin"
+        )
+        let translated = "AI said the request item in the quotation file Daehan-20260115_SSD 견적(테스트코리아).xls, \"Samsung SSD 1TB used,\" is second-hand, is it?"
+        for tone in [WritingTone.idiomatic, .preserve] {
+            XCTAssertEqual(
+                WritingOutputGuard.assess(source: tangled, output: translated, mode: .proofread, tone: tone), [.missing(["삼성", "중고"])], "\(tone)"
+            )
+        }
+        XCTAssertTrue(
+            WritingOutputGuard.retryInstruction(for: [.missing(["삼성", "중고"])], source: tangled, tone: .idiomatic).contains("삼성, 중고")
+        )
+        XCTAssertEqual(
+            WritingOutputGuard.assess(source: "Please check the invoice.", output: "Please check the 청구서.", mode: .proofread, tone: .idiomatic),
+            [.added(["청구서"])], "and none is brought in"
+        )
+        XCTAssertEqual(
+            WritingOutputGuard.assess(source: "Please check the invoice today.", output: "請今天檢查發票。", mode: .proofread, tone: .idiomatic),
+            [.languageChanged(from: .latin, to: .han)], "a change of language is reported once, as that"
+        )
+        // The tones that write English from Chinese, and a translation, are not held to it.
+        for (mode, tone) in [(WritingMode.proofread, WritingTone.native), (.translate, .preserve), (.proofread, .formal)] {
+            XCTAssertFalse(WritingGuardPolicy.for(mode: mode, tone: tone)!.protectedKinds.contains(.foreignWord), "\(mode)/\(tone)")
+        }
     }
 
     func testOnlyIdiomaticGuardsLintsOwnModel() {
@@ -149,6 +208,8 @@ final class WritingOutputGuardTests: XCTestCase {
         let issues = [WritingIssue.excessiveChange(ratio: 0.8)]
         let idiomatic = WritingOutputGuard.retryInstruction(for: issues, source: "x", tone: .idiomatic)
         XCTAssertTrue(idiomatic.contains("the phrases a native speaker would not use"))
+        XCTAssertTrue(idiomatic.contains("the order of a tangled sentence"), "putting a sentence in order is still allowed")
+        XCTAssertFalse(idiomatic.contains("the word order"))
         XCTAssertFalse(idiomatic.contains("Fix only definite grammar"))
         XCTAssertTrue(WritingOutputGuard.retryInstruction(for: issues, source: "x").contains("Fix only definite grammar"))
     }
@@ -588,7 +649,7 @@ final class WritingOutputGuardTests: XCTestCase {
         XCTAssertEqual(result.text, fullForms, "a lost time is not a matter of tone")
         guard case .keptSource = result.outcome else { return XCTFail("\(result.outcome)") }
 
-        let rewritten = "Apologies for the delay; the report will reach you before 5 pm, without fail."
+        let rewritten = "Apologies for the delay; you can expect the finished document on your desk before 5 pm, without fail."
         let fallback = Script([contracted, rewritten])
         let better = try await GuardedWriter.run(source: fullForms, mode: .proofread, tone: .idiomatic, systemPrompt: "P") {
             fallback.next($0, $1)

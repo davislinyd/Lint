@@ -77,6 +77,10 @@ public enum TextScript: Equatable, Sendable {
 public enum ProtectedLiterals {
     public enum Kind: CaseIterable, Sendable {
         case url, email, codeSpan, path, identifier, placeholder, acronym, number
+        /// A word in a script other than Latin: a Korean product name, a Japanese file name, the Chinese
+        /// of a mixed text. An edit of the English leaves it alone (measured: a Korean product name
+        /// came back translated, in an answer no other check held anything against).
+        case foreignWord
     }
 
     static let urlPattern = #"https?://[^\s<>"'`）」』，。、]+"#
@@ -99,6 +103,8 @@ public enum ProtectedLiterals {
     /// 10.0.0.12; and a single digit standing on its own ("1 hour"). A digit followed by "." ("1. first")
     /// is a list marker, which the line check covers, and a digit inside a word ("Q3", "p95") is part of
     /// a name.
+    /// A run of letters (with their marks) in any script but Latin.
+    static let foreignWordPattern = #"[\p{L}&&[^\p{Script=Latin}]][[\p{L}\p{M}]&&[^\p{Script=Latin}]]*"#
     static let numberPattern = #"(?<![\w.])\d[\d,.:/\-]*\d(?![\w])|(?<![\w.,])\d(?![\w,.])"#
 
     /// The literals in `text`, in order, without repeats. Trailing sentence punctuation is not part
@@ -114,7 +120,7 @@ public enum ProtectedLiterals {
             (.url, urlPattern), (.email, emailPattern), (.codeSpan, codeSpanPattern),
             (.path, pathPattern), (.placeholder, placeholderPattern), (.identifier, identifierPattern),
             (.acronym, acronymPattern),
-            (.number, numberPattern),
+            (.number, numberPattern), (.foreignWord, foreignWordPattern),
         ]
         for (kind, pattern) in ordered where kinds.contains(kind) {
             guard let regex = try? NSRegularExpression(pattern: pattern) else { continue }
@@ -199,12 +205,37 @@ public enum EditRatio {
     }
 }
 
+/// How much of an answer is not the text's own words: the share of its words (case aside, each
+/// counted as often as it occurs) that the text does not have. Unlike `EditRatio` it does not mind
+/// the order, so a sentence put in a better order costs nothing while a paraphrase costs nearly all
+/// of it. Measured on a sentence that said its subject twice: the rebuilt sentence is 0.59 by
+/// `EditRatio` and 0.05 here, a paraphrase of it 0.90 and 0.72.
+public enum WordNovelty {
+    /// The words of `text`, lowercased: punctuation is not a word.
+    public static func words(_ text: String) -> [String] {
+        EditRatio.tokens(text).filter { $0.first.map { $0.isLetter || $0.isNumber } ?? false }.map { $0.lowercased() }
+    }
+
+    public static func share(of output: String, notIn source: String) -> Double {
+        let answer = words(output)
+        guard !answer.isEmpty else { return 0 }
+        var available: [String: Int] = [:]
+        for word in words(source) { available[word, default: 0] += 1 }
+        var new = 0
+        for word in answer {
+            if let left = available[word], left > 0 { available[word] = left - 1 } else { new += 1 }
+        }
+        return Double(new) / Double(answer.count)
+    }
+}
+
 /// Something wrong with a model's answer that can be decided without an opinion.
 public enum WritingIssue: Equatable, Sendable {
     case empty
     /// `<think>` or similar made it into the answer.
     case leakedReasoning
-    /// URLs, numbers, emails, paths or code from the source that the answer lost or changed.
+    /// URLs, numbers, emails, paths, code or other-language words from the source that the answer lost
+    /// or changed.
     case missing([String])
     /// A proofread that came back in another language, i.e. a translation nobody asked for.
     case languageChanged(from: TextScript, to: TextScript)
@@ -251,8 +282,9 @@ public struct WritingGuardPolicy: Equatable, Sendable {
     public var numbersMayChange: Bool = false
     /// The minimal-edit checks: the change ratio, and every line and list marker kept.
     public var limitsChange: Bool
-    /// The share of tokens an edit may change when `limitsChange` is on.
-    public var maximumChangeRatio: Double = WritingOutputGuard.maximumChangeRatio
+    /// When set, `limitsChange` measures the change as the share of the answer's words that are new
+    /// (`WordNovelty`) instead of by edit distance: for an edit that may put a sentence in another order.
+    public var maximumNewWordShare: Double? = nil
     /// The answer has to sound like the writer (`VoiceCheck`).
     public var keepsVoice: Bool = false
     /// What to show when every attempt failed: the source text (nothing changes), or the attempt
@@ -278,11 +310,11 @@ public struct WritingGuardPolicy: Equatable, Sendable {
                 fallsBackToSource: false
             )
         case .proofread where tone == .idiomatic:
-            // The preserve checks, with room for a rewritten phrase: "do the needful and update the
-            // ticket" → "update the ticket" is already 0.4 of a short sentence.
+            // The preserve checks, except that the edit may rebuild a tangled sentence: what is limited
+            // is how many of the answer's words are not the writer's, not how far they moved.
             return WritingGuardPolicy(
                 protectedKinds: Set(ProtectedLiterals.Kind.allCases), keepsLanguage: true, limitsChange: true,
-                maximumChangeRatio: WritingOutputGuard.idiomaticMaximumChangeRatio, keepsVoice: true, fallsBackToSource: true
+                maximumNewWordShare: WritingOutputGuard.idiomaticMaximumNewWordShare, keepsVoice: true, fallsBackToSource: true
             )
         case .proofread:
             return WritingGuardPolicy(
@@ -309,8 +341,12 @@ public enum WritingOutputGuard {
     /// A preserve-tone proofread may change at most this share of the tokens. Real corrections of
     /// Lint's fixtures stay well under it (the heaviest measured was ~0.3); a paraphrase does not.
     public static let maximumChangeRatio = 0.5
-    /// The same for the idiomatic tone, which also rewrites phrases that are correct but not native.
-    public static let idiomaticMaximumChangeRatio = 0.65
+    /// An idiomatic edit may bring at most this share of new words. Measured on Lint's fixtures: good
+    /// answers stay at or under 0.38, answers that reply to the text or describe it are 0.77 and up.
+    public static let idiomaticMaximumNewWordShare = 0.5
+    /// The new-word limit applies from this many words: in a shorter text a rewritten phrase is most
+    /// of it ("Kindly revert back to me at the earliest." → "Please get back to me as soon as possible.").
+    public static let newWordMinimumWords = 12
     /// The change limit applies from this many tokens: below it one fixed word is already a large
     /// share. Above `changeLimitMaximumTokens` the edit distance is not worth computing.
     public static let changeLimitMinimumTokens = 8
@@ -337,44 +373,34 @@ public enum WritingOutputGuard {
         if instructionMarkers.contains(where: { output.contains($0) && !source.contains($0) }) {
             issues.append(.leakedInstructions)
         }
-        let missing = ProtectedLiterals.missing(from: output, source: source, kinds: policy.protectedKinds)
+        // A change of language says it all: the other-language words it dropped or brought in are the
+        // same finding, and are not reported a second time.
+        let languageIssue = policy.keepsLanguage ? languageChange(from: source, to: trimmed) : nil
+        let literalKinds = languageIssue == nil ? policy.protectedKinds : policy.protectedKinds.subtracting([.foreignWord])
+        let missing = ProtectedLiterals.missing(from: output, source: source, kinds: literalKinds)
         if !missing.isEmpty { issues.append(.missing(missing)) }
         // A translation may legitimately write a number the source spelled out ("ten" → "10").
-        let addedKinds = policy.numbersMayChange
-            ? policy.protectedKinds.subtracting([.number]) : policy.protectedKinds.union([.number])
+        let addedKinds = policy.numbersMayChange ? literalKinds.subtracting([.number]) : literalKinds.union([.number])
         // Case aside: fixing capitals ("ios" → "iOS") adds nothing.
         let lowercasedSource = source.lowercased()
         let added = ProtectedLiterals.missing(from: source, source: trimmed, kinds: addedKinds)
             .filter { !lowercasedSource.contains($0.lowercased()) }
         if !added.isEmpty { issues.append(.added(added)) }
-        if policy.keepsLanguage {
-            let from = TextScript.of(source)
-            let to = TextScript.of(trimmed)
-            let crossed: Bool
-            switch (from, to) {
-            case (.latin, .han), (.han, .latin):
-                crossed = true
-            case (.mixed, .latin), (.mixed, .han):
-                // Mixed text that came back in one language only: a translation of the half that moved.
-                crossed = abs(TextScript.hanShare(trimmed) - TextScript.hanShare(source)) > mixedLanguageShift
-            default:
-                crossed = false
-            }
-            if crossed {
-                issues.append(.languageChanged(from: from, to: to))
-            } else if !containsCJK(source), containsCJK(trimmed) {
-                // Text with no Chinese in it at all that came back with some: part of it was translated
-                // (or given Chinese punctuation), too little to change its script as a whole.
-                issues.append(.languageChanged(from: from, to: .mixed))
-            }
-        }
+        if let languageIssue { issues.append(languageIssue) }
         if policy.requiresEnglish, containsCJK(trimmed) { issues.append(.notEnglish) }
         if policy.forbidsAddedLists, listLines(in: trimmed) > listLines(in: source) { issues.append(.addedList) }
         if policy.limitsChange {
-            let count = EditRatio.tokens(source).count
-            if (changeLimitMinimumTokens...changeLimitMaximumTokens).contains(count) {
-                let ratio = EditRatio.between(source, trimmed)
-                if ratio > policy.maximumChangeRatio { issues.append(.excessiveChange(ratio: ratio)) }
+            if let limit = policy.maximumNewWordShare {
+                if WordNovelty.words(source).count >= newWordMinimumWords {
+                    let share = WordNovelty.share(of: trimmed, notIn: source)
+                    if share > limit { issues.append(.excessiveChange(ratio: share)) }
+                }
+            } else {
+                let count = EditRatio.tokens(source).count
+                if (changeLimitMinimumTokens...changeLimitMaximumTokens).contains(count) {
+                    let ratio = EditRatio.between(source, trimmed)
+                    if ratio > maximumChangeRatio { issues.append(.excessiveChange(ratio: ratio)) }
+                }
             }
             if lineShape(of: source) != lineShape(of: trimmed) { issues.append(.structureChanged) }
         }
@@ -383,6 +409,27 @@ public enum WritingOutputGuard {
             if !changes.isEmpty { issues.append(.voiceChanged(changes)) }
         }
         return issues
+    }
+
+    /// The answer is in another language than the text, as a whole or in part; nil when it kept it.
+    static func languageChange(from source: String, to output: String) -> WritingIssue? {
+        let from = TextScript.of(source)
+        let to = TextScript.of(output)
+        let crossed: Bool
+        switch (from, to) {
+        case (.latin, .han), (.han, .latin):
+            crossed = true
+        case (.mixed, .latin), (.mixed, .han):
+            // Mixed text that came back in one language only: a translation of the half that moved.
+            crossed = abs(TextScript.hanShare(output) - TextScript.hanShare(source)) > mixedLanguageShift
+        default:
+            crossed = false
+        }
+        if crossed { return .languageChanged(from: from, to: to) }
+        // Text with no Chinese in it at all that came back with some: part of it was translated
+        // (or given Chinese punctuation), too little to change its script as a whole.
+        if !containsCJK(source), containsCJK(output) { return .languageChanged(from: from, to: .mixed) }
+        return nil
     }
 
     static func containsCJK(_ text: String) -> Bool {
@@ -450,7 +497,7 @@ public enum WritingOutputGuard {
             case .languageChanged:
                 lines.append("- " + languageInstruction(for: source))
             case .excessiveChange where tone == .idiomatic:
-                lines.append("- You changed far too much. Change only errors and the phrases a native speaker would not use; leave every other word, the word order, the tone and the formality exactly as they are. If nothing needs changing, return the text unchanged.")
+                lines.append("- You rewrote too much in your own words. Keep the writer's words: change only errors, the phrases a native speaker would not use, and the order of a tangled sentence; leave the tone and the formality exactly as they are. If nothing needs changing, return the text unchanged.")
             case .excessiveChange:
                 lines.append("- You changed far too much. Fix only definite grammar, spelling and punctuation errors; leave every other word, the word order, the tone and the formality exactly as they are. If nothing is wrong, return the text unchanged.")
             case .structureChanged:

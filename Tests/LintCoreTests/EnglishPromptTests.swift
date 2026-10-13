@@ -28,7 +28,9 @@ final class EnglishPromptTests: XCTestCase {
                 // A small model has a 4096-token context to share with the text and the answer. The native
                 // tones carry the most (the idea, a few examples, a style): the local server's context is 3072, and
                 // `WritingChunkBudget` takes the instructions off what is left for the text.
-                XCTAssertLessThan(WritingChunker.estimatedTokens(prompt), mode == .proofread && tone.isNative ? 720 : 650, "\(mode)/\(tone)")
+                // The idiomatic tone carries more still: what to rebuild, what to leave, and an example of each.
+                let limit = mode != .proofread ? 650 : tone == .idiomatic ? 740 : tone.isNative ? 720 : 650
+                XCTAssertLessThan(WritingChunker.estimatedTokens(prompt), limit, "\(mode)/\(tone)")
                 XCTAssertTrue(prompt.contains("Output only"), "\(mode)/\(tone)")
             }
         }
@@ -81,7 +83,7 @@ final class EnglishPromptTests: XCTestCase {
         ] {
             XCTAssertTrue(prompt.replacingOccurrences(of: "\n", with: " ").contains(phrase.replacingOccurrences(of: "\n", with: " ")), phrase)
         }
-        XCTAssertEqual(WritingPromptComposer.englishPromptVersion, "english-16")
+        XCTAssertEqual(WritingPromptComposer.englishPromptVersion, "english-17")
     }
 
     func testIdiomaticRewritesWhatIsNotNativeAndKeepsTheWritersVoice() {
@@ -98,10 +100,14 @@ final class EnglishPromptTests: XCTestCase {
                 XCTAssertTrue(flat.contains(phrase), "\(reader): \(phrase)")
             }
             XCTAssertFalse(flat.contains("A word that is correct stays"), "\(reader): correct but not native is what it changes")
+            // A sentence built wrong is its business too, and words in another language are not.
+            for phrase in ["untangle a sentence", "a subject said twice", "with every piece of information kept", "Words in another language", "stay as written too"] {
+                XCTAssertTrue(flat.contains(phrase), "\(reader): \(phrase)")
+            }
         }
         // The examples must not teach the answers to the evaluation's idiomatic fixtures.
         let prompt = compose(.proofread, .idiomatic)
-        for fixturePhrase in ["revert back", "do the needful", "May I know", "sharing session", "take a reference"] {
+        for fixturePhrase in ["revert back", "do the needful", "May I know", "sharing session", "take a reference", "the request item", "meeting room"] {
             XCTAssertFalse(prompt.contains(fixturePhrase), fixturePhrase)
         }
         XCTAssertEqual(

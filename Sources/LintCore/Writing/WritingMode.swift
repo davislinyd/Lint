@@ -32,6 +32,13 @@ public enum WritingMode: String, CaseIterable, Identifiable, Sendable, Codable {
         }
     }
 
+    /// The tone a task starts in, until the user picks one. Proofreading starts idiomatic: measured,
+    /// the preserve tone returns a sentence that says its subject twice exactly as it is, every time,
+    /// while the idiomatic tone rebuilds it and still keeps the writer's voice.
+    public var defaultTone: WritingTone {
+        self == .proofread ? .idiomatic : .preserve
+    }
+
     /// The tones whose prompts can be edited: every tone a request of the task can be written in
     /// (`WritingTone.effective`), each menu tone followed by what it becomes for Chinese text.
     public var promptTones: [WritingTone] {

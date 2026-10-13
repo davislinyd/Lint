@@ -242,6 +242,7 @@ final class MemoryExtractorTests: XCTestCase {
     func testRegeneratingAndMissingSuggestionsTeachNothing() {
         let sample = feedback(original: "I have meeting.", generated: "I have a meeting.")
         XCTAssertTrue(extract(.regenerated, sample).isEmpty)
+        XCTAssertTrue(extract(.dismissed, sample).isEmpty)
         XCTAssertTrue(extract(.accepted, feedback(original: "I have meeting.", generated: nil)).isEmpty)
     }
 
@@ -454,6 +455,178 @@ final class MemoryExtractorTests: XCTestCase {
             keys(extract(.accepted, feedback(original: "It is a box.", generated: "It is the box."))),
             ["grammar:en:articles"]
         )
+    }
+
+    // MARK: leaving the user's words alone
+
+    func testPuttingAWordBackIsAMemoryToLeaveItAlone() throws {
+        let result = MemoryExtractor().extraction(from: feedback(
+            original: "I need a big house", generated: "I need a large house", final: "I need a big house"
+        ), action: .editedAndAccepted)
+        XCTAssertEqual(result.candidates.map(\.dedupKey), ["keep:en:big>large"])
+        XCTAssertEqual(result.share, 1)
+        let memory = try XCTUnwrap(result.candidates.first)
+        XCTAssertEqual(memory.kind, .vocabulary)
+        XCTAssertEqual(memory.triggers, ["big"], "the word is the user's own, so it is in their text")
+        XCTAssertEqual(memory.instruction, MemoryWording.keepReverted(from: "big", to: "large").chinese)
+        XCTAssertNil(memory.modeScope)
+
+        let copied = feedback(original: "I need a big house", generated: "I need a large house", final: "I need a big house")
+        XCTAssertEqual(keys(extract(.copied, copied)), ["keep:en:big>large"], "copying the edited text is the same edit")
+    }
+
+    func testAWordPutBackUnderAToneIsKeptForThatTone() throws {
+        let memory = try XCTUnwrap(extract(.editedAndAccepted, feedback(
+            .proofread, tone: .formal,
+            original: "I need a big house", generated: "I need a large house", final: "I need a big house"
+        )).first)
+        XCTAssertEqual(memory.dedupKey, "keep:en:proofread|formal:big>large")
+        XCTAssertEqual([memory.modeScope, memory.toneScope] as [AnyHashable?], [WritingMode.proofread, WritingTone.formal])
+    }
+
+    func testASpellingPutBackIsKeptEverywhereAndAPhraseIsStyle() throws {
+        let spelling = try XCTUnwrap(extract(.editedAndAccepted, feedback(
+            .proofread, tone: .concise, original: "From my prospective we wait",
+            generated: "From my perspective we wait", final: "From my prospective we wait"
+        )).first)
+        XCTAssertEqual(spelling.dedupKey, "keep:en:prospective>perspective")
+        XCTAssertEqual(spelling.kind, .spelling)
+        XCTAssertNil(spelling.toneScope)
+
+        let phrase = try XCTUnwrap(extract(.editedAndAccepted, feedback(
+            original: "I will send it. Kindly request your help.",
+            generated: "I will send it. Could you help.",
+            final: "I will send it. Kindly request your help."
+        )).first)
+        XCTAssertEqual(phrase.kind, .style)
+        XCTAssertTrue(phrase.dedupKey.hasPrefix("keep:en:"), phrase.dedupKey)
+    }
+
+    func testAChineseTermPutBackIsKeptInItsLanguage() throws {
+        let memory = try XCTUnwrap(extract(.editedAndAccepted, feedback(
+            original: "這個軟件需要更新", generated: "這個軟體需要更新", final: "這個軟件需要更新"
+        )).first)
+        XCTAssertEqual(memory.dedupKey, "keep:zh-Hant:軟件>軟體")
+        XCTAssertEqual(memory.kind, .terminology)
+        XCTAssertEqual(memory.triggers, ["軟件"])
+    }
+
+    func testOnlyPuttingBackWhatTheModelChangedIsAKeepMemory() {
+        XCTAssertEqual(
+            keys(extract(.editedAndAccepted, feedback(
+                original: "I need a big house", generated: "I need a large house", final: "I need a huge house"
+            ))),
+            ["vocabulary:en:large>huge"], "another word is a preference, as before"
+        )
+        XCTAssertEqual(
+            keys(extract(.editedAndAccepted, feedback(
+                original: "I need a large house", generated: "I need a large house", final: "I need a big house"
+            ))),
+            ["vocabulary:en:large>big"], "the model changed nothing there"
+        )
+        XCTAssertEqual(
+            keys(extract(.editedAndAccepted, feedback(
+                original: "Thanks for you reply.", generated: "Thanks for your reply.", final: "Thanks for you reply."
+            ))),
+            ["spelling:en:your>you"], "a word nearly every text has is no trigger to keep"
+        )
+    }
+
+    func testAChangeTurnedDownAndSentAsItWasIsAWeakerMemoryToLeaveItAlone() throws {
+        var turnedDown = feedback(
+            original: "This is very big news for the team.", generated: "This is very large news for the team.",
+            final: "This is very big news for the team."
+        )
+        turnedDown.sent = true
+        let result = MemoryExtractor().extraction(from: turnedDown, action: .dismissed)
+        XCTAssertEqual(result.candidates.map(\.dedupKey), ["keep:en:big>large"])
+        XCTAssertEqual(result.share, 1)
+        let memory = try XCTUnwrap(result.candidates.first)
+        XCTAssertEqual(memory.instruction, MemoryWording.keepRejected(from: "big", to: "large").chinese)
+        XCTAssertEqual(memory.triggers, ["big"])
+        XCTAssertTrue(result.contradicted.isEmpty)
+    }
+
+    func testADismissalIsSharedBetweenTheChangesTheSuggestionMade() {
+        var sample = feedback(
+            original: "From my prospective this is very big news for the whole team.",
+            generated: "From my perspective this is very large news for the entire team.",
+            final: "From my perspective this is very big news for the full team."
+        )
+        sample.sent = true
+        let result = MemoryExtractor().extraction(from: sample, action: .dismissed)
+        XCTAssertEqual(result.candidates.map(\.dedupKey), ["keep:en:big>large"], "one typed in, one left, one changed otherwise")
+        XCTAssertEqual(result.share, 1.0 / 3, accuracy: 1e-9)
+    }
+
+    func testAnArticleOrAPrepositionThatStayedOnlyCountsAgainstTheMemoryThatFixesIt() {
+        var sample = feedback(
+            original: "We should discuss about the plan because I have meeting today.",
+            generated: "We should discuss the plan because I have a meeting today.",
+            final: "We should discuss about the plan because I have meeting today."
+        )
+        sample.sent = true
+        let result = MemoryExtractor().extraction(from: sample, action: .dismissed)
+        XCTAssertTrue(result.candidates.isEmpty)
+        XCTAssertEqual(result.contradicted, ["grammar:en:discuss about", "grammar:en:articles"])
+        XCTAssertEqual(result.share, 0.5)
+    }
+
+    func testADismissalTeachesOnlyPlainProofreadingThatWasSeenSent() {
+        let original = "This is very big news for the team."
+        let generated = "This is very large news for the team."
+        let unseen = feedback(original: original, generated: generated, final: original)
+        XCTAssertTrue(extract(.dismissed, unseen).isEmpty, "the field was not followed to the end")
+
+        var formal = feedback(.proofread, tone: .formal, original: original, generated: generated, final: original)
+        formal.sent = true
+        XCTAssertTrue(extract(.dismissed, formal).isEmpty, "a tone rewrites by design")
+
+        var idiomatic = feedback(.proofread, tone: .idiomatic, original: original, generated: generated, final: original)
+        idiomatic.sent = true
+        XCTAssertEqual(
+            keys(extract(.dismissed, idiomatic)), ["keep:en:big>large"],
+            "idiomatic only corrects, like preserve: what is learned there applies everywhere"
+        )
+
+        var cut = feedback(original: "This is very big", generated: "This is very large", final: "This is very bi")
+        cut.sent = true
+        XCTAssertTrue(extract(.dismissed, cut).isEmpty, "the end of what was read is not to be trusted")
+    }
+
+    func testAnEditSeenInTheFieldIgnoresWhatTouchesItsEnd() {
+        var sample = feedback(
+            original: "I need a big house near the city", generated: "I need a large house near the city",
+            final: "I need a huge house near the town"
+        )
+        XCTAssertEqual(keys(extract(.editedAndAccepted, sample)), ["vocabulary:en:large>huge", "vocabulary:en:city>town"])
+        sample.sent = true
+        XCTAssertEqual(keys(extract(.editedAndAccepted, sample)), ["vocabulary:en:large>huge"])
+
+        var typedOn = feedback(
+            original: "I need a big house", generated: "I need a large house",
+            final: "I need a large house and a garden with trees"
+        )
+        typedOn.sent = true
+        XCTAssertTrue(extract(.editedAndAccepted, typedOn).isEmpty, "what was typed after it is no edit of it")
+    }
+
+    func testAKeepMemoryAndTheMemoriesThatAskForThatChangeOpposeEachOther() {
+        XCTAssertEqual(
+            MemoryExtractor.opposedKeys(of: "keep:en:big>large"),
+            ["spelling:en:big>large", "vocabulary:en:big>large", "style:en:big>large", "terminology:en:big>large"]
+        )
+        XCTAssertEqual(
+            MemoryExtractor.opposedKeys(of: "vocabulary:en:proofread|formal:big>large"),
+            ["vocabulary:en:proofread|formal:large>big", "keep:en:proofread|formal:big>large"]
+        )
+        XCTAssertEqual(
+            MemoryExtractor.opposedKeys(of: "spelling:en:prospective>perspective"),
+            ["spelling:en:perspective>prospective", "keep:en:prospective>perspective"]
+        )
+        for key in ["grammar:en:articles", "grammar:en:discuss about", "nocolon"] {
+            XCTAssertTrue(MemoryExtractor.opposedKeys(of: key).isEmpty, key)
+        }
     }
 
     // MARK: typography

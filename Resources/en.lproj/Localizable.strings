@@ -210,6 +210,15 @@
 "啟用記憶" = "Enable Memory";
 "記下你修正過的寫作習慣，下一次建議就開始提醒模型；沒有再出現的會在作夢時忘記。資料只存在這台 Mac，只記抽象的規則，不記原文。Lint 認不出中文人名或全小寫的英文名，被你修正過的名字仍可能被記下；可在「管理記憶」查看並刪除。" = "Writes down writing habits you correct and reminds the model from the next suggestion on; the ones that don’t come back are forgotten while dreaming. Data stays on this Mac, and only abstract rules are kept, never your text. Lint can’t recognize Chinese names or names typed in lowercase, so a name you corrected may still be remembered; you can review and delete it under Manage Memories.";
 "關閉時，Lint 的行為與沒有這個功能時完全相同。" = "When off, Lint behaves exactly as if this feature didn’t exist.";
+"觀察模式" = "Observation Mode";
+"Lint 給過建議後，會繼續讀取那個輸入框的文字，直到你送出（輸入框清空）、輸入框消失，或 10 分鐘沒有動靜，藉此知道建議有沒有被採用、哪些改動你不想要。讀到的文字只留在記憶體裡，不會寫入磁碟；存下來的只有各 App 的採用次數、不含文字的紀錄，以及和其他記憶一樣的簡短規則。不會讀取密碼欄位與密碼管理 App。" = "After Lint makes a suggestion, it keeps reading that text field until you send the text (the field empties), the field goes away or nothing happens for 10 minutes, to learn whether the suggestion was used and which of its changes you did not want. What it reads is held in RAM only and never written to disk; only how often suggestions were used in each app, records without any text, and short rules like the other memories are kept. Password fields and password managers are never read.";
+"需要先啟用記憶。" = "Requires Memory to be on.";
+"不自動準備建議" = "Suggestions not prepared automatically";
+"語氣：%@" = "Tone: %@";
+"某個 App 裡的建議從未被採用時，Lint 不再自動為它準備建議；在那裡按 ⌥⌘K 檢查一次就會恢復。某個 App 裡多半採用同一種語氣時，那裡的自動建議會改用那種語氣；手動選語氣就會取消。" = "When the suggestions in an app were never used, Lint stops preparing them there on its own; checking once with ⌥⌘K there brings them back. When one tone is the one mostly used in an app, automatic suggestions there are written in that tone; choosing a tone by hand ends that.";
+"近期採用率" = "Recent adoption rate";
+"%@（約 %lld 次建議）" = "%@ (about %lld suggestions)";
+"尚無資料" = "No data yet";
 "長期記憶" = "Long-term memories";
 "短期記憶" = "Short-term memories";
 "重設記憶資料庫…" = "Reset Memory Database…";
@@ -259,6 +268,7 @@
 "這次沒有要處理的記憶。" = "Nothing for this dream to handle.";
 "作夢完成：記住 %lld 條、忘記 %lld 條、刪除 %lld 條。" = "Dream finished: %lld remembered, %lld forgotten, %lld erased.";
 "新增 %lld 條一般記憶，涵蓋 %lld 條具體記憶。" = "%lld new general memories, covering %lld specific memories.";
+"已依近期的觀察更新寫作風格的記憶。" = "Updated the memory of your writing style from recent observations.";
 "正在作夢。" = "Dreaming.";
 "作夢沒有完成，稍後會再試。" = "The dream didn’t finish. It will try again.";
 "核心" = "Core";

@@ -16,6 +16,11 @@ final class TextCaptureService {
         /// Read with ⌘A then ⌘C because the field exposes no text: the text is the whole field.
         var selectedAll = false
 
+        /// Bundle ID of the app the text was captured in.
+        var sourceBundleID: String? {
+            sourceAppPID.flatMap { NSRunningApplication(processIdentifier: $0)?.bundleIdentifier }
+        }
+
         /// Where Replace would write, for the diagnostic log: never the text.
         var diagnosticTarget: String {
             let range = selectedRange.map { "\($0.location)+\($0.length)" } ?? "none"
@@ -205,6 +210,19 @@ final class TextCaptureService {
 
     func adopt(_ result: CaptureResult) {
         lastCapture = result
+    }
+
+    /// The whole text of the field a capture came from, read again later to follow a suggestion to
+    /// what is sent (`FieldObserver`). Nil without an Accessibility element, and for a secure field.
+    static func readValue(of capture: CaptureResult) -> String? {
+        guard AccessibilityPermission.isTrusted, let element = capture.axElement, !isSecureElement(element)
+        else { return nil }
+        return readStringAttribute(element, kAXValueAttribute as String)
+    }
+
+    static func sameField(_ lhs: CaptureResult, _ rhs: CaptureResult) -> Bool {
+        guard let element = lhs.axElement else { return false }
+        return sameElement(element, rhs.axElement)
     }
 
     /// Replace previously captured selection. Returns error message or nil on success.

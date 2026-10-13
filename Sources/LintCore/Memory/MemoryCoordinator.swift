@@ -99,6 +99,119 @@ public actor MemoryCoordinator {
         }
     }
 
+    /// Records how the suggestions in a followed field fared (`FieldSessionTracker`): one count for
+    /// the app the field is in, counts for the ways of writing the suggestion would have changed
+    /// (`StyleTraits`), and what the text that was sent says. A suggestion that was looked
+    /// at and not used is fed back as dismissed; one that was written into the field and then edited
+    /// there, as the user's edit of what was written. Nothing is kept unless memory and observation
+    /// mode are both on.
+    public func recordObservation(_ outcome: SessionOutcome, config: MemoryConfig) async {
+        guard config.enabled, config.observation else { return }
+        let suggestion = outcome.suggestion
+        switch outcome.result {
+        case .dismissed:
+            await recordFeedback(MemoryFeedback(
+                gesture: .dismissed, mode: .proofread, tone: suggestion.tone,
+                originalText: suggestion.original, generatedText: suggestion.suggestion,
+                finalText: outcome.sentText ?? "", provider: suggestion.provider, model: suggestion.model,
+                usedMemoryIDs: suggestion.usedMemoryIDs, sent: outcome.sentText != nil
+            ), config: config)
+        case .adopted:
+            // The Replace itself was recorded when it happened; this is only what came after it.
+            // The memories behind the suggestion were counted as used then, so they are not named.
+            if let written = outcome.written, let sent = outcome.sentText,
+               sent.trimmingCharacters(in: .whitespacesAndNewlines)
+                   != written.trimmingCharacters(in: .whitespacesAndNewlines) {
+                await recordFeedback(MemoryFeedback(
+                    gesture: .replaced, mode: .proofread, tone: suggestion.tone,
+                    originalText: suggestion.original, generatedText: written, finalText: sent,
+                    provider: suggestion.provider, model: suggestion.model, sent: true
+                ), config: config)
+            }
+        case .ignored:
+            break
+        }
+        guard let store = openStore(create: true) else { return }
+        let adopted = outcome.result == .adopted
+        let now = clock()
+        do {
+            try await store.bumpStat(
+                key: ObservationKey.app(outcome.app), positive: adopted ? 1 : 0, negative: adopted ? 0 : 1, at: now
+            )
+            // The tone of a suggestion that was used: the one that keeps being used in an app
+            // becomes that app's own.
+            if adopted {
+                try await store.bumpStat(
+                    key: ObservationKey.appTone(outcome.app, suggestion.tone.menuTone), positive: 1, negative: 0, at: now
+                )
+            }
+            // The user's own ways of writing that the suggestion would have changed, and whether the
+            // text was sent with them. Dreaming turns the counts into the style profile.
+            if let sent = outcome.sentText, StyleTraits.isObserved(suggestion.tone) {
+                let seen = StyleTraits.observations(
+                    original: suggestion.original, suggestion: suggestion.suggestion, sent: sent,
+                    startsLine: suggestion.startsLine, endsLine: suggestion.endsLine
+                )
+                for (trait, kept) in seen {
+                    try await store.bumpStat(key: trait.statKey, positive: kept ? 1 : 0, negative: kept ? 0 : 1, at: now)
+                }
+            }
+        } catch {
+            DiagnosticLog.shared.log("memory", "could not count an observation: \(DiagnosticLog.describe(error))")
+        }
+    }
+
+    /// How the suggestions in followed fields fared lately, over every app: adopted (`positive`)
+    /// and not (`negative`). Reads whatever is on disk, also while observation mode is off.
+    public func adoption() async -> DecayedCounter {
+        let now = clock()
+        var sum = DecayedCounter(updatedAt: now)
+        guard let store = openStore(create: false) else { return sum }
+        do {
+            for counter in try await store.observationStats(prefix: ObservationKey.app).values {
+                let current = counter.faded(to: now)
+                sum.positive += current.positive
+                sum.negative += current.negative
+            }
+        } catch {
+            DiagnosticLog.shared.log("memory", "could not read the observations: \(DiagnosticLog.describe(error))")
+        }
+        return sum
+    }
+
+    /// What Lint does differently per app, as dreaming last wrote it. Reads whatever is on disk;
+    /// whether it is applied is for the caller to decide (only while observation mode is on).
+    public func appAdjustments() async -> [AppAdjustment] {
+        guard let store = openStore(create: false) else { return [] }
+        do {
+            return try await store.appAdjustments()
+        } catch {
+            DiagnosticLog.shared.log("memory", "could not read the app adjustments: \(DiagnosticLog.describe(error))")
+            return []
+        }
+    }
+
+    /// The user wants an app back to normal: asked for a suggestion in a quiet app (`quiet`), chose
+    /// a tone themselves (`tone`), or removed the adjustment in Settings (both). The counts behind
+    /// what is forgotten go too, so that it is not learned again from them at the next dream.
+    public func forget(app: String, quiet: Bool, tone: Bool) async {
+        guard let store = openStore(create: false) else { return }
+        do {
+            var adjustment = try await store.appAdjustments().first { $0.app == app } ?? AppAdjustment(app: app)
+            if quiet {
+                adjustment.quiet = false
+                try await store.deleteStat(key: ObservationKey.app(app))
+            }
+            if tone {
+                adjustment.tone = nil
+                try await store.deleteStats(prefix: ObservationKey.appTones(app))
+            }
+            try await store.saveAppAdjustment(adjustment, at: clock())
+        } catch {
+            DiagnosticLog.shared.log("memory", "could not forget an app adjustment: \(DiagnosticLog.describe(error))")
+        }
+    }
+
     /// `prompt` with the memories relevant to `text` added at its end, and the memories used.
     /// It comes back untouched while memory is off or nothing is relevant, and also when this
     /// takes longer than `timeout`: a suggestion must never wait on the memory. An `english`
@@ -190,7 +303,7 @@ public actor MemoryCoordinator {
         await scheduler?.didRun()
         return .finished(
             remembered: run.rememberedCount, forgotten: run.forgottenCount, erased: run.erasedCount,
-            newRules: run.generatedCount, coveredMemories: run.supersededCount
+            newRules: run.generatedCount, coveredMemories: run.supersededCount, adjusted: run.adjustedCount
         )
     }
 
@@ -289,7 +402,7 @@ public actor MemoryCoordinator {
         }
     }
 
-    /// Wipes all memories and events, also while memory is off.
+    /// Wipes all memories, events and counters, also while memory is off.
     public func resetAll() async {
         guard let store = openStore(create: false) else { return }
         do {
@@ -307,13 +420,14 @@ public actor MemoryCoordinator {
         at now: Date,
         store: any MemoryStore
     ) async -> Int {
-        let weight = MemoryPolicy.evidenceWeight(for: action)
-        guard weight > 0 else { return 0 }
-        await countUse(of: feedback.usedMemoryIDs, at: now, store: store)
+        guard MemoryPolicy.evidenceWeight(for: action) > 0 else { return 0 }
+        // A suggestion that was turned down was not used, and neither were the memories behind it.
+        if action != .dismissed { await countUse(of: feedback.usedMemoryIDs, at: now, store: store) }
         let extractor = MemoryExtractor()
         let injected = await injectedPatterns(feedback.usedMemoryIDs, store: store)
         let extraction = extractor.extraction(from: feedback, action: action, injected: Set(injected.keys))
-        let against = MemoryPolicy.contradictionWeight(for: action)
+        let weight = MemoryPolicy.evidenceWeight(for: action) * extraction.share
+        let against = MemoryPolicy.contradictionWeight(for: action) * extraction.share
         var changed = false
         var changes = 0
         for candidate in extraction.candidates {
@@ -333,9 +447,10 @@ public actor MemoryCoordinator {
             } catch {
                 DiagnosticLog.shared.log("memory", "could not update a memory: \(DiagnosticLog.describe(error))")
             }
-            // Wanting `b` where a memory asks for `a` is evidence against that memory.
-            if let opposite = MemoryExtractor.reversedKey(of: candidate.dedupKey),
-               await weaken(opposite, by: against, at: now, store: store) {
+            // Wanting `b` where a memory asks for `a` is evidence against that memory, and so is
+            // wanting `a` left alone where one asks to change it (or the other way round).
+            for opposite in MemoryExtractor.opposedKeys(of: candidate.dedupKey)
+            where await weaken(opposite, by: against, at: now, store: store) {
                 changed = true
                 changes += 1
             }
@@ -425,11 +540,12 @@ public actor MemoryCoordinator {
         }
     }
 
-    /// Does nothing if there is no such memory. False if it could not be written. What goes against a
-    /// memory goes against the rule that stands in for it too.
+    /// False if there is no such memory, or it could not be written. What goes against a memory goes
+    /// against the rule that stands in for it too.
     private func weaken(_ dedupKey: String, by amount: Double, at now: Date, store: any MemoryStore) async -> Bool {
         do {
-            let parentID = try await store.memory(dedupKey: dedupKey)?.supersededBy
+            guard let memory = try await store.memory(dedupKey: dedupKey) else { return false }
+            let parentID = memory.supersededBy
             try await store.updateMemory(dedupKey: dedupKey) { memory in
                 memory = MemoryLifecycle.weakened(MemoryLifecycle.settled(memory, at: now), by: amount, at: now)
             }

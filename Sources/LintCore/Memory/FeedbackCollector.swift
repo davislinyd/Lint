@@ -23,6 +23,10 @@ struct FeedbackCollector {
             finalHMAC = hmac(finalText)
         case .regenerated:
             action = .regenerated
+        case .dismissed:
+            action = .dismissed
+            // There is a final text only if the field was followed until it was sent.
+            if feedback.sent { finalHMAC = hmac(finalText) }
         }
         return FeedbackEvent(
             id: UUID(),

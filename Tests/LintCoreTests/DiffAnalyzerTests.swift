@@ -64,6 +64,21 @@ final class DiffAnalyzerTests: XCTestCase {
         XCTAssertEqual(keys(span.before), ["from", "my"])
     }
 
+    func testASpanSaysWhereInTheOldTextItSits() {
+        func ranges(_ old: String, _ new: String) -> [Range<Int>] {
+            DiffAnalyzer.locatedSpans(from: DiffAnalyzer.tokens(in: old), to: DiffAnalyzer.tokens(in: new)).map(\.oldRange)
+        }
+        XCTAssertEqual(ranges("we need a big house", "we need a large house"), [3..<4], "the word it replaced")
+        XCTAssertEqual(ranges("we need discuss it", "we need to discuss it"), [2..<2], "where it added a word")
+        XCTAssertEqual(ranges("we should discuss about it", "we should discuss it"), [3..<4], "the word it removed")
+        XCTAssertEqual(ranges("we need a big house", "we need a big house today"), [5..<5], "after the last word")
+        XCTAssertEqual(ranges("my prospective on a big house", "my perspective on a large home"), [1..<2, 4..<6])
+        let located = DiffAnalyzer.locatedSpans(
+            from: DiffAnalyzer.tokens(in: "we need a big house"), to: DiffAnalyzer.tokens(in: "we need a large house")
+        )
+        XCTAssertEqual(located.map(\.span), spans("we need a big house", "we need a large house"))
+    }
+
     func testInsertionAndDeletion() throws {
         let inserted = try XCTUnwrap(spans("I have meeting tomorrow", "I have a meeting tomorrow").first)
         XCTAssertEqual(keys(inserted.added), ["a"])

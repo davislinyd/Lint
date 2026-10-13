@@ -158,6 +158,32 @@ struct SQLiteMemoryStore: MemoryStore {
                 t.add(column: "erased_count", .integer).notNull().defaults(to: 0)
             }
         }
+        // Observation mode counts how suggestions fared: a key (an app's bundle ID, say) and two
+        // numbers that fade. Never any text.
+        migrator.registerMigration("v6_observation") { db in
+            try db.create(table: "observation_stat") { t in
+                t.column("key", .text).primaryKey()
+                t.column("positive", .double).notNull()
+                t.column("negative", .double).notNull()
+                t.column("updated_at", .double).notNull()
+            }
+        }
+        // A pass also keeps the memory of the user's style in line with what was observed, and says
+        // whether it changed it. A number, and 0 for the passes before.
+        migrator.registerMigration("v7_adjustments") { db in
+            try db.alter(table: "dream_run") { t in
+                t.add(column: "adjusted_count", .integer).notNull().defaults(to: 0)
+            }
+        }
+        // What Lint does differently in an app: a bundle ID, a flag and the name of a tone.
+        migrator.registerMigration("v8_app_adjustments") { db in
+            try db.create(table: "app_adjustment") { t in
+                t.column("app", .text).primaryKey()
+                t.column("quiet", .boolean).notNull()
+                t.column("tone", .text)
+                t.column("updated_at", .double).notNull()
+            }
+        }
         return migrator
     }
 
@@ -258,7 +284,8 @@ struct SQLiteMemoryStore: MemoryStore {
     func deleteMemory(id: UUID) async throws {
         try await dbQueue.write { db in
             guard let memory = try MemoryRecord.fetchOne(db, key: id.uuidString)?.memory else { return }
-            if memory.level != .specific {
+            // The style profile is derived as well, though from counts and not from other memories.
+            if memory.level != .specific || memory.dedupKey.hasPrefix(StyleProfile.keyPrefix) {
                 try db.execute(
                     sql: "INSERT OR IGNORE INTO dream_veto (dedup_key, created_at) VALUES (?, ?)",
                     arguments: [memory.dedupKey, Date().timeIntervalSince1970]
@@ -465,6 +492,79 @@ struct SQLiteMemoryStore: MemoryStore {
         }
     }
 
+    func bumpStat(key: String, positive: Double, negative: Double, at now: Date) async throws {
+        try await dbQueue.write { db in
+            let row = try Row.fetchOne(
+                db, sql: "SELECT positive, negative, updated_at FROM observation_stat WHERE key = ?", arguments: [key]
+            )
+            var counter = row.map { Self.counter($0).faded(to: now) } ?? DecayedCounter(updatedAt: now)
+            counter.positive += positive
+            counter.negative += negative
+            try db.execute(
+                sql: "INSERT OR REPLACE INTO observation_stat (key, positive, negative, updated_at) VALUES (?, ?, ?, ?)",
+                arguments: [key, counter.positive, counter.negative, counter.updatedAt.timeIntervalSince1970]
+            )
+        }
+    }
+
+    func observationStats(prefix: String) async throws -> [String: DecayedCounter] {
+        try await dbQueue.read { db in
+            var counters: [String: DecayedCounter] = [:]
+            for row in try Row.fetchAll(
+                db,
+                sql: "SELECT key, positive, negative, updated_at FROM observation_stat WHERE substr(key, 1, length(?)) = ?",
+                arguments: [prefix, prefix]
+            ) {
+                counters[row["key"]] = Self.counter(row)
+            }
+            return counters
+        }
+    }
+
+    func deleteStat(key: String) async throws {
+        try await dbQueue.write { db in
+            try db.execute(sql: "DELETE FROM observation_stat WHERE key = ?", arguments: [key])
+        }
+    }
+
+    func deleteStats(prefix: String) async throws {
+        try await dbQueue.write { db in
+            try db.execute(
+                sql: "DELETE FROM observation_stat WHERE substr(key, 1, length(?)) = ?", arguments: [prefix, prefix]
+            )
+        }
+    }
+
+    func appAdjustments() async throws -> [AppAdjustment] {
+        try await dbQueue.read { db in
+            try Row.fetchAll(db, sql: "SELECT app, quiet, tone FROM app_adjustment ORDER BY app").map { row in
+                let tone: String? = row["tone"]
+                // A tone this build does not know is no tone: the app falls back to the chosen one.
+                return AppAdjustment(app: row["app"], quiet: row["quiet"], tone: tone.flatMap(WritingTone.init(rawValue:)))
+            }
+        }
+    }
+
+    func saveAppAdjustment(_ adjustment: AppAdjustment, at now: Date) async throws {
+        try await dbQueue.write { db in
+            if adjustment.isEmpty {
+                try db.execute(sql: "DELETE FROM app_adjustment WHERE app = ?", arguments: [adjustment.app])
+            } else {
+                try db.execute(
+                    sql: "INSERT OR REPLACE INTO app_adjustment (app, quiet, tone, updated_at) VALUES (?, ?, ?, ?)",
+                    arguments: [adjustment.app, adjustment.quiet, adjustment.tone?.rawValue, now.timeIntervalSince1970]
+                )
+            }
+        }
+    }
+
+    private static func counter(_ row: Row) -> DecayedCounter {
+        DecayedCounter(
+            positive: row["positive"], negative: row["negative"],
+            updatedAt: Date(timeIntervalSince1970: row["updated_at"])
+        )
+    }
+
     func stats() async throws -> MemoryStats {
         try await dbQueue.read { db in
             var counts: [MemoryState: Int] = [:]
@@ -517,6 +617,8 @@ struct SQLiteMemoryStore: MemoryStore {
             try db.execute(sql: "DELETE FROM feedback_event")
             try db.execute(sql: "DELETE FROM dream_run")
             try db.execute(sql: "DELETE FROM dream_veto")
+            try db.execute(sql: "DELETE FROM observation_stat")
+            try db.execute(sql: "DELETE FROM app_adjustment")
         }
         try await dbQueue.vacuum()
     }
@@ -652,6 +754,7 @@ private struct DreamRunRecord: FetchableRecord, PersistableRecord {
             rememberedCount: row["remembered_count"],
             forgottenCount: row["forgotten_count"],
             erasedCount: row["erased_count"],
+            adjustedCount: row["adjusted_count"],
             status: status
         )
     }
@@ -668,6 +771,7 @@ private struct DreamRunRecord: FetchableRecord, PersistableRecord {
         container["remembered_count"] = run.rememberedCount
         container["forgotten_count"] = run.forgottenCount
         container["erased_count"] = run.erasedCount
+        container["adjusted_count"] = run.adjustedCount
         container["status"] = run.status.rawValue
     }
 }

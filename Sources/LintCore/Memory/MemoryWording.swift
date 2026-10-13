@@ -13,6 +13,17 @@ enum MemoryWording: Equatable, Sendable {
     case acceptedReplacement(from: String, to: String)
     case terminology(from: String, to: String)
     case redundantPrepositions
+    /// The model changed `from` to `to` and the user put `from` back.
+    case keepReverted(from: String, to: String)
+    /// The model suggested `to` for `from`; the user saw it and sent the text with `from`.
+    case keepRejected(from: String, to: String)
+    /// The user's own ways of writing, in the order of `StyleTrait.allCases` (see `profile(of:)`).
+    case profile([StyleTrait])
+
+    /// The wording for these traits, whatever order they come in; nil for none.
+    static func profile(of traits: Set<StyleTrait>) -> MemoryWording? {
+        traits.isEmpty ? nil : .profile(StyleTrait.allCases.filter(traits.contains))
+    }
 
     var chinese: String {
         switch self {
@@ -32,6 +43,12 @@ enum MemoryWording: Equatable, Sendable {
             "用詞：請用「\(to)」，不要用「\(from)」。"
         case .redundantPrepositions:
             "英文常在動詞後多加不必要的介系詞（如 discuss about）：請特別檢查動詞後的介系詞是否多餘，僅在語意不需要時才刪除。"
+        case .keepReverted(let from, let to):
+            "使用者把「\(to)」改回了「\(from)」：原文的「\(from)」請保留，不要改成「\(to)」。"
+        case .keepRejected(let from, let to):
+            "使用者沒有採用把「\(from)」改成「\(to)」的建議：原文的「\(from)」可能是刻意的，除非明顯有錯，否則請保留。"
+        case .profile(let traits):
+            Self.chineseProfileStart + traits.map(Self.chinesePhrase).joined(separator: "；") + "。"
         }
     }
 
@@ -53,11 +70,45 @@ enum MemoryWording: Equatable, Sendable {
             "Wording: use \"\(to)\", not \"\(from)\"."
         case .redundantPrepositions:
             "This user often puts an unneeded preposition after a verb (such as \"discuss about\"): check the preposition after each verb, and remove it only where the meaning does not need it."
+        case .keepReverted(let from, let to):
+            "This user changed \"\(to)\" back to \"\(from)\": keep \"\(from)\" as written, and do not change it to \"\(to)\"."
+        case .keepRejected(let from, let to):
+            "This user did not take a suggestion to change \"\(from)\" to \"\(to)\": \"\(from)\" may be intended, so leave it unless it is clearly wrong."
+        case .profile(let traits):
+            "This user's own way of writing, to be left as it is: " + traits.map(Self.englishPhrase).joined(separator: "; ") + "."
+        }
+    }
+
+    private static let chineseProfileStart = "這位使用者自己的寫法，請照原樣保留："
+
+    private static func chinesePhrase(_ trait: StyleTrait) -> String {
+        switch trait {
+        case .keepContractions: "會用縮寫（如 don't），不要展開"
+        case .keepFullForms: "不用縮寫（如 do not），不要縮寫"
+        case .noTerminalPeriod: "訊息結尾不加句點，不要補上"
+        case .keepLowercaseStart: "開頭用小寫，不要改成大寫"
+        }
+    }
+
+    private static func englishPhrase(_ trait: StyleTrait) -> String {
+        switch trait {
+        case .keepContractions: "contractions (such as don't) stay contracted"
+        case .keepFullForms: "full forms (such as do not) are not contracted"
+        case .noTerminalPeriod: "a message ends without a period, so none is added"
+        case .keepLowercaseStart: "a message starts in lowercase, so it is not capitalized"
         }
     }
 
     /// The wording a stored instruction was written in, nil for anything else (the user's own text).
     init?(chinese instruction: String) {
+        if instruction.hasPrefix(Self.chineseProfileStart), instruction.hasSuffix("。") {
+            // Fixed phrases in a fixed order: anything else was written by the user.
+            let phrases = instruction.dropFirst(Self.chineseProfileStart.count).dropLast().split(separator: "；").map(String.init)
+            let traits = StyleTrait.allCases.filter { phrases.contains(Self.chinesePhrase($0)) }
+            guard !traits.isEmpty, traits.map(Self.chinesePhrase) == phrases else { return nil }
+            self = .profile(traits)
+            return
+        }
         for (shape, make) in Self.shapes {
             if let values = Self.values(in: instruction, shapedLike: shape.chinese) {
                 self = make(values)
@@ -78,6 +129,8 @@ enum MemoryWording: Equatable, Sendable {
         (.acceptedReplacement(from: "\u{1}", to: "\u{2}"), { .acceptedReplacement(from: $0[0], to: $0[1]) }),
         (.terminology(from: "\u{1}", to: "\u{2}"), { .terminology(from: $0[0], to: $0[1]) }),
         (.redundantPrepositions, { _ in .redundantPrepositions }),
+        (.keepReverted(from: "\u{1}", to: "\u{2}"), { .keepReverted(from: $0[0], to: $0[1]) }),
+        (.keepRejected(from: "\u{1}", to: "\u{2}"), { .keepRejected(from: $0[0], to: $0[1]) }),
     ]
 
     /// The words standing where `template` has its placeholders, if `text` is `template` filled in.

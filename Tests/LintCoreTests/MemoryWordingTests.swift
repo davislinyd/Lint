@@ -12,6 +12,10 @@ final class MemoryWordingTests: XCTestCase {
         .acceptedReplacement(from: "open the light", to: "turn on the light"),
         .terminology(from: "軟件", to: "軟體"),
         .redundantPrepositions,
+        .keepReverted(from: "big", to: "large"),
+        .keepRejected(from: "reach out", to: "contact"),
+        .profile([.keepContractions, .noTerminalPeriod]),
+        .profile(StyleTrait.allCases),
     ]
 
     func testEveryStoredWordingIsReadBackAsItself() {
@@ -41,6 +45,26 @@ final class MemoryWordingTests: XCTestCase {
         XCTAssertEqual(MemoryWording.articles.chinese, "英文常漏用或誤用冠詞（a／an／the）：請特別檢查單數可數名詞前的冠詞。")
         XCTAssertEqual(MemoryWording.terminology(from: "軟件", to: "軟體").chinese, "用詞：請用「軟體」，不要用「軟件」。")
         XCTAssertEqual(MemoryConsolidator.redundantPrepositionInstruction, MemoryWording.redundantPrepositions.chinese)
+    }
+
+    func testTheStyleProfileListsItsTraitsInOneOrderAndNothingElseIsOne() throws {
+        XCTAssertEqual(
+            MemoryWording.profile(of: [.keepLowercaseStart, .keepContractions]),
+            .profile([.keepContractions, .keepLowercaseStart])
+        )
+        XCTAssertNil(MemoryWording.profile(of: []))
+        let one = try XCTUnwrap(MemoryWording.profile(of: [.noTerminalPeriod]))
+        XCTAssertEqual(one.chinese, "這位使用者自己的寫法，請照原樣保留：訊息結尾不加句點，不要補上。")
+        XCTAssertEqual(
+            one.english, "This user's own way of writing, to be left as it is: a message ends without a period, so none is added."
+        )
+        let two = MemoryWording.profile([.keepContractions, .noTerminalPeriod]).chinese
+        let swapped = "這位使用者自己的寫法，請照原樣保留：訊息結尾不加句點，不要補上；會用縮寫（如 don't），不要展開。"
+        XCTAssertNotEqual(two, swapped)
+        XCTAssertNil(MemoryWording(chinese: swapped), "another order is not what Lint writes")
+        XCTAssertNil(MemoryWording(chinese: "這位使用者自己的寫法，請照原樣保留：一律用英式拼法。"))
+        XCTAssertNil(MemoryWording(chinese: "這位使用者自己的寫法，請照原樣保留：。"))
+        XCTAssertNil(MemoryWording(chinese: one.chinese + "另外不要用驚嘆號。"))
     }
 
     func testTextTheUserWroteIsNotAWording() {

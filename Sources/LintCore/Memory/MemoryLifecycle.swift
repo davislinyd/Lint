@@ -24,11 +24,13 @@ enum MemoryLifecycle {
     /// A change the model made and the user only accepted, which depends on its sentence: another
     /// word ("used" for "able"), or the same word in another form ("tickets" for "ticket"). One such
     /// fix says little about a habit, so the memory is used only once its pattern has come back.
+    /// The same goes for a change the user did not take up: they may have turned the suggestion down
+    /// for another reason.
     /// Told apart by the wording it was stored with, so memories remembered before this rule follow it.
     static func waitsForRecurrence(_ memory: WritingMemory) -> Bool {
         guard memory.level == .specific, !isProven(memory) else { return false }
         switch MemoryWording(chinese: memory.instruction) {
-        case .acceptedReplacement?: return true
+        case .acceptedReplacement?, .keepRejected?: return true
         case .misspelling(let wrong, let right)?: return MemoryExtractor.isInflection(wrong, right)
         default: return false
         }

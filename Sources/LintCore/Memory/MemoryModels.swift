@@ -6,6 +6,8 @@ public enum FeedbackAction: String, Codable, CaseIterable, Sendable {
     case editedAndAccepted
     case copied
     case regenerated
+    /// Looked at and not used, as observation mode saw it.
+    case dismissed
 }
 
 public enum MemoryKind: String, Codable, CaseIterable, Sendable {
@@ -93,6 +95,8 @@ public enum UserGesture: Sendable {
     case replaced
     case copied
     case regenerated
+    /// Looked at the suggestion and left the text to itself (observation mode).
+    case dismissed
 }
 
 /// Input to memory. It carries the full texts, which live only in memory: what gets persisted
@@ -112,6 +116,8 @@ public struct MemoryFeedback: Sendable {
     public var model: String
     /// Memories that were in the prompt that produced the suggestion.
     public var usedMemoryIDs: [UUID]
+    /// `finalText` is what the field held when it was sent, as observation mode read it.
+    public var sent: Bool
 
     public init(
         gesture: UserGesture,
@@ -122,7 +128,8 @@ public struct MemoryFeedback: Sendable {
         finalText: String,
         provider: String,
         model: String,
-        usedMemoryIDs: [UUID] = []
+        usedMemoryIDs: [UUID] = [],
+        sent: Bool = false
     ) {
         self.gesture = gesture
         self.mode = mode
@@ -133,6 +140,7 @@ public struct MemoryFeedback: Sendable {
         self.provider = provider
         self.model = model
         self.usedMemoryIDs = usedMemoryIDs
+        self.sent = sent
     }
 
     /// False when there is no finished suggestion or no source text to compare it with.
@@ -180,9 +188,12 @@ public struct PersonalizedPrompt: Sendable, Equatable {
 /// is what crosses into `MemoryCoordinator`.
 public struct MemoryConfig: Sendable, Equatable {
     public var enabled: Bool
+    /// Observation mode: a suggestion is followed to the text that is sent. Only with `enabled`.
+    public var observation: Bool
 
-    public init(enabled: Bool) {
+    public init(enabled: Bool, observation: Bool = false) {
         self.enabled = enabled
+        self.observation = observation
     }
 }
 
@@ -265,10 +276,12 @@ enum MemoryPolicy {
     static let minHabitCJKCharacters = 4
 
     /// What one observation is worth. An edit is the user's own choice; accepting is a weaker
-    /// yes, copying weaker still, and asking again says nothing about what to learn.
+    /// yes, copying weaker still, and asking again says nothing about what to learn. Turning a
+    /// suggestion down is as weak a no as accepting is a yes, and it is shared between all the
+    /// changes the suggestion made (`MemoryExtractor.Extraction.share`).
     static func evidenceWeight(for action: FeedbackAction) -> Double {
         switch action {
-        case .accepted: 0.15
+        case .accepted, .dismissed: 0.15
         case .editedAndAccepted: 0.35
         case .copied: 0.05
         case .regenerated: 0

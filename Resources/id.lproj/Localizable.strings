@@ -210,6 +210,15 @@
 "啟用記憶" = "Aktifkan Memori";
 "記下你修正過的寫作習慣，下一次建議就開始提醒模型；沒有再出現的會在作夢時忘記。資料只存在這台 Mac，只記抽象的規則，不記原文。Lint 認不出中文人名或全小寫的英文名，被你修正過的名字仍可能被記下；可在「管理記憶」查看並刪除。" = "Mencatat kebiasaan menulis yang Anda perbaiki dan mengingatkan model sejak saran berikutnya; yang tidak muncul lagi dilupakan saat bermimpi. Data hanya ada di Mac ini, dan yang disimpan hanya aturan abstrak, bukan teks Anda. Lint tidak dapat mengenali nama Tionghoa atau nama yang diketik dengan huruf kecil, jadi nama yang Anda perbaiki mungkin tetap diingat; Anda dapat meninjau dan menghapusnya di Kelola Memori.";
 "關閉時，Lint 的行為與沒有這個功能時完全相同。" = "Saat nonaktif, Lint berperilaku persis seperti tanpa fitur ini.";
+"觀察模式" = "Mode Observasi";
+"Lint 給過建議後，會繼續讀取那個輸入框的文字，直到你送出（輸入框清空）、輸入框消失，或 10 分鐘沒有動靜，藉此知道建議有沒有被採用、哪些改動你不想要。讀到的文字只留在記憶體裡，不會寫入磁碟；存下來的只有各 App 的採用次數、不含文字的紀錄，以及和其他記憶一樣的簡短規則。不會讀取密碼欄位與密碼管理 App。" = "Setelah memberi saran, Lint terus membaca kolom teks itu sampai Anda mengirim teksnya (kolom menjadi kosong), kolomnya hilang, atau tidak ada perubahan selama 10 menit, untuk mengetahui apakah saran dipakai dan perubahan mana yang tidak Anda inginkan. Teks yang dibaca hanya ada di RAM dan tidak pernah ditulis ke disk; yang disimpan hanya jumlah saran yang dipakai per aplikasi, catatan tanpa teks, dan aturan singkat seperti memori lainnya. Kolom kata sandi dan aplikasi pengelola kata sandi tidak pernah dibaca.";
+"需要先啟用記憶。" = "Memori harus diaktifkan terlebih dahulu.";
+"不自動準備建議" = "Saran tidak disiapkan otomatis";
+"語氣：%@" = "Nada: %@";
+"某個 App 裡的建議從未被採用時，Lint 不再自動為它準備建議；在那裡按 ⌥⌘K 檢查一次就會恢復。某個 App 裡多半採用同一種語氣時，那裡的自動建議會改用那種語氣；手動選語氣就會取消。" = "Jika saran di suatu aplikasi tidak pernah dipakai, Lint berhenti menyiapkannya secara otomatis di sana; memeriksa sekali dengan ⌥⌘K di sana mengaktifkannya kembali. Jika satu nada paling sering dipakai di suatu aplikasi, saran otomatis di sana ditulis dengan nada itu; memilih nada secara manual membatalkannya.";
+"近期採用率" = "Tingkat pemakaian saran terbaru";
+"%@（約 %lld 次建議）" = "%@ (sekitar %lld saran)";
+"尚無資料" = "Belum ada data";
 "長期記憶" = "Memori jangka panjang";
 "短期記憶" = "Memori jangka pendek";
 "重設記憶資料庫…" = "Atur Ulang Basis Data Memori…";
@@ -259,6 +268,7 @@
 "這次沒有要處理的記憶。" = "Tidak ada memori untuk mimpi ini.";
 "作夢完成：記住 %lld 條、忘記 %lld 條、刪除 %lld 條。" = "Mimpi selesai: %lld diingat, %lld dilupakan, %lld dihapus.";
 "新增 %lld 條一般記憶，涵蓋 %lld 條具體記憶。" = "%lld memori umum baru, mencakup %lld memori spesifik.";
+"已依近期的觀察更新寫作風格的記憶。" = "Memori gaya menulis Anda diperbarui berdasarkan pengamatan terbaru.";
 "正在作夢。" = "Sedang bermimpi.";
 "作夢沒有完成，稍後會再試。" = "Mimpi tidak selesai. Akan dicoba lagi nanti.";
 "核心" = "Inti";

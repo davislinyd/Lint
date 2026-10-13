@@ -1,9 +1,11 @@
+import AppKit
 import LintCore
 import SwiftUI
 
 struct MemorySettingsPane: View {
     var app: AppModel
     @State private var stats = MemoryStats.empty
+    @State private var adoption = DecayedCounter(updatedAt: .now)
     @State private var confirmReset = false
     @State private var showMemories = false
     @State private var dreaming = false
@@ -20,6 +22,43 @@ struct MemorySettingsPane: View {
             } footer: {
                 Text("關閉時，Lint 的行為與沒有這個功能時完全相同。")
                     .sectionNote()
+            }
+
+            Section {
+                SettingsToggle(
+                    title: "觀察模式",
+                    detail: "Lint 給過建議後，會繼續讀取那個輸入框的文字，直到你送出（輸入框清空）、輸入框消失，或 10 分鐘沒有動靜，藉此知道建議有沒有被採用、哪些改動你不想要。讀到的文字只留在記憶體裡，不會寫入磁碟；存下來的只有各 App 的採用次數、不含文字的紀錄，以及和其他記憶一樣的簡短規則。不會讀取密碼欄位與密碼管理 App。",
+                    isOn: Bindable(app.settings).observationEnabled
+                )
+                .disabled(!app.settings.memoryEnabled)
+                if app.settings.memoryEnabled, app.settings.observationEnabled {
+                    LabeledContent("近期採用率") {
+                        if adoption.total >= 1 {
+                            Text("\((adoption.positive / adoption.total).formatted(.percent.precision(.fractionLength(0))))（約 \(Int(adoption.total.rounded())) 次建議）")
+                        } else {
+                            Text("尚無資料")
+                        }
+                    }
+                    ForEach(adjustments) { adjustment in
+                        LabeledContent(Self.appName(adjustment.app)) {
+                            HStack {
+                                Text(Self.summary(of: adjustment))
+                                    .foregroundStyle(.secondary)
+                                Button("移除") {
+                                    app.forgetAdjustment(for: adjustment.app, quiet: true, tone: true)
+                                }
+                            }
+                        }
+                    }
+                }
+            } footer: {
+                if adjustments.isEmpty {
+                    Text("需要先啟用記憶。")
+                        .sectionNote()
+                } else {
+                    Text("某個 App 裡的建議從未被採用時，Lint 不再自動為它準備建議；在那裡按 ⌥⌘K 檢查一次就會恢復。某個 App 裡多半採用同一種語氣時，那裡的自動建議會改用那種語氣；手動選語氣就會取消。")
+                        .sectionNote()
+                }
             }
 
             Section("記憶") {
@@ -82,11 +121,18 @@ struct MemorySettingsPane: View {
         .formStyle(.grouped)
         .task {
             stats = await app.memory.stats()
+            adoption = await app.memory.adoption()
         }
         .onChange(of: app.settings.memoryEnabled) {
             Task {
                 await app.memory.prepare(config: app.settings.memoryConfig)
                 stats = await app.memory.stats()
+            }
+        }
+        .onChange(of: app.settings.observationEnabled) {
+            Task {
+                adoption = await app.memory.adoption()
+                await app.refreshAppAdjustments()
             }
         }
         .sheet(isPresented: $showMemories) {
@@ -98,7 +144,9 @@ struct MemorySettingsPane: View {
             Button("重設", role: .destructive) {
                 Task {
                     await app.memory.resetAll()
+                    await app.refreshAppAdjustments()
                     stats = await app.memory.stats()
+                    adoption = await app.memory.adoption()
                 }
             }
         } message: {
@@ -106,10 +154,32 @@ struct MemorySettingsPane: View {
         }
     }
 
+    /// What Lint does differently per app, by the app's name.
+    private var adjustments: [AppAdjustment] {
+        guard app.settings.memoryEnabled, app.settings.observationEnabled else { return [] }
+        return app.appAdjustments.values.sorted {
+            Self.appName($0.app).localizedCaseInsensitiveCompare(Self.appName($1.app)) == .orderedAscending
+        }
+    }
+
+    /// The name the app goes by, or its bundle ID when it is not installed any more.
+    private static func appName(_ bundle: String) -> String {
+        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundle) else { return bundle }
+        return FileManager.default.displayName(atPath: url.path)
+    }
+
+    private static func summary(of adjustment: AppAdjustment) -> String {
+        [
+            adjustment.quiet ? String(localized: "不自動準備建議") : nil,
+            adjustment.tone.map { String(localized: "語氣：\($0.title)") },
+        ].compactMap { $0 }.joined(separator: " · ")
+    }
+
     private func dreamNow() {
         Task {
             dreaming = true
             dreamOutcome = await app.memory.dream(config: app.settings.memoryConfig)
+            await app.refreshAppAdjustments()
             stats = await app.memory.stats()
             dreaming = false
         }
@@ -118,14 +188,17 @@ struct MemorySettingsPane: View {
     @ViewBuilder
     private func dreamMessage(_ outcome: DreamOutcome) -> some View {
         switch outcome {
-        case .finished(let remembered, let forgotten, let erased, let rules, let covered)
-            where remembered + forgotten + erased + rules + covered == 0:
+        case .finished(let remembered, let forgotten, let erased, let rules, let covered, let adjusted)
+            where remembered + forgotten + erased + rules + covered + adjusted == 0:
             Text("這次沒有要處理的記憶。")
-        case .finished(let remembered, let forgotten, let erased, let rules, let covered):
+        case .finished(let remembered, let forgotten, let erased, let rules, let covered, let adjusted):
             VStack(alignment: .leading, spacing: 2) {
                 Text("作夢完成：記住 \(remembered) 條、忘記 \(forgotten) 條、刪除 \(erased) 條。")
                 if rules > 0 || covered > 0 {
                     Text("新增 \(rules) 條一般記憶，涵蓋 \(covered) 條具體記憶。")
+                }
+                if adjusted > 0 {
+                    Text("已依近期的觀察更新寫作風格的記憶。")
                 }
             }
         case .alreadyRunning:

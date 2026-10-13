@@ -616,6 +616,7 @@ final class MemoryLifecycleTests: XCTestCase {
             .acceptedReplacement(from: "used", to: "able"),
             .misspelling(wrong: "tickets", right: "ticket"),
             .misspelling(wrong: "agent", right: "agents"),
+            .keepRejected(from: "big", to: "large"),
         ]
         for wording in waits {
             let memory = learned(wording)
@@ -639,6 +640,7 @@ final class MemoryLifecycleTests: XCTestCase {
             .articles,
             .extraPreposition(verb: "discuss", preposition: "about"),
             .terminology(from: "伺服器", to: "服務器"),
+            .keepReverted(from: "big", to: "large"),
         ]
         for wording in usedAtOnce {
             let memory = learned(wording)

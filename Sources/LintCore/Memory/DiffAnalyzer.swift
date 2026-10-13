@@ -34,6 +34,14 @@ struct EditSpan: Equatable, Sendable {
     let before: [WordToken]
 }
 
+/// A difference, and where in the old text it sits: the words it removed, or the place it added
+/// words at when it removed none. (For Chinese the range can reach past `span.removed`, which is
+/// trimmed to the characters that differ.)
+struct LocatedSpan: Equatable, Sendable {
+    let span: EditSpan
+    let oldRange: Range<Int>
+}
+
 enum DiffAnalyzer {
     /// Past this many differing words on a side, the two texts are treated as unrelated.
     static let maxMiddleTokens = 1_200
@@ -65,6 +73,10 @@ enum DiffAnalyzer {
     /// The differences between two token sequences, in order. Identical sequences, or ones that
     /// differ too much to compare, give none.
     static func spans(from old: [WordToken], to new: [WordToken]) -> [EditSpan] {
+        locatedSpans(from: old, to: new).map(\.span)
+    }
+
+    static func locatedSpans(from old: [WordToken], to new: [WordToken]) -> [LocatedSpan] {
         var head = 0
         while head < old.count, head < new.count, old[head].key == new[head].key {
             head += 1
@@ -119,7 +131,7 @@ enum DiffAnalyzer {
                 removed: Array(old[range.old]),
                 added: Array(new[range.new]),
                 before: Array(old[max(floor, range.old.lowerBound - 2)..<range.old.lowerBound])
-            ))
+            )).map { LocatedSpan(span: $0, oldRange: range.old) }
         }
     }
 

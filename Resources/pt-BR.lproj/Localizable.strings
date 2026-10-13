@@ -210,6 +210,15 @@
 "啟用記憶" = "Ativar Memória";
 "記下你修正過的寫作習慣，下一次建議就開始提醒模型；沒有再出現的會在作夢時忘記。資料只存在這台 Mac，只記抽象的規則，不記原文。Lint 認不出中文人名或全小寫的英文名，被你修正過的名字仍可能被記下；可在「管理記憶」查看並刪除。" = "Anota os hábitos de escrita que você corrige e lembra o modelo a partir da próxima sugestão; os que não voltam são esquecidos ao sonhar. Os dados ficam neste Mac, e só regras abstratas são guardadas, nunca o seu texto. O Lint não reconhece nomes chineses nem nomes escritos só em minúsculas, então um nome que você corrigiu ainda pode ser lembrado; você pode rever e apagar em Gerenciar Memórias.";
 "關閉時，Lint 的行為與沒有這個功能時完全相同。" = "Quando desativado, o Lint funciona exatamente como se este recurso não existisse.";
+"觀察模式" = "Modo de observação";
+"Lint 給過建議後，會繼續讀取那個輸入框的文字，直到你送出（輸入框清空）、輸入框消失，或 10 分鐘沒有動靜，藉此知道建議有沒有被採用、哪些改動你不想要。讀到的文字只留在記憶體裡，不會寫入磁碟；存下來的只有各 App 的採用次數、不含文字的紀錄，以及和其他記憶一樣的簡短規則。不會讀取密碼欄位與密碼管理 App。" = "Depois de fazer uma sugestão, o Lint continua lendo aquele campo de texto até você enviar o texto (o campo fica vazio), o campo sumir ou nada acontecer por 10 minutos, para saber se a sugestão foi usada e quais das mudanças você não quis. O que ele lê fica só na RAM e nunca é gravado em disco; são guardados apenas a quantidade de sugestões usadas em cada app, registros sem nenhum texto e regras curtas como as outras memórias. Campos de senha e gerenciadores de senhas nunca são lidos.";
+"需要先啟用記憶。" = "Requer que a Memória esteja ativada.";
+"不自動準備建議" = "Sugestões não são preparadas automaticamente";
+"語氣：%@" = "Tom: %@";
+"某個 App 裡的建議從未被採用時，Lint 不再自動為它準備建議；在那裡按 ⌥⌘K 檢查一次就會恢復。某個 App 裡多半採用同一種語氣時，那裡的自動建議會改用那種語氣；手動選語氣就會取消。" = "Quando as sugestões em um app nunca foram usadas, o Lint deixa de prepará-las sozinho ali; verificar uma vez com ⌥⌘K nesse app as traz de volta. Quando um tom é o mais usado em um app, as sugestões automáticas ali são escritas nesse tom; escolher um tom manualmente encerra isso.";
+"近期採用率" = "Taxa de adoção recente";
+"%@（約 %lld 次建議）" = "%@ (cerca de %lld sugestões)";
+"尚無資料" = "Ainda sem dados";
 "長期記憶" = "Memórias de longo prazo";
 "短期記憶" = "Memórias de curto prazo";
 "重設記憶資料庫…" = "Redefinir Banco de Dados de Memória…";
@@ -259,6 +268,7 @@
 "這次沒有要處理的記憶。" = "Nada para este sonho tratar.";
 "作夢完成：記住 %lld 條、忘記 %lld 條、刪除 %lld 條。" = "Sonho concluído: %lld lembradas, %lld esquecidas, %lld apagadas.";
 "新增 %lld 條一般記憶，涵蓋 %lld 條具體記憶。" = "%lld novas memórias gerais, cobrindo %lld memórias específicas.";
+"已依近期的觀察更新寫作風格的記憶。" = "A memória do seu estilo de escrita foi atualizada com base nas observações recentes.";
 "正在作夢。" = "Sonhando.";
 "作夢沒有完成，稍後會再試。" = "O sonho não terminou. Será tentado novamente mais tarde.";
 "核心" = "Central";

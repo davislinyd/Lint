@@ -31,12 +31,23 @@ final class FloatingPanelViewModel {
     var usedClipboardFallback = false
     /// The task. Choosing another one brings back the tone that task remembers.
     var mode: WritingMode = .proofread {
-        didSet { if mode != oldValue { tone = settings.tone(for: mode) } }
+        didSet { if mode != oldValue { load(settings.tone(for: mode)) } }
     }
-    /// How it should sound; each task remembers its own (see `SettingsStore.tones`).
+    /// How it should sound; each task remembers its own (see `SettingsStore.tones`). A tone the user
+    /// picks is remembered, and takes the place of the one learned for the app the text is from; a
+    /// tone that is only loaded for a suggestion (`load`) is neither.
     var tone: WritingTone = .preserve {
-        didSet { if tone != oldValue { settings.setTone(tone, for: mode) } }
+        didSet {
+            guard tone != oldValue, !isLoadingTone else { return }
+            settings.setTone(tone, for: mode)
+            onToneChosen?(capture.lastCapture?.sourceBundleID)
+        }
     }
+    private var isLoadingTone = false
+    /// The tone the user uses most in an app, by bundle ID, where observation mode learned one.
+    var learnedTone: ((String?) -> WritingTone?)?
+    /// The user picked a tone by hand, for text from this app.
+    var onToneChosen: ((String?) -> Void)?
     /// The task, and the tone if one applies and was chosen: what the panel and the bubble call it.
     var modeTitle: String { mode.displayTitle(tone: tone) }
     var testOutput: String = ""
@@ -51,6 +62,7 @@ final class FloatingPanelViewModel {
     private let capture: TextCaptureService
     private let llm: LLMService
     private let memory: MemoryCoordinator
+    private let observer: FieldObserver
     private let localAI: LocalAISetupCoordinator
     private let appleIntelligence: any AppleIntelligenceAvailabilityChecking
     /// Only the newest request may put its answer on screen (see `WritingRequestTickets`).
@@ -72,7 +84,11 @@ final class FloatingPanelViewModel {
         /// What a translation was written in; nil for the other tasks.
         let translationLanguage: TranslationLanguage?
     }
-    private var generated: GeneratedSuggestion?
+    private var generated: GeneratedSuggestion? {
+        didSet { generatedIsObserved = generated.map(observeOpened) ?? false }
+    }
+    /// Observation mode follows the suggestion on screen, so what is done with it is reported.
+    private var generatedIsObserved = false
 
     // Background prefetch while the selection chip is visible.
     private var prefetchTask: Task<Void, Never>?
@@ -88,6 +104,8 @@ final class FloatingPanelViewModel {
     private var prefetchNote: String?
     private var prefetchIsSuggestion = true
     private var prefetchAttachedToUI = false
+    /// Observation mode was told that this prefetch is waiting behind the ready chip.
+    private var prefetchReadyReported = false
     /// Gloss of the finished prefetch, fetched in the background so the bubble opens complete.
     private var prefetchTranslationTask: Task<Void, Never>?
     private var prefetchTranslation: (language: TranslationLanguage, text: String)?
@@ -105,15 +123,32 @@ final class FloatingPanelViewModel {
         self.capture = capture
         self.llm = llm
         self.memory = memory
+        self.observer = FieldObserver(settings: settings, memory: memory)
         self.localAI = localAI
         self.appleIntelligence = appleIntelligence
         loadSelectionFromSettings()
     }
 
-    /// The task last used, and the tone that task remembers.
-    private func loadSelectionFromSettings() {
+    /// The task last used and its tone: the tone that task remembers or, for an automatic suggestion
+    /// for text from `app`, the one learned for that app.
+    private func loadSelectionFromSettings(app: String? = nil) {
         mode = settings.lastMode
-        tone = settings.tone(for: mode)
+        load(requestTone(for: mode, app: app))
+    }
+
+    /// Sets the tone without it counting as the user's choice.
+    private func load(_ tone: WritingTone) {
+        isLoadingTone = true
+        self.tone = tone
+        isLoadingTone = false
+    }
+
+    /// The tone an automatic suggestion for text from `app` is asked for: the one the user uses there
+    /// most of the time, where observation mode learned one (proofreading only), else the tone
+    /// chosen for the task. The chosen tone itself, and the menu that shows it, stay as they are.
+    private func requestTone(for mode: WritingMode, app: String?) -> WritingTone {
+        if mode == .proofread, let learned = learnedTone?(app) { return learned }
+        return settings.tone(for: mode)
     }
 
     func adoptCapture(_ result: TextCaptureService.CaptureResult) {
@@ -124,7 +159,7 @@ final class FloatingPanelViewModel {
 
     /// Start (or keep) a background suggestion for the current selection chip.
     func beginPrefetch(for result: TextCaptureService.CaptureResult) {
-        let key = currentRequestKey(for: result.text)
+        let key = currentRequestKey(for: result.text, app: result.sourceBundleID)
         if prefetchKey == key, (isPrefetching || isPrefetchReady || prefetchAttachedToUI) {
             return
         }
@@ -167,12 +202,12 @@ final class FloatingPanelViewModel {
         }
     }
 
-    /// The request the settings in force now make for `source`.
-    private func currentRequestKey(for source: String) -> WritingRequestKey {
+    /// The request the settings in force now make for `source`, text from `app`.
+    private func currentRequestKey(for source: String, app: String?) -> WritingRequestKey {
         let mode = settings.lastMode
         return WritingRequestKey(
             source: source, mode: mode,
-            tone: settings.tone(for: mode).effective(for: source, mode: mode, mixed: settings.mixedTextHandling),
+            tone: requestTone(for: mode, app: app).effective(for: source, mode: mode, mixed: settings.mixedTextHandling),
             customPrompt: settings.customPrompt,
             translationLanguage: settings.translationLanguage
         )
@@ -203,7 +238,8 @@ final class FloatingPanelViewModel {
         Task { [weak self] in
             guard let self else { return }
             let mode = self.settings.lastMode
-            let route = await self.resolveRoute(mode: mode, tone: self.settings.tone(for: mode))
+            let tone = self.requestTone(for: mode, app: NSWorkspace.shared.frontmostApplication?.bundleIdentifier)
+            let route = await self.resolveRoute(mode: mode, tone: tone)
             guard self.settings.wantsManagedLocalServer(for: route) else { return }
             do {
                 try await self.ensureLocalServerIfNeeded(for: route)
@@ -212,8 +248,7 @@ final class FloatingPanelViewModel {
                     model: config.model,
                     // The prompt the next request will start with, so llama-server caches its prefix.
                     systemPrompt: self.settings.effectiveSystemPrompt(
-                        for: self.settings.lastMode, tone: self.settings.tone(for: self.settings.lastMode),
-                        profile: WritingPromptProfile.for(provider: .localLlama)
+                        for: mode, tone: tone, profile: WritingPromptProfile.for(provider: .localLlama)
                     ),
                     userText: "hi",
                     maxTokens: 1,
@@ -241,7 +276,39 @@ final class FloatingPanelViewModel {
         prefetchNote = nil
         prefetchIsSuggestion = true
         prefetchAttachedToUI = false
+        prefetchReadyReported = false
         onPrefetchStateChange?()
+    }
+
+    /// The chip over `result` says a suggestion is ready: one the user can see is there and has not
+    /// looked at. Observation mode is told once per prefetch, and only of plain proofreading.
+    func readyChipShown(for result: TextCaptureService.CaptureResult) {
+        guard isPrefetchReady, !prefetchReadyReported, prefetchIsSuggestion,
+              let key = prefetchKey, key.mode == .proofread, key.source == result.text
+        else { return }
+        prefetchReadyReported = true
+        observer.suggestionReady(
+            ObservedSuggestion(
+                original: key.source, suggestion: prefetchBuffer, tone: key.tone,
+                provider: prefetchProvider.rawValue, model: settings.model, usedMemoryIDs: prefetchUsedMemoryIDs
+            ),
+            for: result
+        )
+    }
+
+    /// Tells observation mode that a finished suggestion is on screen. Only proofreading is
+    /// followed, and only a suggestion for the text Lint captured in a field: not one for text
+    /// typed into the panel. Returns whether it is followed.
+    private func observeOpened(_ generated: GeneratedSuggestion) -> Bool {
+        guard generated.mode == .proofread, let captured = capture.lastCapture, captured.text == generated.source
+        else { return false }
+        return observer.opened(
+            ObservedSuggestion(
+                original: generated.source, suggestion: generated.text, tone: generated.tone,
+                provider: generated.provider.rawValue, model: settings.model, usedMemoryIDs: generated.usedMemoryIDs
+            ),
+            for: captured
+        )
     }
 
     /// Chip click: reuse prefetch if it matches, otherwise stream fresh.
@@ -249,12 +316,12 @@ final class FloatingPanelViewModel {
         let text = result.text
         // Only a prefetch made for what the settings ask for now; after a change of mode, tone or
         // translation target (from the status menu, say) it would answer another question.
-        if prefetchKey == currentRequestKey(for: text) {
+        if prefetchKey == currentRequestKey(for: text, app: result.sourceBundleID) {
             errorMessage = nil
             statusNote = nil
             generated = nil
             isAutoSuggestSession = true
-            loadSelectionFromSettings()
+            loadSelectionFromSettings(app: result.sourceBundleID)
             originalText = text
             usedClipboardFallback = result.usedClipboardFallback
             lastUsage = nil
@@ -308,7 +375,7 @@ final class FloatingPanelViewModel {
         clearTranslation()
         statusNote = nil
         isAutoSuggestSession = true
-        loadSelectionFromSettings()
+        loadSelectionFromSettings(app: result.sourceBundleID)
         originalText = result.text
         usedClipboardFallback = result.usedClipboardFallback
         isStreaming = true
@@ -398,6 +465,7 @@ final class FloatingPanelViewModel {
         pb.clearContents()
         pb.setString(resultText, forType: .string)
         recordFeedback(.copied)
+        if generatedIsObserved { observer.copied() }
     }
 
     @discardableResult
@@ -407,6 +475,7 @@ final class FloatingPanelViewModel {
             return message
         }
         recordFeedback(.replaced)
+        if generatedIsObserved { observer.replaced(written: resultText) }
         return nil
     }
 

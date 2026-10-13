@@ -7,8 +7,9 @@ public enum DreamOutcome: Sendable, Equatable {
     /// A pass was already running.
     case alreadyRunning
     /// What the pass did: memories it found proved (now long-term), memories it forgot, faded traces
-    /// it erased, rules it derived and the memories those stand in for.
-    case finished(remembered: Int, forgotten: Int, erased: Int, newRules: Int, coveredMemories: Int)
+    /// it erased, rules it derived and the memories those stand in for, and whether it changed the
+    /// memory of the user's style (`adjusted`, 0 or 1).
+    case finished(remembered: Int, forgotten: Int, erased: Int, newRules: Int, coveredMemories: Int, adjusted: Int)
     case failed
 }
 
@@ -37,6 +38,8 @@ struct DreamRun: Sendable, Equatable, Identifiable {
     var forgottenCount = 0
     /// Forgotten memories whose trace had faded, removed from the file.
     var erasedCount = 0
+    /// Times the style profile was taken up, changed or put away.
+    var adjustedCount = 0
     var status: DreamRunStatus
 }
 

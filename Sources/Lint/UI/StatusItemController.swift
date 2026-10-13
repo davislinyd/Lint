@@ -84,6 +84,8 @@ final class StatusItemController: NSObject, NSMenuDelegate {
               let tone = WritingTone(rawValue: raw)
         else { return }
         app.settings.setTone(tone, for: app.settings.lastMode)
+        // Chosen by hand: it replaces the tone Lint had learned for the app the user is in.
+        app.forgetAdjustment(for: NSWorkspace.shared.frontmostApplication?.bundleIdentifier, quiet: false, tone: true)
     }
 
     @objc private func promptAccess() {

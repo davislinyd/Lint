@@ -76,6 +76,8 @@ actor MemoryDreamCoordinator {
         record.inputMemoryCount = try await store.memories().count
         try await settle(&record, at: now, gate: gate)
         try await erase(&record, at: now, gate: gate)
+        try await adjust(&record, at: now, gate: gate)
+        try await adjustApps(at: now, gate: gate)
         let memories = try await store.memories()
 
         // Judged as they stand today, whether or not they have been settled in the store yet.
@@ -152,6 +154,93 @@ actor MemoryDreamCoordinator {
             memory.state == .archived && memory.evidence(at: now) < MemoryPolicy.archiveThreshold
         }
         record.erasedCount = try await store.eraseMemories(ids: faded.map(\.id))
+    }
+
+    /// Brings the style profile, the one memory that says how the user writes, in line with what
+    /// observation mode counted: a trait is taken up or dropped by `ObservationAdjuster`, and with
+    /// none left the memory is put away. A profile the user pinned, disabled, reworded or deleted is
+    /// theirs and is left alone. While it holds it is confirmed again by every pass, so it does not
+    /// fade for want of new evidence: a trait the model respects is one it no longer touches.
+    private func adjust(_ record: inout DreamRun, at now: Date, gate: InteractiveGate?) async throws {
+        try Self.checkpoint(gate)
+        let existing = try await store.memory(dedupKey: StyleProfile.dedupKey)
+        if let existing {
+            guard !existing.userEdited, existing.state != .pinned, existing.state != .disabled else { return }
+        } else if try await store.isVetoed(dedupKey: StyleProfile.dedupKey) {
+            return
+        }
+        let inUse = existing.map(MemoryLifecycle.isUsed) ?? false
+        var held: Set<StyleTrait> = []
+        if inUse, case .profile(let traits)? = existing.flatMap({ MemoryWording(chinese: $0.instruction) }) {
+            held = Set(traits)
+        }
+        let counters = try await store.observationStats(prefix: StyleTrait.statPrefix)
+        let traits = Set(StyleTrait.allCases.filter { trait in
+            counters[trait.statKey].map {
+                ObservationAdjuster.holds($0.faded(to: now), held: held.contains(trait))
+            } ?? false
+        })
+
+        guard let instruction = MemoryWording.profile(of: traits)?.chinese else {
+            guard inUse, let existing else { return }
+            try await store.updateMemory(id: existing.id) { memory in
+                guard !memory.userEdited, memory.state == .active || memory.state == .candidate else { return }
+                memory.state = .archived
+            }
+            record.adjustedCount += 1
+            return
+        }
+        if !inUse || traits != held { record.adjustedCount += 1 }
+        try await store.mergeMemory(dedupKey: StyleProfile.dedupKey) { current in
+            // Seen once and not from the user's words: never a source of a generalized memory.
+            var memory = current ?? WritingMemory(
+                id: UUID(), dedupKey: StyleProfile.dedupKey, kind: .style, language: "en", modeScope: nil,
+                triggers: [], instruction: instruction, evidenceScore: 0, occurrenceCount: 1,
+                state: .active, userEdited: false, createdAt: now, lastConfirmedAt: now
+            )
+            // Judged again here, in case the user got to it meanwhile.
+            guard !memory.userEdited, memory.state != .pinned, memory.state != .disabled else { return memory }
+            memory.instruction = instruction
+            memory.state = .active
+            memory.evidenceScore = max(memory.evidence(at: now), MemoryPolicy.activeThreshold)
+            memory.lastConfirmedAt = now
+            return memory
+        }
+    }
+
+    /// Brings what Lint does differently per app in line with what observation mode counted there.
+    /// An app goes quiet when its suggestions were never used, and stays so until one is (asking
+    /// for a suggestion there also ends it, see `MemoryCoordinator.forget`); the tone used there
+    /// most of the time is its own for as long as the counts say so.
+    private func adjustApps(at now: Date, gate: InteractiveGate?) async throws {
+        try Self.checkpoint(gate)
+        let sessions = try await store.observationStats(prefix: ObservationKey.app)
+        var adoptions: [String: [WritingTone: Double]] = [:]
+        for (key, counter) in try await store.observationStats(prefix: ObservationKey.appTone) {
+            let parts = key.dropFirst(ObservationKey.appTone.count).split(separator: ":", omittingEmptySubsequences: false)
+            guard parts.count == 2, let tone = WritingTone(rawValue: String(parts[1])) else { continue }
+            adoptions[String(parts[0]), default: [:]][tone] = counter.faded(to: now).positive
+        }
+        let existing = Dictionary(
+            try await store.appAdjustments().map { ($0.app, $0) }, uniquingKeysWith: { first, _ in first }
+        )
+        let apps = Set(sessions.keys.map { String($0.dropFirst(ObservationKey.app.count)) })
+            .union(adoptions.keys).union(existing.keys)
+        for app in apps.sorted() {
+            try Self.checkpoint(gate)
+            var adjustment = existing[app] ?? AppAdjustment(app: app)
+            if let counter = sessions[ObservationKey.app(app)]?.faded(to: now) {
+                if ObservationAdjuster.isQuiet(counter) {
+                    adjustment.quiet = true
+                } else if counter.positive.rounded() >= 1 {
+                    adjustment.quiet = false
+                }
+            }
+            adjustment.tone = ObservationAdjuster.tone(from: adoptions[app] ?? [:])
+            if adjustment != existing[app], !(existing[app] == nil && adjustment.isEmpty) {
+                try await store.saveAppAdjustment(adjustment, at: now)
+            }
+        }
     }
 
     /// A generalized memory with too few sources left is put away (its sources are free again), and

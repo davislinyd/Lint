@@ -919,6 +919,264 @@ final class DreamCoordinatorTests: XCTestCase {
         let parents = try await derived(store)
         XCTAssertEqual(parents.map(\.dedupKey), ["dream:redundant-preposition:grammar:en"])
     }
+
+    // MARK: the style profile
+
+    private func count(
+        _ trait: StyleTrait, kept: Double, givenUp: Double, in store: SQLiteMemoryStore, at date: Date? = nil
+    ) async throws {
+        try await store.bumpStat(key: trait.statKey, positive: kept, negative: givenUp, at: date ?? now)
+    }
+
+    private func profile(in store: SQLiteMemoryStore) async throws -> WritingMemory? {
+        try await store.memory(dedupKey: StyleProfile.dedupKey)
+    }
+
+    func testATraitKeptOftenEnoughBecomesTheStyleProfile() async throws {
+        let store = try makeStore()
+        try await count(.noTerminalPeriod, kept: 9, givenUp: 1, in: store)
+        try await count(.keepContractions, kept: 5, givenUp: 0, in: store)
+        try await count(.keepLowercaseStart, kept: 6, givenUp: 6, in: store)
+
+        let run = try unwrapped(await dreamer(store).run())
+
+        XCTAssertEqual(run.adjustedCount, 1)
+        let memory = try unwrapped(try await profile(in: store))
+        XCTAssertEqual(memory.instruction, MemoryWording.profile([.noTerminalPeriod]).chinese, "the others were seen too little or kept too rarely")
+        XCTAssertEqual(memory.kind, .style)
+        XCTAssertEqual(memory.language, "en")
+        XCTAssertEqual(memory.state, .active)
+        XCTAssertEqual(memory.level, .specific)
+        XCTAssertTrue(memory.triggers.isEmpty, "a habit: it takes one of the habit places")
+        XCTAssertNil(memory.modeScope)
+        XCTAssertEqual(memory.evidenceScore, MemoryPolicy.activeThreshold, accuracy: 1e-12)
+
+        let again = try unwrapped(await dreamer(store).run())
+        XCTAssertEqual(again.adjustedCount, 0)
+        let unchanged = try await profile(in: store)
+        XCTAssertEqual(unchanged, memory, "nothing more to do")
+    }
+
+    func testEightObservationsMadeEarlierTodayAreEnough() async throws {
+        let store = try makeStore()
+        try await count(.noTerminalPeriod, kept: 8, givenUp: 0, in: store, at: now.addingTimeInterval(-6 * 3_600))
+        let run = try unwrapped(await dreamer(store).run())
+        XCTAssertEqual(run.adjustedCount, 1)
+    }
+
+    func testWithoutEnoughObservationsThereIsNoProfile() async throws {
+        let store = try makeStore()
+        try await save(DreamFixtures.prepositions(2), to: store)
+        try await count(.noTerminalPeriod, kept: 7, givenUp: 0, in: store)
+        try await count(.keepContractions, kept: 20, givenUp: 10, in: store)
+
+        let run = try unwrapped(await dreamer(store).run())
+
+        XCTAssertEqual(run.adjustedCount, 0)
+        let memory = try await profile(in: store)
+        XCTAssertNil(memory)
+        let all = try await store.memories()
+        XCTAssertEqual(all.count, 2)
+    }
+
+    func testTheProfileFollowsTheCountsButATraitIsOnlyDroppedWellBelowTheBar() async throws {
+        let store = try makeStore()
+        try await count(.noTerminalPeriod, kept: 9, givenUp: 1, in: store)
+        _ = await dreamer(store).run()
+
+        // Another trait joins.
+        try await count(.keepContractions, kept: 8, givenUp: 0, in: store)
+        var run = try unwrapped(await dreamer(store).run())
+        XCTAssertEqual(run.adjustedCount, 1)
+        var memory = try unwrapped(try await profile(in: store))
+        XCTAssertEqual(memory.instruction, MemoryWording.profile([.keepContractions, .noTerminalPeriod]).chinese)
+
+        // Kept 9 times of 14: not enough to take it up, but enough to keep it.
+        try await count(.noTerminalPeriod, kept: 0, givenUp: 4, in: store)
+        run = try unwrapped(await dreamer(store).run())
+        XCTAssertEqual(run.adjustedCount, 0)
+
+        // Kept 9 times of 16: dropped.
+        try await count(.noTerminalPeriod, kept: 0, givenUp: 2, in: store)
+        run = try unwrapped(await dreamer(store).run())
+        XCTAssertEqual(run.adjustedCount, 1)
+        memory = try unwrapped(try await profile(in: store))
+        XCTAssertEqual(memory.instruction, MemoryWording.profile([.keepContractions]).chinese)
+        XCTAssertEqual(memory.state, .active)
+
+        // The last trait goes too: the profile is put away, and comes back when a trait does.
+        try await count(.keepContractions, kept: 0, givenUp: 8, in: store)
+        run = try unwrapped(await dreamer(store).run())
+        XCTAssertEqual(run.adjustedCount, 1)
+        memory = try unwrapped(try await profile(in: store))
+        XCTAssertEqual(memory.state, .archived)
+
+        try await count(.keepLowercaseStart, kept: 12, givenUp: 0, in: store)
+        run = try unwrapped(await dreamer(store).run())
+        XCTAssertEqual(run.adjustedCount, 1)
+        memory = try unwrapped(try await profile(in: store))
+        XCTAssertEqual(memory.state, .active)
+        XCTAssertEqual(memory.instruction, MemoryWording.profile([.keepLowercaseStart]).chinese)
+    }
+
+    func testCountsThatHaveFadedNoLongerTakeATraitUpButKeepOneThatHolds() async throws {
+        let store = try makeStore()
+        let clock = ManualClock()
+        // Sixty days old: two half-lives, so 12 counts as 3.
+        try await count(.noTerminalPeriod, kept: 12, givenUp: 0, in: store, at: now.addingTimeInterval(-60 * 86_400))
+        var run = try unwrapped(await dreamer(store, clock: clock).run())
+        XCTAssertEqual(run.adjustedCount, 0)
+
+        try await count(.noTerminalPeriod, kept: 6, givenUp: 0, in: store)
+        run = try unwrapped(await dreamer(store, clock: clock).run())
+        XCTAssertEqual(run.adjustedCount, 1, "3 that are left and 6 new ones")
+
+        // A trait the model respects is no longer touched, so nothing new is counted: the passes
+        // that find it holding keep the profile from fading, however little is left of the counts.
+        for _ in 0..<10 {
+            clock.advance(days: 20)
+            run = try unwrapped(await dreamer(store, clock: clock).run())
+            XCTAssertEqual(run.adjustedCount, 0)
+        }
+        var memory = try unwrapped(try await profile(in: store))
+        XCTAssertEqual(memory.state, .active)
+        XCTAssertEqual(memory.lastConfirmedAt, clock.now)
+
+        // Not dreamed for most of a year, it fades like any memory, and what is left of the counts
+        // is too little to take the trait up again.
+        clock.advance(days: 300)
+        run = try unwrapped(await dreamer(store, clock: clock).run())
+        memory = try unwrapped(try await profile(in: store))
+        XCTAssertEqual(memory.state, .archived)
+    }
+
+    func testAProfileTheUserHoldsRewordedOrDeletedIsLeftAlone() async throws {
+        func established() async throws -> (SQLiteMemoryStore, WritingMemory) {
+            let store = try makeStore()
+            try await count(.noTerminalPeriod, kept: 9, givenUp: 0, in: store)
+            _ = await dreamer(store).run()
+            return (store, try unwrapped(try await profile(in: store)))
+        }
+        for change in ["pinned", "disabled", "reworded"] {
+            let (store, memory) = try await established()
+            try await store.updateMemory(id: memory.id) { memory in
+                switch change {
+                case "pinned": memory.state = .pinned
+                case "disabled": memory.state = .disabled
+                default:
+                    memory.instruction = "No period at the end, please."
+                    memory.userEdited = true
+                }
+            }
+            let held = try unwrapped(try await profile(in: store))
+            try await count(.noTerminalPeriod, kept: 0, givenUp: 30, in: store)
+            try await count(.keepContractions, kept: 10, givenUp: 0, in: store)
+
+            let run = try unwrapped(await dreamer(store).run())
+
+            XCTAssertEqual(run.adjustedCount, 0, change)
+            let after = try await profile(in: store)
+            XCTAssertEqual(after, held, change)
+        }
+
+        let (store, memory) = try await established()
+        try await store.deleteMemory(id: memory.id)
+        let run = try unwrapped(await dreamer(store).run())
+        XCTAssertEqual(run.adjustedCount, 0)
+        let gone = try await profile(in: store)
+        XCTAssertNil(gone, "deleted by the user: not written again")
+    }
+
+    func testTheProfileIsRemindedAsAHabitAndIsNeverCombinedOrPutAwayAsARule() async throws {
+        let store = try makeStore()
+        try await save(DreamFixtures.prepositions(3), to: store)
+        try await count(.noTerminalPeriod, kept: 9, givenUp: 0, in: store)
+        let clock = ManualClock()
+        _ = await dreamer(store, clock: clock).run()
+        clock.advance(days: 5)
+        let run = try unwrapped(await dreamer(store, clock: clock).run())
+
+        XCTAssertEqual(run.status, .completed)
+        let memory = try unwrapped(try await profile(in: store))
+        XCTAssertEqual(memory.state, .active)
+        XCTAssertNil(memory.supersededBy)
+        let memories = try await store.memories()
+        let reminded = MemoryRetriever(memories: memories, now: clock.now)
+            .select(for: .init(text: "see you at the office tomorrow morning", mode: .proofread))
+        XCTAssertTrue(reminded.contains { $0.dedupKey == StyleProfile.dedupKey })
+    }
+}
+
+extension DreamCoordinatorTests {
+    // MARK: per app
+
+    private func sessions(_ app: String, used: Double, unused: Double, in store: SQLiteMemoryStore) async throws {
+        try await store.bumpStat(key: ObservationKey.app(app), positive: used, negative: unused, at: DreamFixtures.now)
+    }
+
+    private func adoptions(_ app: String, _ tone: WritingTone, _ count: Double, in store: SQLiteMemoryStore) async throws {
+        try await store.bumpStat(key: ObservationKey.appTone(app, tone), positive: count, negative: 0, at: DreamFixtures.now)
+    }
+
+    private func pass(_ store: SQLiteMemoryStore) async throws -> [AppAdjustment] {
+        let fixed = DreamFixtures.now
+        _ = await MemoryDreamCoordinator(store: store, clock: { fixed }).run()
+        return try await store.appAdjustments()
+    }
+
+    func testAnAppWhoseSuggestionsWereNeverUsedGoesQuiet() async throws {
+        let store = try SQLiteMemoryStore(url: nil)
+        try await sessions("com.example.chat", used: 0, unused: 30, in: store)
+        try await sessions("com.example.mail", used: 2, unused: 60, in: store)
+        try await sessions("com.example.notes", used: 0, unused: 12, in: store)
+
+        let adjustments = try await pass(store)
+        XCTAssertEqual(adjustments, [AppAdjustment(app: "com.example.chat", quiet: true)])
+    }
+
+    func testAQuietAppStaysQuietUntilASuggestionIsUsedThere() async throws {
+        let store = try SQLiteMemoryStore(url: nil)
+        try await sessions("com.example.chat", used: 0, unused: 30, in: store)
+        _ = try await pass(store)
+
+        // The counts fade (nothing is prepared there any more), and the app stays quiet.
+        let later = DreamFixtures.now.addingTimeInterval(90 * 86_400)
+        _ = await MemoryDreamCoordinator(store: store, clock: { later }).run()
+        var adjustments = try await store.appAdjustments()
+        XCTAssertEqual(adjustments, [AppAdjustment(app: "com.example.chat", quiet: true)])
+
+        // Asked for with the hotkey and used: wanted there after all.
+        try await store.bumpStat(key: ObservationKey.app("com.example.chat"), positive: 1, negative: 0, at: later)
+        _ = await MemoryDreamCoordinator(store: store, clock: { later }).run()
+        adjustments = try await store.appAdjustments()
+        XCTAssertTrue(adjustments.isEmpty)
+    }
+
+    func testTheToneUsedInAnAppMostOfTheTimeBecomesItsOwnForAsLongAsTheCountsSaySo() async throws {
+        let store = try SQLiteMemoryStore(url: nil)
+        try await adoptions("com.example.mail", .formal, 4, in: store)
+        try await adoptions("com.example.chat", .casual, 2, in: store)
+        try await adoptions("com.example.notes", .formal, 3, in: store)
+        try await adoptions("com.example.notes", .concise, 3, in: store)
+        var adjustments = try await pass(store)
+        XCTAssertEqual(adjustments, [AppAdjustment(app: "com.example.mail", tone: .formal)])
+
+        try await adoptions("com.example.chat", .casual, 1, in: store)
+        try await adoptions("com.example.mail", .casual, 12, in: store)
+        adjustments = try await pass(store)
+        XCTAssertEqual(adjustments, [AppAdjustment(app: "com.example.chat", tone: .casual)], "mail has no tone of its own now")
+
+        try await adoptions("com.example.mail", .casual, 20, in: store)
+        try await sessions("com.example.mail", used: 0, unused: 40, in: store)
+        adjustments = try await pass(store)
+        XCTAssertEqual(adjustments, [
+            AppAdjustment(app: "com.example.chat", tone: .casual),
+            AppAdjustment(app: "com.example.mail", quiet: true, tone: .casual),
+        ])
+
+        let memories = try await store.memories()
+        XCTAssertTrue(memories.isEmpty, "nothing here is a memory")
+    }
 }
 
 private extension WritingMemory {

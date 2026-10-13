@@ -65,6 +65,9 @@ struct MemoryExtractor: Sendable {
         /// Patterns the prompt reminded the model of, which it then applied and the user accepted.
         /// The habit is still there, but the fix is no evidence that it is wanted.
         var reminded: [String] = []
+        /// The part of the action's evidence each candidate and contradiction gets. A suggestion
+        /// that was turned down says the less about any one of its changes the more of them it made.
+        var share = 1.0
     }
 
     /// The patterns in a piece of feedback.
@@ -86,10 +89,14 @@ struct MemoryExtractor: Sendable {
         injected: Set<String> = []
     ) -> Extraction {
         let none = Extraction(candidates: [], contradicted: [])
+        if action == .dismissed { return rejections(in: feedback) ?? none }
         guard let comparison = comparison(for: feedback, action: action) else { return none }
         let oldTokens = DiffAnalyzer.tokens(in: comparison.old)
         let newTokens = DiffAnalyzer.tokens(in: comparison.new)
-        let spans = DiffAnalyzer.spans(from: oldTokens, to: newTokens)
+        var located = DiffAnalyzer.locatedSpans(from: oldTokens, to: newTokens)
+        // Read from the field as it was sent, the text can lack its last words or have more after them.
+        if feedback.sent { located.removeAll { $0.oldRange.upperBound == oldTokens.count } }
+        let spans = located.map(\.span)
         guard !DiffAnalyzer.isRewrite(spans, oldCount: oldTokens.count, newCount: newTokens.count) else {
             return none
         }
@@ -103,6 +110,8 @@ struct MemoryExtractor: Sendable {
             sourceTokens: comparison.userChoice ? DiffAnalyzer.tokens(in: source) : oldTokens,
             newText: comparison.new
         )
+        // What the model changed, to tell when the user puts one of those changes back.
+        let modelSpans = comparison.userChoice ? DiffAnalyzer.spans(from: context.sourceTokens, to: oldTokens) : []
         var seen = Set<String>()
         var found: [MemoryCandidate] = []
         var against: [String] = []
@@ -111,9 +120,15 @@ struct MemoryExtractor: Sendable {
             if comparison.userChoice, let key = contradictedKey(by: span), !against.contains(key) {
                 against.append(key)
             }
-            guard let pattern = pattern(of: span),
-                  let candidate = candidate(for: pattern, context: context)
-            else { continue }
+            let candidate: MemoryCandidate
+            if let undone = modelSpans.first(where: { Self.undoes(span, $0) }).flatMap(pattern(of:)),
+               let kept = keepCandidate(for: undone, reverted: true, context: context) {
+                candidate = kept
+            } else if let pattern = pattern(of: span), let changed = self.candidate(for: pattern, context: context) {
+                candidate = changed
+            } else {
+                continue
+            }
             if !comparison.userChoice, injected.contains(candidate.dedupKey) {
                 if !reminded.contains(candidate.dedupKey) { reminded.append(candidate.dedupKey) }
                 continue
@@ -125,6 +140,67 @@ struct MemoryExtractor: Sendable {
         return Extraction(
             candidates: found, contradicted: against.filter { !seen.contains($0) }, reminded: reminded
         )
+    }
+
+    /// What a suggestion says that was looked at and not used, once the text was sent: a change whose
+    /// original words were sent untouched was not wanted. Only for plain proofreading
+    /// (`WritingTone.correctsOnly`), since another tone gives the text another register by design and
+    /// turning that down says nothing about its words. A word or phrase
+    /// becomes a memory to leave it alone; an article or a preposition that stayed only counts against
+    /// the memory that asks for that fix.
+    private func rejections(in feedback: MemoryFeedback) -> Extraction? {
+        guard feedback.sent, feedback.mode == .proofread, feedback.tone.correctsOnly,
+              let generated = feedback.generatedText
+        else { return nil }
+        let source = trimmed(feedback.originalText)
+        let sent = trimmed(feedback.finalText)
+        let changes = SuggestionReview.changes(original: source, suggestion: trimmed(generated), sent: sent)
+        guard !changes.isEmpty else { return nil }
+        let context = Context(
+            mode: feedback.mode, tone: feedback.tone, userChoice: false,
+            sourceText: source, sourceTokens: [], newText: sent
+        )
+        var found: [MemoryCandidate] = []
+        var against: [String] = []
+        for change in changes where change.verdict == .rejected {
+            guard let pattern = pattern(of: change.span) else { continue }
+            if let kept = keepCandidate(for: pattern, reverted: false, context: context) {
+                if !found.contains(where: { $0.dedupKey == kept.dedupKey }) { found.append(kept) }
+                continue
+            }
+            switch pattern {
+            case .articles, .extraPreposition:
+                if let key = candidate(for: pattern, context: context)?.dedupKey, !against.contains(key) {
+                    against.append(key)
+                }
+            case .spelling, .replacement, .terminology:
+                break
+            }
+        }
+        return Extraction(candidates: found, contradicted: against, share: 1 / Double(changes.count))
+    }
+
+    /// The user's edit puts back exactly what the model's change took out.
+    private static func undoes(_ edit: EditSpan, _ change: EditSpan) -> Bool {
+        !edit.removed.isEmpty && !edit.added.isEmpty
+            && edit.removed.map(\.key) == change.added.map(\.key)
+            && edit.added.map(\.key) == change.removed.map(\.key)
+    }
+
+    private static let keepPrefix = "keep"
+    /// The kinds of memory that ask for one word or phrase to become another.
+    private static let changeKinds: [MemoryKind] = [.spelling, .vocabulary, .style, .terminology]
+
+    /// The keys of the memories that ask for the opposite of the one with `key`. For `a>b`, change
+    /// `a` to `b`, that is `b>a` and the memory to leave `a` alone (`keep:…:a>b`). For that keep
+    /// memory it is every memory that asks to change `a` to `b`, but not `keep:…:b>a`, which only
+    /// keeps another word. None for a memory with no direction.
+    static func opposedKeys(of key: String) -> [String] {
+        guard let reversed = reversedKey(of: key), let colon = key.firstIndex(of: ":") else { return [] }
+        let kind = key[..<colon]
+        let rest = key[colon...]
+        if kind == keepPrefix { return changeKinds.map { $0.rawValue + rest } }
+        return changeKinds.contains { $0.rawValue == kind } ? [reversed, keepPrefix + rest] : [reversed]
     }
 
     /// The key of the memory that asks for the opposite: `a>b` becomes `b>a`. Nil for a memory
@@ -160,7 +236,7 @@ struct MemoryExtractor: Sendable {
 
         let result: (old: String, new: String, userChoice: Bool)
         switch action {
-        case .regenerated:
+        case .regenerated, .dismissed:
             return nil
         case .accepted:
             result = (original, suggestion, false)
@@ -321,6 +397,40 @@ struct MemoryExtractor: Sendable {
                 instruction: MemoryWording.terminology(from: from, to: to).chinese
             )
         }
+    }
+
+    /// A memory to leave the user's words alone: the model changed them (`pattern`, from theirs to
+    /// its own) and the user put them back (`reverted`) or sent the text without the change. Nil for
+    /// a change that is not one word or phrase for another, and for a lone function word, which
+    /// nearly every text has.
+    private func keepCandidate(for pattern: Pattern, reverted: Bool, context: Context) -> MemoryCandidate? {
+        let old: [WordToken]
+        let new: [WordToken]
+        let kind: MemoryKind
+        var language = "en"
+        var scope = MemoryScope.of(mode: context.mode, tone: context.tone)
+        switch pattern {
+        case .spelling(let wrong, let right):
+            (old, new, kind, scope) = ([wrong], [right], .spelling, (nil, nil))
+        case .replacement(let from, let to):
+            (old, new, kind) = (from, to, from.count == 1 && to.count == 1 ? .vocabulary : .style)
+        case .terminology(let from, let to):
+            (old, new, kind) = (from, to, .terminology)
+            language = TextProfile.chineseVariant(of: context.newText) ?? "zh-Hant"
+        case .articles, .extraPreposition:
+            return nil
+        }
+        if old.count == 1, Self.functionWords.contains(old[0].key) { return nil }
+        let (from, to) = (Self.phrase(old), Self.phrase(new))
+        guard from.count <= MemorySanitizer.maxPhraseLength, to.count <= MemorySanitizer.maxPhraseLength
+        else { return nil }
+        return MemoryCandidate(
+            dedupKey: [Self.keepPrefix, language, MemoryScope.keySegment(mode: scope.mode, tone: scope.tone), "\(from)>\(to)"]
+                .compactMap { $0 }.joined(separator: ":"),
+            kind: kind, language: language, modeScope: scope.mode, toneScope: scope.tone, triggers: [from],
+            instruction: (reverted
+                ? MemoryWording.keepReverted(from: from, to: to) : MemoryWording.keepRejected(from: from, to: to)).chinese
+        )
     }
 
     /// What makes a memory relevant to a text. A word the model wrote and the user replaced is only

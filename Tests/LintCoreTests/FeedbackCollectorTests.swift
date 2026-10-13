@@ -57,6 +57,19 @@ final class FeedbackCollectorTests: XCTestCase {
         XCTAssertNil(event.finalHMAC)
     }
 
+    func testASuggestionThatWasNotUsedHasAFinalTextOnlyWhenTheFieldWasSeenSent() throws {
+        let closed = try XCTUnwrap(collector().event(for: feedback(.dismissed, final: ""), now: now))
+        XCTAssertEqual(closed.action, .dismissed)
+        XCTAssertNotNil(closed.suggestionHMAC)
+        XCTAssertNil(closed.finalHMAC)
+
+        var sent = feedback(.dismissed, final: "I think we need discuss about this issue.")
+        sent.sent = true
+        let event = try XCTUnwrap(collector().event(for: sent, now: now))
+        XCTAssertEqual(event.action, .dismissed)
+        XCTAssertEqual(event.finalHMAC, event.sourceHMAC, "the text was sent as it was written")
+    }
+
     func testNothingIsRememberedWithoutAFinishedSuggestion() {
         XCTAssertNil(collector().event(for: feedback(generated: nil), now: now))
         XCTAssertNil(collector().event(for: feedback(generated: "  \n"), now: now))

@@ -13,6 +13,10 @@ enum MemoryWording: Equatable, Sendable {
     case acceptedReplacement(from: String, to: String)
     case terminology(from: String, to: String)
     case redundantPrepositions
+    /// The model changed `from` to `to` and the user put `from` back.
+    case keepReverted(from: String, to: String)
+    /// The model suggested `to` for `from`; the user saw it and sent the text with `from`.
+    case keepRejected(from: String, to: String)
 
     var chinese: String {
         switch self {
@@ -32,6 +36,10 @@ enum MemoryWording: Equatable, Sendable {
             "用詞：請用「\(to)」，不要用「\(from)」。"
         case .redundantPrepositions:
             "英文常在動詞後多加不必要的介系詞（如 discuss about）：請特別檢查動詞後的介系詞是否多餘，僅在語意不需要時才刪除。"
+        case .keepReverted(let from, let to):
+            "使用者把「\(to)」改回了「\(from)」：原文的「\(from)」請保留，不要改成「\(to)」。"
+        case .keepRejected(let from, let to):
+            "使用者沒有採用把「\(from)」改成「\(to)」的建議：原文的「\(from)」可能是刻意的，除非明顯有錯，否則請保留。"
         }
     }
 
@@ -53,6 +61,10 @@ enum MemoryWording: Equatable, Sendable {
             "Wording: use \"\(to)\", not \"\(from)\"."
         case .redundantPrepositions:
             "This user often puts an unneeded preposition after a verb (such as \"discuss about\"): check the preposition after each verb, and remove it only where the meaning does not need it."
+        case .keepReverted(let from, let to):
+            "This user changed \"\(to)\" back to \"\(from)\": keep \"\(from)\" as written, and do not change it to \"\(to)\"."
+        case .keepRejected(let from, let to):
+            "This user did not take a suggestion to change \"\(from)\" to \"\(to)\": \"\(from)\" may be intended, so leave it unless it is clearly wrong."
         }
     }
 
@@ -78,6 +90,8 @@ enum MemoryWording: Equatable, Sendable {
         (.acceptedReplacement(from: "\u{1}", to: "\u{2}"), { .acceptedReplacement(from: $0[0], to: $0[1]) }),
         (.terminology(from: "\u{1}", to: "\u{2}"), { .terminology(from: $0[0], to: $0[1]) }),
         (.redundantPrepositions, { _ in .redundantPrepositions }),
+        (.keepReverted(from: "\u{1}", to: "\u{2}"), { .keepReverted(from: $0[0], to: $0[1]) }),
+        (.keepRejected(from: "\u{1}", to: "\u{2}"), { .keepRejected(from: $0[0], to: $0[1]) }),
     ]
 
     /// The words standing where `template` has its placeholders, if `text` is `template` filled in.

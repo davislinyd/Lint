@@ -342,6 +342,34 @@ final class MemoryRetrieverTests: XCTestCase {
         XCTAssertEqual(keys([forward, backward], bothWords), ["vocabulary:en:large>big"], "alone, it is used")
     }
 
+    func testOfAMemoryToChangeAWordAndOneToLeaveItAloneOnlyTheBetterEvidencedIsUsed() {
+        func pair(change: Double, keep: Double) -> [WritingMemory] {
+            [
+                memory("vocabulary:en:big>large", kind: .vocabulary, triggers: ["big"], evidence: change),
+                memory("keep:en:big>large", kind: .vocabulary, triggers: ["big"], evidence: keep),
+            ]
+        }
+        XCTAssertEqual(keys(pair(change: 3, keep: 1.2), bothWords), ["vocabulary:en:big>large"])
+        XCTAssertEqual(keys(pair(change: 1.2, keep: 3), bothWords), ["keep:en:big>large"])
+        XCTAssertEqual(keys(pair(change: 1.2, keep: 3).reversed(), bothWords), ["keep:en:big>large"])
+    }
+
+    func testAMemoryToLeaveAWordAloneGoesWithTheOnesThatAgree() {
+        let memories = [
+            memory("keep:en:big>large", kind: .vocabulary, triggers: ["big"], evidence: 1.2),
+            memory("vocabulary:en:large>big", kind: .vocabulary, triggers: ["large"], evidence: 3),
+            memory("keep:en:large>big", kind: .vocabulary, triggers: ["large"], evidence: 2),
+        ]
+        XCTAssertEqual(
+            Set(keys(memories, bothWords)), ["keep:en:big>large", "vocabulary:en:large>big"],
+            "only changing large to big and leaving large alone disagree"
+        )
+        XCTAssertEqual(
+            Set(keys([memories[0], memories[2]], bothWords)), ["keep:en:big>large", "keep:en:large>big"],
+            "leaving both words alone is no contradiction"
+        )
+    }
+
     func testMemoriesWithoutADirectionNeverSuppressEachOther() {
         let memories = [
             memory("grammar:en:discuss about", triggers: ["discuss about"]),

@@ -103,18 +103,35 @@ public actor MemoryCoordinator {
     }
 
     /// Records how the suggestions in a followed field fared (`FieldSessionTracker`): one count for
-    /// the app the field is in and, for a suggestion that was looked at and not used, an event.
-    /// Nothing is kept unless memory and observation mode are both on.
+    /// the app the field is in, and what the text that was sent says. A suggestion that was looked
+    /// at and not used is fed back as dismissed; one that was written into the field and then edited
+    /// there, as the user's edit of what was written. Nothing is kept unless memory and observation
+    /// mode are both on.
     public func recordObservation(_ outcome: SessionOutcome, config: MemoryConfig) async {
         guard config.enabled, config.observation else { return }
-        if outcome.result == .dismissed {
-            let suggestion = outcome.suggestion
+        let suggestion = outcome.suggestion
+        switch outcome.result {
+        case .dismissed:
             await recordFeedback(MemoryFeedback(
                 gesture: .dismissed, mode: .proofread, tone: suggestion.tone,
                 originalText: suggestion.original, generatedText: suggestion.suggestion,
                 finalText: outcome.sentText ?? "", provider: suggestion.provider, model: suggestion.model,
                 usedMemoryIDs: suggestion.usedMemoryIDs, sent: outcome.sentText != nil
             ), config: config)
+        case .adopted:
+            // The Replace itself was recorded when it happened; this is only what came after it.
+            // The memories behind the suggestion were counted as used then, so they are not named.
+            if let written = outcome.written, let sent = outcome.sentText,
+               sent.trimmingCharacters(in: .whitespacesAndNewlines)
+                   != written.trimmingCharacters(in: .whitespacesAndNewlines) {
+                await recordFeedback(MemoryFeedback(
+                    gesture: .replaced, mode: .proofread, tone: suggestion.tone,
+                    originalText: suggestion.original, generatedText: written, finalText: sent,
+                    provider: suggestion.provider, model: suggestion.model, sent: true
+                ), config: config)
+            }
+        case .ignored:
+            break
         }
         guard let store = openStore(create: true) else { return }
         let adopted = outcome.result == .adopted
@@ -353,13 +370,14 @@ public actor MemoryCoordinator {
         at now: Date,
         store: any MemoryStore
     ) async -> Int {
-        let weight = MemoryPolicy.evidenceWeight(for: action)
-        guard weight > 0 else { return 0 }
-        await countUse(of: feedback.usedMemoryIDs, at: now, store: store)
+        guard MemoryPolicy.evidenceWeight(for: action) > 0 else { return 0 }
+        // A suggestion that was turned down was not used, and neither were the memories behind it.
+        if action != .dismissed { await countUse(of: feedback.usedMemoryIDs, at: now, store: store) }
         let extractor = MemoryExtractor()
         let injected = await injectedPatterns(feedback.usedMemoryIDs, store: store)
         let extraction = extractor.extraction(from: feedback, action: action, injected: Set(injected.keys))
-        let against = MemoryPolicy.contradictionWeight(for: action)
+        let weight = MemoryPolicy.evidenceWeight(for: action) * extraction.share
+        let against = MemoryPolicy.contradictionWeight(for: action) * extraction.share
         var changed = false
         var changes = 0
         for candidate in extraction.candidates {
@@ -379,9 +397,10 @@ public actor MemoryCoordinator {
             } catch {
                 DiagnosticLog.shared.log("memory", "could not update a memory: \(DiagnosticLog.describe(error))")
             }
-            // Wanting `b` where a memory asks for `a` is evidence against that memory.
-            if let opposite = MemoryExtractor.reversedKey(of: candidate.dedupKey),
-               await weaken(opposite, by: against, at: now, store: store) {
+            // Wanting `b` where a memory asks for `a` is evidence against that memory, and so is
+            // wanting `a` left alone where one asks to change it (or the other way round).
+            for opposite in MemoryExtractor.opposedKeys(of: candidate.dedupKey)
+            where await weaken(opposite, by: against, at: now, store: store) {
                 changed = true
                 changes += 1
             }
@@ -471,11 +490,12 @@ public actor MemoryCoordinator {
         }
     }
 
-    /// Does nothing if there is no such memory. False if it could not be written. What goes against a
-    /// memory goes against the rule that stands in for it too.
+    /// False if there is no such memory, or it could not be written. What goes against a memory goes
+    /// against the rule that stands in for it too.
     private func weaken(_ dedupKey: String, by amount: Double, at now: Date, store: any MemoryStore) async -> Bool {
         do {
-            let parentID = try await store.memory(dedupKey: dedupKey)?.supersededBy
+            guard let memory = try await store.memory(dedupKey: dedupKey) else { return false }
+            let parentID = memory.supersededBy
             try await store.updateMemory(dedupKey: dedupKey) { memory in
                 memory = MemoryLifecycle.weakened(MemoryLifecycle.settled(memory, at: now), by: amount, at: now)
             }

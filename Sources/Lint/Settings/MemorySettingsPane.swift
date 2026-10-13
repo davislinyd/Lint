@@ -26,7 +26,7 @@ struct MemorySettingsPane: View {
             Section {
                 SettingsToggle(
                     title: "觀察模式",
-                    detail: "Lint 給過建議後，會繼續讀取那個輸入框的文字，直到你送出（輸入框清空）、輸入框消失，或 10 分鐘沒有動靜，藉此知道建議有沒有被採用。讀到的文字只留在記憶體裡，不會寫入磁碟；存下來的只有各 App 的採用次數與不含文字的紀錄。不會讀取密碼欄位與密碼管理 App。",
+                    detail: "Lint 給過建議後，會繼續讀取那個輸入框的文字，直到你送出（輸入框清空）、輸入框消失，或 10 分鐘沒有動靜，藉此知道建議有沒有被採用、哪些改動你不想要。讀到的文字只留在記憶體裡，不會寫入磁碟；存下來的只有各 App 的採用次數、不含文字的紀錄，以及和其他記憶一樣的簡短規則。不會讀取密碼欄位與密碼管理 App。",
                     isOn: Bindable(app.settings).observationEnabled
                 )
                 .disabled(!app.settings.memoryEnabled)

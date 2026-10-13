@@ -46,8 +46,8 @@ struct MemoryRetriever: Sendable {
 
     /// Evidence fades and short-term memories run out, so every memory is judged as it stands at
     /// `now`: short-term, long-term and pinned ones can be retrieved (a memory is used as soon as it
-    /// is remembered), and of two that ask for opposite things (`a>b` and `b>a`) only the
-    /// better-evidenced one: a prompt must not tell the model both.
+    /// is remembered), and of two that ask for opposite things (`a>b` and `b>a`, or changing `a` to
+    /// `b` and leaving `a` alone) only the better-evidenced one: a prompt must not tell the model both.
     init(memories: [WritingMemory], now: Date = Date()) {
         self.now = now
         let usable = memories
@@ -57,9 +57,9 @@ struct MemoryRetriever: Sendable {
         let rulesInUse = Set(usable.filter { $0.level != .specific }.map(\.id))
         entries = usable
             .filter { memory in
-                guard let key = MemoryExtractor.reversedKey(of: memory.dedupKey),
-                      let opposite = byKey[key] else { return true }
-                return !Self.loses(memory, to: opposite, at: now)
+                !MemoryExtractor.opposedKeys(of: memory.dedupKey).contains { key in
+                    byKey[key].map { Self.loses(memory, to: $0, at: now) } ?? false
+                }
             }
             .map { memory in
                 Entry(

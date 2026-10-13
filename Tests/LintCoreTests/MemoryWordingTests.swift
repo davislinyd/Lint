@@ -12,6 +12,8 @@ final class MemoryWordingTests: XCTestCase {
         .acceptedReplacement(from: "open the light", to: "turn on the light"),
         .terminology(from: "軟件", to: "軟體"),
         .redundantPrepositions,
+        .keepReverted(from: "big", to: "large"),
+        .keepRejected(from: "reach out", to: "contact"),
     ]
 
     func testEveryStoredWordingIsReadBackAsItself() {

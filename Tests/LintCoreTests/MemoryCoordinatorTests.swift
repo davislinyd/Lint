@@ -1500,17 +1500,142 @@ final class MemoryCoordinatorTests: XCTestCase {
         XCTAssertEqual(adoption.negative, 3, accuracy: 1e-6, "every session counts for its app")
     }
 
-    func testObservationsTeachNothingYetAndLeaveThePromptAlone() async throws {
-        let coordinator = MemoryCoordinator(storeURL: nil, hmacKey: testKey())
-        await coordinator.recordObservation(outcome(.dismissed, sent: "zq-source-text discuss about"), config: observing)
-        await coordinator.recordObservation(outcome(.adopted, sent: "zq-suggestion-text discuss"), config: observing)
+    /// The model suggested "large" for "big" in a sentence about `object`.
+    private func session(
+        _ result: SessionOutcome.Result, _ object: String, written: String? = nil, sent: String?,
+        tone: WritingTone = .preserve, used: [UUID] = []
+    ) -> SessionOutcome {
+        SessionOutcome(
+            app: "com.example.chat", result: result, ending: sent == nil ? .timedOut : .sent,
+            suggestion: ObservedSuggestion(
+                original: "I need a big \(object) for the team.", suggestion: "I need a large \(object) for the team.",
+                tone: tone, provider: "localLlama", model: "qwen", usedMemoryIDs: used
+            ),
+            written: written, sentText: sent
+        )
+    }
 
+    func testASuggestionTurnedDownTeachesNothingUnlessTheTextWasSeenSent() async throws {
+        let coordinator = learner()
+        await coordinator.recordObservation(session(.dismissed, "house", sent: nil), config: observing)
+        await coordinator.recordObservation(session(.ignored, "house", sent: "I need a big house for the team."), config: observing)
+        await coordinator.recordObservation(
+            session(.dismissed, "house", sent: "I need a big house for the team.", tone: .formal), config: observing
+        )
         let memories = await coordinator.memories()
         XCTAssertTrue(memories.isEmpty)
+    }
+
+    func testAChangeTurnedDownTwiceBecomesAMemoryToLeaveTheWordAlone() async throws {
+        let coordinator = learner()
+        let text = "We need a big office."
+        await coordinator.recordObservation(session(.dismissed, "house", sent: "I need a big house for the team."), config: observing)
+        let once = try await memory("keep:en:big>large", in: coordinator)
+        XCTAssertEqual(once.evidenceScore, 0.15, accuracy: 1e-9)
+        XCTAssertEqual(once.state, .archived, "one dismissal may have had another reason: only a trace")
+        var reminded = await coordinator.relevantMemories(for: text, mode: .proofread, config: observing)
+        XCTAssertTrue(reminded.isEmpty)
+
+        await coordinator.recordObservation(session(.dismissed, "garage", sent: "I need a big garage for the team."), config: observing)
+        let twice = try await memory("keep:en:big>large", in: coordinator)
+        XCTAssertEqual(twice.state, .active, "it came back")
+        XCTAssertEqual(twice.occurrenceCount, 2)
+        reminded = await coordinator.relevantMemories(for: text, mode: .proofread, config: observing)
+        XCTAssertEqual(reminded.map(\.dedupKey), ["keep:en:big>large"])
+
         let prompt = await coordinator.personalize(
-            prompt: "Fix the text.", for: "we should discuss about the plan", mode: .proofread, config: observing
+            prompt: "Fix the text.", for: text, mode: .proofread, english: true, config: observing
         )
-        XCTAssertEqual(prompt, PersonalizedPrompt(systemPrompt: "Fix the text.", usedMemoryIDs: []))
+        XCTAssertTrue(prompt.systemPrompt.contains(MemoryWording.keepRejected(from: "big", to: "large").english))
+    }
+
+    func testADismissalIsWorthLessTheMoreTheSuggestionChanged() async throws {
+        let coordinator = learner()
+        var outcome = session(.dismissed, "house", sent: "From my prospective I need a big house for the team.")
+        outcome.suggestion.original = "From my prospective I need a big house for the team."
+        outcome.suggestion.suggestion = "From my perspective I need a large house for the team."
+        await coordinator.recordObservation(outcome, config: observing)
+        for key in ["keep:en:big>large", "keep:en:prospective>perspective"] {
+            let memory = try await memory(key, in: coordinator)
+            XCTAssertEqual(memory.evidenceScore, 0.075, accuracy: 1e-9, key)
+        }
+    }
+
+    func testEditingWhatReplaceWroteBeforeSendingIsTheUsersOwnEdit() async throws {
+        let coordinator = learner()
+        // Replace wrote the suggestion; in the field the user put "big" back and typed on.
+        await coordinator.recordObservation(
+            session(.adopted, "house", written: "I need a large house for the team.",
+                    sent: "I need a big house for the team. Thanks a lot"),
+            config: observing
+        )
+        let kept = try await memory("keep:en:big>large", in: coordinator)
+        XCTAssertEqual(kept.evidenceScore, 0.35, accuracy: 1e-9)
+        XCTAssertEqual(kept.state, .candidate, "the user's own edit is used at once")
+        XCTAssertEqual(kept.instruction, MemoryWording.keepReverted(from: "big", to: "large").chinese)
+        let all = await coordinator.memories()
+        XCTAssertEqual(all.count, 1, "what was typed after the text is no edit of it")
+        let events = await coordinator.stats().eventCount
+        XCTAssertEqual(events, 1)
+    }
+
+    func testASessionSentAsReplaceWroteItAddsNothing() async throws {
+        let coordinator = learner()
+        await coordinator.recordObservation(
+            session(.adopted, "house", written: "I need a large house for the team.", sent: " I need a large house for the team.\n"),
+            config: observing
+        )
+        await coordinator.recordObservation(session(.adopted, "house", sent: "I need a big house for the team."), config: observing)
+        let events = await coordinator.stats().eventCount
+        XCTAssertEqual(events, 0, "Replace and Copy were recorded when they happened")
+        let memories = await coordinator.memories()
+        XCTAssertTrue(memories.isEmpty)
+    }
+
+    func testAcceptingAChangeAndLeavingTheWordAloneCountAgainstEachOther() async throws {
+        let coordinator = learner()
+        func accepted(_ object: String) -> MemoryFeedback {
+            MemoryFeedback(
+                gesture: .replaced, mode: .proofread, originalText: "I need a big \(object) for the team.",
+                generatedText: "I need a large \(object) for the team.", finalText: "I need a large \(object) for the team.",
+                provider: "localLlama", model: "qwen"
+            )
+        }
+        for object in ["house", "office", "garage", "attic", "cellar", "kitchen", "garden"] {
+            await coordinator.recordFeedback(accepted(object), config: observing)
+        }
+        let change = try await memory("vocabulary:en:big>large", in: coordinator)
+        XCTAssertEqual(change.state, .active)
+
+        // Putting the word back by hand counts against the change, twice what it adds for keeping.
+        await coordinator.recordObservation(
+            session(.adopted, "shed", written: "I need a large shed for the team.", sent: "I need a big shed for the team."),
+            config: observing
+        )
+        let weakened = try await memory("vocabulary:en:big>large", in: coordinator)
+        XCTAssertEqual(weakened.evidenceScore, change.evidenceScore - 0.7, accuracy: 1e-9)
+        XCTAssertEqual(weakened.contradictionCount, 1)
+        let kept = try await memory("keep:en:big>large", in: coordinator)
+        XCTAssertEqual(kept.evidenceScore, 0.35, accuracy: 1e-9)
+
+        // And taking the change again counts against leaving the word alone.
+        await coordinator.recordFeedback(accepted("barn"), config: observing)
+        let after = try await memory("keep:en:big>large", in: coordinator)
+        XCTAssertEqual(after.evidenceScore, 0.05, accuracy: 1e-9)
+        XCTAssertEqual(after.contradictionCount, 1)
+        XCTAssertEqual(after.state, .archived, "left well below the bar: forgotten")
+    }
+
+    func testADismissalDoesNotCountTheMemoriesBehindTheSuggestionAsUsed() async throws {
+        let coordinator = learner()
+        await coordinator.recordFeedback(edit("plan"), config: observing)
+        let reminder = try await onlyMemory(coordinator)
+        await coordinator.recordObservation(
+            session(.dismissed, "house", sent: "I need a big house for the team.", used: [reminder.id]), config: observing
+        )
+        let after = try await memory(reminder.dedupKey, in: coordinator)
+        XCTAssertEqual(after.retrievalCount, 0)
+        XCTAssertNil(after.lastUsedAt)
     }
 
     func testWhatWasObservedNeverReachesTheFile() async throws {

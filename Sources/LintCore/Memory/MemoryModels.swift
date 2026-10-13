@@ -276,14 +276,15 @@ enum MemoryPolicy {
     static let minHabitCJKCharacters = 4
 
     /// What one observation is worth. An edit is the user's own choice; accepting is a weaker
-    /// yes, copying weaker still, and asking again says nothing about what to learn. Nothing is
-    /// learned yet from a suggestion that was not used.
+    /// yes, copying weaker still, and asking again says nothing about what to learn. Turning a
+    /// suggestion down is as weak a no as accepting is a yes, and it is shared between all the
+    /// changes the suggestion made (`MemoryExtractor.Extraction.share`).
     static func evidenceWeight(for action: FeedbackAction) -> Double {
         switch action {
-        case .accepted: 0.15
+        case .accepted, .dismissed: 0.15
         case .editedAndAccepted: 0.35
         case .copied: 0.05
-        case .regenerated, .dismissed: 0
+        case .regenerated: 0
         }
     }
 

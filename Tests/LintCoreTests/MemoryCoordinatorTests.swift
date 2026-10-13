@@ -1665,4 +1665,83 @@ final class MemoryCoordinatorTests: XCTestCase {
         let cleared = await coordinator.adoption()
         XCTAssertEqual(cleared.total, 0)
     }
+
+    // MARK: the style profile
+
+    /// The model tidied a casual message: a capital at the start and a period at the end.
+    private func casual(
+        _ result: SessionOutcome.Result, _ object: String, sent: (String) -> String?, tone: WritingTone = .preserve,
+        prefix: String = "", suffix: String = ""
+    ) -> SessionOutcome {
+        let original = "see you at the \(object) tomorrow"
+        return SessionOutcome(
+            app: "com.example.chat", result: result, ending: .sent,
+            suggestion: ObservedSuggestion(
+                original: original, suggestion: "See you at the \(object) tomorrow.", tone: tone,
+                provider: "localLlama", model: "qwen", prefix: prefix, suffix: suffix
+            ),
+            written: nil, sentText: sent(original)
+        )
+    }
+
+    private let places = ["office", "station", "airport", "library", "harbor", "market", "bridge", "garden", "museum"]
+
+    func testWaysOfWritingTheUserKeepsBecomeOneMemoryOfTheirStyleWhenDreaming() async throws {
+        let coordinator = learner()
+        for (index, place) in places.enumerated() {
+            // Looked at and left, never opened, or sent in the tone the user works in: all show how they write.
+            let result: SessionOutcome.Result = index % 2 == 0 ? .dismissed : .ignored
+            await coordinator.recordObservation(
+                casual(result, place, sent: { $0 }, tone: index % 3 == 0 ? .idiomatic : .preserve), config: observing
+            )
+        }
+        let before = await coordinator.memories()
+        XCTAssertFalse(before.contains { $0.dedupKey == StyleProfile.dedupKey }, "only a dream writes it")
+
+        let outcome = await coordinator.dream(config: observing)
+        guard case .finished(_, _, _, _, _, let adjusted) = outcome else { return XCTFail("\(outcome)") }
+        XCTAssertEqual(adjusted, 1)
+        let memory = try await memory(StyleProfile.dedupKey, in: coordinator)
+        XCTAssertEqual(memory.instruction, MemoryWording.profile([.noTerminalPeriod, .keepLowercaseStart]).chinese)
+
+        let prompt = await coordinator.personalize(
+            prompt: "Fix the text.", for: "can you send me the report before lunch", mode: .proofread,
+            english: true, config: observing
+        )
+        XCTAssertTrue(prompt.systemPrompt.contains("a message ends without a period, so none is added"), prompt.systemPrompt)
+        XCTAssertEqual(prompt.usedMemoryIDs, [memory.id])
+    }
+
+    func testOnlyWhatWasSeenSentInAToneThatKeepsTheVoiceAndAtTheEndsOfALineCounts() async throws {
+        let coordinator = learner()
+        for place in places {
+            await coordinator.recordObservation(casual(.dismissed, place, sent: { $0 }, tone: .formal), config: observing)
+            await coordinator.recordObservation(casual(.dismissed, place, sent: { _ in nil }), config: observing)
+            await coordinator.recordObservation(
+                casual(.dismissed, place, sent: { $0 }, prefix: "Hi there, ", suffix: " and thanks"), config: observing
+            )
+            await coordinator.recordObservation(
+                casual(.dismissed, place, sent: { $0 }), config: MemoryConfig(enabled: true)
+            )
+        }
+        let outcome = await coordinator.dream(config: observing)
+        guard case .finished(_, _, _, _, _, let adjusted) = outcome else { return XCTFail("\(outcome)") }
+        XCTAssertEqual(adjusted, 0)
+        let memories = await coordinator.memories()
+        XCTAssertFalse(memories.contains { $0.dedupKey == StyleProfile.dedupKey })
+    }
+
+    func testTakingTheSuggestionsWayCountsAgainstTheTrait() async throws {
+        let coordinator = learner()
+        for (index, place) in places.enumerated() {
+            // Six times the tidied message was sent as Replace wrote it, three times the user's own.
+            await coordinator.recordObservation(
+                casual(index < 6 ? .adopted : .dismissed, place, sent: { index < 6 ? "See you at the \(place) tomorrow." : $0 }),
+                config: observing
+            )
+        }
+        let outcome = await coordinator.dream(config: observing)
+        guard case .finished(_, _, _, _, _, let adjusted) = outcome else { return XCTFail("\(outcome)") }
+        XCTAssertEqual(adjusted, 0)
+    }
 }

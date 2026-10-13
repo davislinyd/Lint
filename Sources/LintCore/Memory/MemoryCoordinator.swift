@@ -103,7 +103,8 @@ public actor MemoryCoordinator {
     }
 
     /// Records how the suggestions in a followed field fared (`FieldSessionTracker`): one count for
-    /// the app the field is in, and what the text that was sent says. A suggestion that was looked
+    /// the app the field is in, counts for the ways of writing the suggestion would have changed
+    /// (`StyleTraits`), and what the text that was sent says. A suggestion that was looked
     /// at and not used is fed back as dismissed; one that was written into the field and then edited
     /// there, as the user's edit of what was written. Nothing is kept unless memory and observation
     /// mode are both on.
@@ -135,10 +136,22 @@ public actor MemoryCoordinator {
         }
         guard let store = openStore(create: true) else { return }
         let adopted = outcome.result == .adopted
+        let now = clock()
         do {
             try await store.bumpStat(
-                key: Self.appStatPrefix + outcome.app, positive: adopted ? 1 : 0, negative: adopted ? 0 : 1, at: clock()
+                key: Self.appStatPrefix + outcome.app, positive: adopted ? 1 : 0, negative: adopted ? 0 : 1, at: now
             )
+            // The user's own ways of writing that the suggestion would have changed, and whether the
+            // text was sent with them. Dreaming turns the counts into the style profile.
+            if let sent = outcome.sentText, StyleTraits.isObserved(suggestion.tone) {
+                let seen = StyleTraits.observations(
+                    original: suggestion.original, suggestion: suggestion.suggestion, sent: sent,
+                    startsLine: suggestion.startsLine, endsLine: suggestion.endsLine
+                )
+                for (trait, kept) in seen {
+                    try await store.bumpStat(key: trait.statKey, positive: kept ? 1 : 0, negative: kept ? 0 : 1, at: now)
+                }
+            }
         } catch {
             DiagnosticLog.shared.log("memory", "could not count an observation: \(DiagnosticLog.describe(error))")
         }
@@ -253,7 +266,7 @@ public actor MemoryCoordinator {
         await scheduler?.didRun()
         return .finished(
             remembered: run.rememberedCount, forgotten: run.forgottenCount, erased: run.erasedCount,
-            newRules: run.generatedCount, coveredMemories: run.supersededCount
+            newRules: run.generatedCount, coveredMemories: run.supersededCount, adjusted: run.adjustedCount
         )
     }
 

@@ -17,6 +17,13 @@ enum MemoryWording: Equatable, Sendable {
     case keepReverted(from: String, to: String)
     /// The model suggested `to` for `from`; the user saw it and sent the text with `from`.
     case keepRejected(from: String, to: String)
+    /// The user's own ways of writing, in the order of `StyleTrait.allCases` (see `profile(of:)`).
+    case profile([StyleTrait])
+
+    /// The wording for these traits, whatever order they come in; nil for none.
+    static func profile(of traits: Set<StyleTrait>) -> MemoryWording? {
+        traits.isEmpty ? nil : .profile(StyleTrait.allCases.filter(traits.contains))
+    }
 
     var chinese: String {
         switch self {
@@ -40,6 +47,8 @@ enum MemoryWording: Equatable, Sendable {
             "使用者把「\(to)」改回了「\(from)」：原文的「\(from)」請保留，不要改成「\(to)」。"
         case .keepRejected(let from, let to):
             "使用者沒有採用把「\(from)」改成「\(to)」的建議：原文的「\(from)」可能是刻意的，除非明顯有錯，否則請保留。"
+        case .profile(let traits):
+            Self.chineseProfileStart + traits.map(Self.chinesePhrase).joined(separator: "；") + "。"
         }
     }
 
@@ -65,11 +74,41 @@ enum MemoryWording: Equatable, Sendable {
             "This user changed \"\(to)\" back to \"\(from)\": keep \"\(from)\" as written, and do not change it to \"\(to)\"."
         case .keepRejected(let from, let to):
             "This user did not take a suggestion to change \"\(from)\" to \"\(to)\": \"\(from)\" may be intended, so leave it unless it is clearly wrong."
+        case .profile(let traits):
+            "This user's own way of writing, to be left as it is: " + traits.map(Self.englishPhrase).joined(separator: "; ") + "."
+        }
+    }
+
+    private static let chineseProfileStart = "這位使用者自己的寫法，請照原樣保留："
+
+    private static func chinesePhrase(_ trait: StyleTrait) -> String {
+        switch trait {
+        case .keepContractions: "會用縮寫（如 don't），不要展開"
+        case .keepFullForms: "不用縮寫（如 do not），不要縮寫"
+        case .noTerminalPeriod: "訊息結尾不加句點，不要補上"
+        case .keepLowercaseStart: "開頭用小寫，不要改成大寫"
+        }
+    }
+
+    private static func englishPhrase(_ trait: StyleTrait) -> String {
+        switch trait {
+        case .keepContractions: "contractions (such as don't) stay contracted"
+        case .keepFullForms: "full forms (such as do not) are not contracted"
+        case .noTerminalPeriod: "a message ends without a period, so none is added"
+        case .keepLowercaseStart: "a message starts in lowercase, so it is not capitalized"
         }
     }
 
     /// The wording a stored instruction was written in, nil for anything else (the user's own text).
     init?(chinese instruction: String) {
+        if instruction.hasPrefix(Self.chineseProfileStart), instruction.hasSuffix("。") {
+            // Fixed phrases in a fixed order: anything else was written by the user.
+            let phrases = instruction.dropFirst(Self.chineseProfileStart.count).dropLast().split(separator: "；").map(String.init)
+            let traits = StyleTrait.allCases.filter { phrases.contains(Self.chinesePhrase($0)) }
+            guard !traits.isEmpty, traits.map(Self.chinesePhrase) == phrases else { return nil }
+            self = .profile(traits)
+            return
+        }
         for (shape, make) in Self.shapes {
             if let values = Self.values(in: instruction, shapedLike: shape.chinese) {
                 self = make(values)

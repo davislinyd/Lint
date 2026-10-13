@@ -168,6 +168,13 @@ struct SQLiteMemoryStore: MemoryStore {
                 t.column("updated_at", .double).notNull()
             }
         }
+        // A pass also keeps the memory of the user's style in line with what was observed, and says
+        // whether it changed it. A number, and 0 for the passes before.
+        migrator.registerMigration("v7_adjustments") { db in
+            try db.alter(table: "dream_run") { t in
+                t.add(column: "adjusted_count", .integer).notNull().defaults(to: 0)
+            }
+        }
         return migrator
     }
 
@@ -268,7 +275,8 @@ struct SQLiteMemoryStore: MemoryStore {
     func deleteMemory(id: UUID) async throws {
         try await dbQueue.write { db in
             guard let memory = try MemoryRecord.fetchOne(db, key: id.uuidString)?.memory else { return }
-            if memory.level != .specific {
+            // The style profile is derived as well, though from counts and not from other memories.
+            if memory.level != .specific || memory.dedupKey.hasPrefix(StyleProfile.keyPrefix) {
                 try db.execute(
                     sql: "INSERT OR IGNORE INTO dream_veto (dedup_key, created_at) VALUES (?, ?)",
                     arguments: [memory.dedupKey, Date().timeIntervalSince1970]
@@ -699,6 +707,7 @@ private struct DreamRunRecord: FetchableRecord, PersistableRecord {
             rememberedCount: row["remembered_count"],
             forgottenCount: row["forgotten_count"],
             erasedCount: row["erased_count"],
+            adjustedCount: row["adjusted_count"],
             status: status
         )
     }
@@ -715,6 +724,7 @@ private struct DreamRunRecord: FetchableRecord, PersistableRecord {
         container["remembered_count"] = run.rememberedCount
         container["forgotten_count"] = run.forgottenCount
         container["erased_count"] = run.erasedCount
+        container["adjusted_count"] = run.adjustedCount
         container["status"] = run.status.rawValue
     }
 }

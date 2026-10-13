@@ -1070,12 +1070,52 @@ final class MemoryStoreTests: XCTestCase {
         XCTAssertEqual(try count("observation_stat", in: url), 0)
     }
 
+    func testAV6DatabaseUpgradesAndEarlierPassesAdjustedNothing() async throws {
+        let url = try makeTempDirectory().appendingPathComponent("LintLearning.sqlite")
+        let id = UUID()
+        do {
+            let queue = try DatabaseQueue(path: url.path)
+            try SQLiteMemoryStore.migrator.migrate(queue, upTo: "v6_observation")
+            try await queue.write { db in
+                try db.execute(
+                    sql: """
+                    INSERT INTO dream_run (id, started_at, finished_at, algorithm_version, input_memory_count,
+                        cluster_count, generated_count, superseded_count, remembered_count, forgotten_count,
+                        erased_count, status)
+                    VALUES (?, 1800000000, 1800000005, 2, 12, 1, 1, 3, 4, 5, 6, 'completed')
+                    """,
+                    arguments: [id.uuidString]
+                )
+            }
+        }
+        let store = try SQLiteMemoryStore(url: url)
+        let run = try await store.lastCompletedDreamRun()
+        XCTAssertEqual(run?.id, id)
+        XCTAssertEqual([run?.rememberedCount, run?.forgottenCount, run?.erasedCount], [4, 5, 6])
+        XCTAssertEqual(run?.adjustedCount, 0)
+    }
+
+    func testDeletingTheStyleProfileIsRememberedLikeDeletingARule() async throws {
+        let store = try SQLiteMemoryStore(url: nil)
+        let profile = memory(key: StyleProfile.dedupKey)
+        let other = memory(key: "vocabulary:en:big>large")
+        try await store.saveMemory(profile)
+        try await store.saveMemory(other)
+        try await store.deleteMemory(id: profile.id)
+        try await store.deleteMemory(id: other.id)
+        let vetoed = try await store.isVetoed(dedupKey: StyleProfile.dedupKey)
+        XCTAssertTrue(vetoed)
+        let plain = try await store.isVetoed(dedupKey: "vocabulary:en:big>large")
+        XCTAssertFalse(plain)
+    }
+
     func testADreamRunKeepsWhatItRememberedForgotAndErased() async throws {
         let store = try SQLiteMemoryStore(url: nil)
         var run = dreamRun()
         run.rememberedCount = 4
         run.forgottenCount = 7
         run.erasedCount = 2
+        run.adjustedCount = 1
         try await store.recordDreamRun(run)
         let loaded = try await store.lastCompletedDreamRun()
         XCTAssertEqual(loaded, run)

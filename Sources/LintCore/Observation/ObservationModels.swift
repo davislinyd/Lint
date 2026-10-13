@@ -40,6 +40,16 @@ public struct ObservedSuggestion: Sendable, Equatable {
         Self.trimmed(original) == Self.trimmed(suggestion)
     }
 
+    /// The text the suggestion was made for begins where a line of the field does, and ends where
+    /// one does: it was not picked out of the middle of a line.
+    var startsLine: Bool {
+        prefix.last { $0 != " " && $0 != "\t" }.map(\.isNewline) ?? true
+    }
+
+    var endsLine: Bool {
+        suffix.first { $0 != " " && $0 != "\t" }.map(\.isNewline) ?? true
+    }
+
     /// This suggestion with `prefix` and `suffix` taken from `value`, the field's whole text.
     /// `original` sits at `utf16Range` if that is what is there, else at its only occurrence; nil
     /// when the field does not show where it sits.

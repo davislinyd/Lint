@@ -145,14 +145,17 @@ struct MemorySettingsPane: View {
     @ViewBuilder
     private func dreamMessage(_ outcome: DreamOutcome) -> some View {
         switch outcome {
-        case .finished(let remembered, let forgotten, let erased, let rules, let covered)
-            where remembered + forgotten + erased + rules + covered == 0:
+        case .finished(let remembered, let forgotten, let erased, let rules, let covered, let adjusted)
+            where remembered + forgotten + erased + rules + covered + adjusted == 0:
             Text("這次沒有要處理的記憶。")
-        case .finished(let remembered, let forgotten, let erased, let rules, let covered):
+        case .finished(let remembered, let forgotten, let erased, let rules, let covered, let adjusted):
             VStack(alignment: .leading, spacing: 2) {
                 Text("作夢完成：記住 \(remembered) 條、忘記 \(forgotten) 條、刪除 \(erased) 條。")
                 if rules > 0 || covered > 0 {
                     Text("新增 \(rules) 條一般記憶，涵蓋 \(covered) 條具體記憶。")
+                }
+                if adjusted > 0 {
+                    Text("已依近期的觀察更新寫作風格的記憶。")
                 }
             }
         case .alreadyRunning:

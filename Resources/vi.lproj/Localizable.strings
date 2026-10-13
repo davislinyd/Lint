@@ -261,6 +261,7 @@
 "這次沒有要處理的記憶。" = "Giấc mơ này không có gì để xử lý.";
 "作夢完成：記住 %lld 條、忘記 %lld 條、刪除 %lld 條。" = "Giấc mơ kết thúc: ghi nhớ %lld, quên %lld, xóa %lld.";
 "新增 %lld 條一般記憶，涵蓋 %lld 條具體記憶。" = "%lld bộ nhớ chung mới, bao hàm %lld bộ nhớ cụ thể.";
+"已依近期的觀察更新寫作風格的記憶。" = "Đã cập nhật ghi nhớ về phong cách viết của bạn theo các quan sát gần đây.";
 "正在作夢。" = "Đang mơ.";
 "作夢沒有完成，稍後會再試。" = "Giấc mơ chưa xong. Sẽ thử lại sau.";
 "核心" = "Cốt lõi";

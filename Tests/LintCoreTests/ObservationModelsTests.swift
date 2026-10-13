@@ -60,6 +60,15 @@ final class ObservationModelsTests: XCTestCase {
         XCTAssertFalse(same.changesNothing)
     }
 
+    func testASuggestionKnowsWhetherItsTextBeginsAndEndsWithALine() {
+        for (prefix, starts) in [("", true), ("Hi,\n", true), ("Hi,\n \t", true), ("Hi, ", false), ("Hi", false)] {
+            XCTAssertEqual(suggestion("see you soon", prefix: prefix).startsLine, starts, prefix.debugDescription)
+        }
+        for (suffix, ends) in [("", true), ("\nbye", true), (" \nbye", true), (" bye", false), ("!", false)] {
+            XCTAssertEqual(suggestion("see you soon", suffix: suffix).endsLine, ends, suffix.debugDescription)
+        }
+    }
+
     // MARK: fading counts
 
     func testACounterHalvesEveryThirtyDays() {

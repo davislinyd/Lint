@@ -207,7 +207,7 @@ final class MemoryOrganizingTests: XCTestCase {
 
         let outcome = await setup.coordinator.dream(config: on)
 
-        XCTAssertEqual(outcome, .finished(remembered: 3, forgotten: 1, erased: 2, newRules: 0, coveredMemories: 0))
+        XCTAssertEqual(outcome, .finished(remembered: 3, forgotten: 1, erased: 2, newRules: 0, coveredMemories: 0, adjusted: 0))
     }
 
     func testAPassHoldsBackWhileTheUserIsWaitingOnASuggestion() async throws {
@@ -240,7 +240,7 @@ final class MemoryOrganizingTests: XCTestCase {
 
         let outcome = await setup.coordinator.dream(config: on)
 
-        XCTAssertEqual(outcome, .finished(remembered: 0, forgotten: 0, erased: 0, newRules: 1, coveredMemories: 3))
+        XCTAssertEqual(outcome, .finished(remembered: 0, forgotten: 0, erased: 0, newRules: 1, coveredMemories: 3, adjusted: 0))
         let stats = await setup.coordinator.stats()
         XCTAssertEqual([stats.count(.specific), stats.count(.generalized), stats.count(.core)], [3, 1, 0])
         XCTAssertEqual(stats.supersededCount, 3)
@@ -252,7 +252,7 @@ final class MemoryOrganizingTests: XCTestCase {
         XCTAssertEqual(sources.count, 3)
 
         let again = await setup.coordinator.dream(config: on)
-        XCTAssertEqual(again, .finished(remembered: 0, forgotten: 0, erased: 0, newRules: 0, coveredMemories: 0), "nothing more to do")
+        XCTAssertEqual(again, .finished(remembered: 0, forgotten: 0, erased: 0, newRules: 0, coveredMemories: 0, adjusted: 0), "nothing more to do")
     }
 
     func testAnExplicitRequestNeedsMemoryOnAndSomethingOnDisk() async throws {
@@ -274,7 +274,7 @@ final class MemoryOrganizingTests: XCTestCase {
         XCTAssertTrue(waiting)
 
         let outcome = await setup.coordinator.dream(config: on)
-        XCTAssertEqual(outcome, .finished(remembered: 0, forgotten: 0, erased: 0, newRules: 0, coveredMemories: 0))
+        XCTAssertEqual(outcome, .finished(remembered: 0, forgotten: 0, erased: 0, newRules: 0, coveredMemories: 0, adjusted: 0))
         let none = await eventually { setup.sleeper.waitingCount == 0 }
         XCTAssertTrue(none, "the one that was waiting is no longer needed")
     }

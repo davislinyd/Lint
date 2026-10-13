@@ -15,8 +15,9 @@ protocol MemoryStore: Sendable {
     func memory(id: UUID) async throws -> WritingMemory?
     func memory(dedupKey: String) async throws -> WritingMemory?
     func memories() async throws -> [WritingMemory]
-    /// Deleting a generalized or core memory is remembered (`isVetoed`), so it is not derived again;
-    /// the memories it was derived from stay, and are no longer pointed at as superseded.
+    /// Deleting a generalized or core memory, or the style profile, is remembered (`isVetoed`), so it
+    /// is not derived again; the memories it was derived from stay, and are no longer pointed at as
+    /// superseded.
     func deleteMemory(id: UUID) async throws
     func deleteAllMemories() async throws
     /// Removes, in one transaction, those of `ids` that are forgotten specific memories the user has

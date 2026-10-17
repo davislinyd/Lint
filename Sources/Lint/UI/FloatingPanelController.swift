@@ -402,6 +402,8 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
 
     private func endBubbleEditing() {
         bubbleChrome?.endEditing()
+        // An engine that is not asked while typing translates the edit now.
+        viewModel.translateEditedResult(whileTyping: false)
         refreshBubbleChrome()
     }
 
@@ -412,8 +414,9 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
             let fitting = chrome.fittingSize
             if fitting.width > 1, fitting.height > 1 {
                 let old = panel.frame
+                // 420: Replace, Edit, Rewrite and Close side by side take about 410 pt in Portuguese.
                 panel.setContentSize(NSSize(
-                    width: max(260, min(360, fitting.width)),
+                    width: max(260, min(420, fitting.width)),
                     height: max(110, min(480, fitting.height))
                 ))
                 if chrome.isEditing {
@@ -685,6 +688,7 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
         chrome.onEndEditing = { [weak self] in self?.endBubbleEditing() }
         chrome.onTextEdited = { [weak self] text in
             self?.viewModel.resultText = text
+            self?.viewModel.translateEditedResult(whileTyping: true)
             // Resize now, not on the next pump tick: the editor's height has already changed.
             self?.refreshBubbleChrome()
         }

@@ -22,6 +22,7 @@
 "取代 ⏎" = "Replace ⏎";
 "重寫 R" = "Rewrite R";
 "關閉 esc" = "Close esc";
+"編輯 E" = "Edit E";
 "取代 ⌘⏎" = "Replace ⌘⏎";
 "結束編輯 esc" = "Done esc";
 "ChatGPT 判定為異常流量（403）。請改走 App 內 WebView 連線，或稍後重試／重新登入。" = "ChatGPT flagged the traffic as unusual (403). Use the in-app WebView connection instead, or retry later / sign in again.";
@@ -257,7 +258,6 @@
 "編輯這條記憶" = "Edit This Memory";
 "最多 %lld 字" = "Up to %lld characters";
 "管理記憶…" = "Manage Memories…";
-"編輯建議 E" = "Edit Suggestion E";
 "作夢" = "Dreaming";
 "上次作夢" = "Last dream";
 "尚未作夢" = "No dream yet";

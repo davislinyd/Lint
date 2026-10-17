@@ -22,6 +22,7 @@
 "取代 ⏎" = "Thay thế ⏎";
 "重寫 R" = "Viết lại R";
 "關閉 esc" = "Đóng esc";
+"編輯 E" = "Sửa E";
 "取代 ⌘⏎" = "Thay thế ⌘⏎";
 "結束編輯 esc" = "Xong esc";
 "ChatGPT 判定為異常流量（403）。請改走 App 內 WebView 連線，或稍後重試／重新登入。" = "ChatGPT đánh giá lưu lượng là bất thường (403). Hãy dùng kết nối WebView trong ứng dụng, hoặc thử lại sau / đăng nhập lại.";
@@ -257,7 +258,6 @@
 "編輯這條記憶" = "Sửa bộ nhớ này";
 "最多 %lld 字" = "Tối đa %lld ký tự";
 "管理記憶…" = "Quản lý bộ nhớ…";
-"編輯建議 E" = "Sửa gợi ý E";
 "作夢" = "Giấc mơ";
 "上次作夢" = "Giấc mơ gần nhất";
 "尚未作夢" = "Chưa mơ";

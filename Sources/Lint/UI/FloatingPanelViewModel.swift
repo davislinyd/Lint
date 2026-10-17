@@ -54,9 +54,6 @@ final class FloatingPanelViewModel {
     var lastUsage: TokenUsage?
     /// Compact bubble session — use lowest latency settings.
     private(set) var isAutoSuggestSession = false
-    /// Bumped to ask the full panel to open its result editor with the focus in it. A count rather
-    /// than a flag, so that asking again while the editor is already open still fires.
-    private(set) var resultEditRequest = 0
 
     let settings: SettingsStore
     private let capture: TextCaptureService
@@ -68,6 +65,8 @@ final class FloatingPanelViewModel {
     /// Only the newest request may put its answer on screen (see `WritingRequestTickets`).
     private var tickets = WritingRequestTickets()
     private var translationTask: Task<Void, Never>?
+    /// The text `translationText` is a gloss of, once that gloss is complete.
+    private var glossSource: String?
     private var streamTask: Task<Void, Never>?
 
     /// A finished suggestion, kept apart from `resultText` (which the user may edit) so feedback can
@@ -342,6 +341,7 @@ final class FloatingPanelViewModel {
                         cancelTranslation()
                         translationLanguage = gloss.language
                         translationText = gloss.text
+                        glossSource = resultText.trimmingCharacters(in: .whitespacesAndNewlines)
                     } else {
                         prefetchTranslationTask?.cancel()
                         scheduleTranslationOfResult()
@@ -420,17 +420,9 @@ final class FloatingPanelViewModel {
         return UnchangedAdvice.advice(source: generated.source, answer: generated.text, mode: generated.mode, tone: generated.tone)
     }
 
-    /// A finished suggestion is on screen, so it can be handed to the full panel to edit.
-    var canEditInFullPanel: Bool {
+    /// A finished suggestion is on screen, so the bubble can open it for editing.
+    var canEditResult: Bool {
         !isStreaming && !resultText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-    }
-
-    /// The bubble hands its suggestion to the full panel. Nothing is regenerated or reset: the
-    /// panel shows what the bubble showed, with the result ready to edit. From here it is a
-    /// full-panel session, so a retry follows the settings and not the bubble's low-latency shortcuts.
-    func handOffForEditing() {
-        isAutoSuggestSession = false
-        resultEditRequest += 1
     }
 
     /// Run the model on whatever is currently in `originalText` (selection or typed).
@@ -867,6 +859,7 @@ final class FloatingPanelViewModel {
     private func clearTranslation() {
         cancelTranslation()
         translationText = ""
+        glossSource = nil
     }
 
     /// After a suggestion is ready, fetch a short gloss in the translation language for the bubble.
@@ -879,6 +872,28 @@ final class FloatingPanelViewModel {
         }
         let language = settings.translationLanguage
         translationTask = Task { await self.translateResult(source, into: language) }
+    }
+
+    /// The bubble's editor changed the result, so the gloss follows it: once typing pauses
+    /// (`whileTyping`), or at once when the edit ends. The gloss on screen stays until the new one is
+    /// complete, and text that already has its gloss (typed and deleted again) asks for nothing.
+    func translateEditedResult(whileTyping: Bool) {
+        let source = resultText.trimmingCharacters(in: .whitespacesAndNewlines)
+        cancelTranslation()
+        guard source != glossSource else { return }
+        guard !source.isEmpty else {
+            translationText = ""
+            glossSource = nil
+            return
+        }
+        let language = settings.translationLanguage
+        translationTask = Task {
+            if whileTyping {
+                // One request per pause, not one per key.
+                do { try await Task.sleep(for: .milliseconds(600)) } catch { return }
+            }
+            await self.translateResult(source, into: language, keepingShown: true, freeEnginesOnly: whileTyping)
+        }
     }
 
     /// The reading aid under a suggestion: the English translation prompt where the engine takes the
@@ -931,14 +946,28 @@ final class FloatingPanelViewModel {
         }
     }
 
-    private func translateResult(_ source: String, into language: TranslationLanguage) async {
+    /// `keepingShown`: the gloss on screen stays until the new one is complete, instead of being
+    /// cleared and rewritten as it streams (no flicker, and no half gloss left by a cancel).
+    /// `freeEnginesOnly`: only Lint's local model and Apple Intelligence are asked. Another engine
+    /// would pay for a request at every pause in typing; its gloss goes until the edit ends.
+    private func translateResult(
+        _ source: String, into language: TranslationLanguage, keepingShown: Bool = false, freeEnginesOnly: Bool = false
+    ) async {
         isTranslating = true
         translationLanguage = language
-        translationText = ""
+        if !keepingShown {
+            translationText = ""
+        }
         defer { isTranslating = false }
         do {
             let route = try await prepareEngine()
             guard let kind = route.providerKind else { return }
+            if freeEnginesOnly, kind != .localLlama, kind != .appleIntelligence {
+                // The gloss on screen is of the text before this edit.
+                translationText = ""
+                glossSource = nil
+                return
+            }
             let config = try settings.runtimeConfig(for: kind)
             let onDevice = route == .appleIntelligence
             let request = ChatRequest(
@@ -956,11 +985,14 @@ final class FloatingPanelViewModel {
                 if Task.isCancelled { return }
                 if case .text(let token) = event {
                     out += token
-                    translationText = out
+                    if !keepingShown {
+                        translationText = out
+                    }
                 }
             }
             if !Task.isCancelled {
                 translationText = out.trimmingCharacters(in: .whitespacesAndNewlines)
+                glossSource = source
             }
         } catch is CancellationError {
             return
@@ -968,6 +1000,11 @@ final class FloatingPanelViewModel {
             // Soft-fail: gloss is optional; keep the suggestion usable.
             if translationText.isEmpty {
                 translationText = ""
+            }
+            // The gloss kept on screen is of the text before the edit.
+            if keepingShown {
+                translationText = ""
+                glossSource = nil
             }
         }
     }

@@ -129,6 +129,7 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
     private func showBubbleWithMessage(_ message: String) {
         dismissChip()
         hideFull()
+        bubbleChrome?.resetEditing()
         viewModel.prepareMessageOnly(message)
         bubbleAnchorPoint = NSEvent.mouseLocation
         bubbleAvoidRect = nil
@@ -147,6 +148,8 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
 
     /// User clicked the chip (or wants immediate suggest).
     func runAutoSuggest(_ result: TextCaptureService.CaptureResult) {
+        // A ready prefetch replaces the text without streaming, so an edit in progress ends here.
+        bubbleChrome?.resetEditing()
         // Must adopt so Replace knows the AX element / range (⌥⌘K peek does not set lastCapture).
         viewModel.adoptCapture(result)
         // Consume prefetch before dismissing the chip so we do not cancel in-flight work.
@@ -190,6 +193,7 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
         uiPumpTask = nil
         viewModel.cancelStream()
         removeOutsideClickMonitor()
+        bubbleChrome?.resetEditing()
         bubbleActive = false
         bubbleAnchorPoint = nil
         bubbleAvoidRect = nil
@@ -257,7 +261,7 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
         panel.orderFrontRegardless()
         panel.makeKeyAndOrderFront(nil)
         if let chrome = bubbleChrome {
-            _ = panel.makeFirstResponder(chrome)
+            _ = panel.makeFirstResponder(chrome.focusTarget)
         }
         installOutsideClickMonitor()
         startUIPump()
@@ -366,7 +370,8 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
         }
     }
 
-    /// Keep the bubble key so Enter/R/Esc actually land (menu-bar apps lose focus easily).
+    /// Keep the bubble key so Enter/R/Esc (or the editor's typing) actually land (menu-bar apps lose
+    /// focus easily).
     private func ensureBubbleKeyFocus() {
         guard !replacingInProgress else { return }
         guard let panel = bubblePanel, panel.isVisible, !bubbleNonActivating else { return }
@@ -377,42 +382,70 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
             NSApp.activate(ignoringOtherApps: true)
             panel.makeKeyAndOrderFront(nil)
             if let chrome = bubbleChrome {
-                _ = panel.makeFirstResponder(chrome)
+                _ = panel.makeFirstResponder(chrome.focusTarget)
             }
         }
     }
 
-    /// The bubble's edit button: the suggestion on screen moves to the full panel, ready to edit,
-    /// without being captured or generated again. Same order as ⌥⌘L: the bubble goes first (which
-    /// lets the selection monitor run) and showing the panel pauses it again. The capture that
-    /// Replace writes back to, and the finished suggestion feedback compares against, both survive.
-    private func editInFullPanel() {
-        guard viewModel.canEditInFullPanel, !bubbleNonActivating else {
+    /// The bubble's edit button and E: the suggestion on screen becomes editable in place, so the
+    /// user keeps what they want and rewrites the rest. Nothing is captured or generated again:
+    /// Replace writes their version to the same field, and feedback compares it with the finished
+    /// suggestion, which the view model keeps apart.
+    private func beginBubbleEditing() {
+        guard let chrome = bubbleChrome, chrome.canBeginEditing(viewModel) else {
             NSSound.beep()
             return
         }
-        dismissBubble()
-        showFull()
-        viewModel.handOffForEditing()
+        chrome.beginEditing(viewModel.resultText)
+        refreshBubbleChrome()
+    }
+
+    private func endBubbleEditing() {
+        bubbleChrome?.endEditing()
+        // An engine that is not asked while typing translates the edit now.
+        viewModel.translateEditedResult(whileTyping: false)
+        refreshBubbleChrome()
     }
 
     private func refreshBubbleChrome() {
-        bubbleChrome?.offersFullPanelEdit = !bubbleNonActivating
+        bubbleChrome?.offersEditing = !bubbleNonActivating
         bubbleChrome?.apply(viewModel: viewModel)
         if let panel = bubblePanel, let chrome = bubbleChrome {
             let fitting = chrome.fittingSize
             if fitting.width > 1, fitting.height > 1 {
+                let old = panel.frame
+                // 420: Replace, Edit, Rewrite and Close side by side take about 410 pt in Portuguese.
                 panel.setContentSize(NSSize(
-                    width: max(260, min(360, fitting.width)),
+                    width: max(260, min(420, fitting.width)),
                     height: max(110, min(480, fitting.height))
                 ))
-                // Keep parked next to the text — setContentSize can nudge the frame.
-                applyBubbleFrameOrigin(panel)
+                if chrome.isEditing {
+                    // Typing grows the bubble away from the field, from where it is: parking it again
+                    // could move it above or beside the field mid-sentence.
+                    let height = panel.frame.height
+                    let aboveField = bubbleAvoidRect.map { old.minY >= $0.maxY } ?? false
+                    var origin = NSPoint(x: old.minX, y: aboveField ? old.minY : old.maxY - height)
+                    if let visible = panel.screen?.visibleFrame {
+                        origin.y = min(max(origin.y, visible.minY + 8), visible.maxY - height - 8)
+                    }
+                    if origin != panel.frame.origin {
+                        panel.setFrameOrigin(origin)
+                    }
+                } else {
+                    // Keep parked next to the text — setContentSize can nudge the frame.
+                    applyBubbleFrameOrigin(panel)
+                }
             }
         }
     }
 
     private func replaceFromBubble() {
+        // The editor's text still holds the uncommitted Zhuyin / Pinyin: that is not what to write.
+        if bubbleChrome?.editorHasMarkedText == true {
+            NSSound.beep()
+            return
+        }
+        bubbleChrome?.endEditing()
         TextCaptureService.logPublic("REPLACE FROM BUBBLE originalCount=\(viewModel.originalText.count) resultCount=\(viewModel.resultText.count)")
         // Immediate UI feedback on the AppKit chrome (do not rely on Observation alone).
         viewModel.errorMessage = nil
@@ -651,7 +684,14 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
         chrome.onRewrite = { [weak self] in
             self?.viewModel.retry()
         }
-        chrome.onEdit = { [weak self] in self?.editInFullPanel() }
+        chrome.onEdit = { [weak self] in self?.beginBubbleEditing() }
+        chrome.onEndEditing = { [weak self] in self?.endBubbleEditing() }
+        chrome.onTextEdited = { [weak self] text in
+            self?.viewModel.resultText = text
+            self?.viewModel.translateEditedResult(whileTyping: true)
+            // Resize now, not on the next pump tick: the editor's height has already changed.
+            self?.refreshBubbleChrome()
+        }
         chrome.onSetUpLocalAI = { [weak self] in self?.viewModel.openLocalAISetup() }
         chrome.onDismiss = { [weak self] in self?.dismissBubble() }
         chrome.onDragBegan = { [weak self] in
@@ -679,7 +719,9 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
         return panel
     }
 
-    /// Enter → 取代, R → 重寫, Esc → 關閉. Returns true if consumed.
+    /// Enter → 取代, R → 重寫, Esc → 關閉, E → 編輯. While editing: ⌘Enter → 取代, Esc → 結束編輯, the
+    /// rest is typing. Returns true if consumed. The tap and the local monitor can both pass the same
+    /// key here, so a branch that returns false must change nothing.
     @discardableResult
     private func handleBubbleKey(_ event: NSEvent) -> Bool {
         guard bubbleActive || bubblePanel?.isVisible == true else { return false }
@@ -688,6 +730,19 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
         let noMods = flags.isEmpty
         let cmdOnly = flags == .command
         guard noMods || cmdOnly else { return false }
+
+        if let chrome = bubbleChrome, chrome.isEditing {
+            // While composing, every key belongs to the input method (⏎ commits, esc cancels).
+            if chrome.editorHasMarkedText { return false }
+            if event.keyCode == 53 && noMods {
+                TextCaptureService.logPublic("bubble key Esc ends editing")
+                endBubbleEditing()
+                return true
+            }
+            // ⏎ is a new line here; only ⌘⏎ goes on to Replace below.
+            let isReturn = event.keyCode == 36 || event.keyCode == 76
+            if !(isReturn && cmdOnly) { return false }
+        }
 
         if event.keyCode == 53 {
             TextCaptureService.logPublic("bubble key Esc")
@@ -718,6 +773,13 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
                 viewModel.cancelStream()
             }
             viewModel.retry()
+            return true
+        }
+        // E is not in the event tap, so it only gets here from the bubble itself. Lint's other
+        // windows (Settings) can be key while the bubble shows: typing there is not for the bubble.
+        if event.keyCode == 14 && noMods && bubblePanel?.isKeyWindow == true {
+            TextCaptureService.logPublic("bubble key E")
+            beginBubbleEditing()
             return true
         }
         return false

@@ -9,13 +9,14 @@ final class BubbleChromeView: NSView {
     var onReplace: (() -> Void)?
     var onRewrite: (() -> Void)?
     var onEdit: (() -> Void)?
+    var onEndEditing: (() -> Void)?
+    /// Every change typed in the editor, so `resultText` is always what Replace writes.
+    var onTextEdited: ((String) -> Void)?
     var onSetUpLocalAI: (() -> Void)?
     var onDismiss: (() -> Void)?
-    /// The controller turns the edit button off when the bubble is shown without activating Lint:
-    /// opening the full panel would activate it, and closing the bubble hands the focus back.
-    var offersFullPanelEdit = true {
-        didSet { editButton.isHidden = !offersFullPanelEdit }
-    }
+    /// The controller turns editing off when the bubble is shown without activating Lint: the editor
+    /// needs the key window, and that mode exists so that Lint is not activated.
+    var offersEditing = true
     /// Fired when the user starts dragging the bubble (not a button).
     var onDragBegan: (() -> Void)?
     /// Panel wires this for Enter / R / Esc while chrome is first responder.
@@ -44,9 +45,22 @@ final class BubbleChromeView: NSView {
     private let setupButton = NSButton(title: String(localized: "設定本機 AI"), target: nil, action: nil)
     private let closeButton = NSButton(title: String(localized: "關閉"), target: nil, action: nil)
     private let xButton = NSButton(image: NSImage(systemSymbolName: "xmark", accessibilityDescription: String(localized: "關閉")) ?? NSImage(), target: nil, action: nil)
-    private let editButton = NSButton(image: NSImage(systemSymbolName: "square.and.pencil", accessibilityDescription: String(localized: "在全面板編輯")) ?? NSImage(), target: nil, action: nil)
+    /// In the row with the other keys, so E is seen where ⏎ and R are.
+    private let editButton = NSButton(title: String(localized: "編輯 E"), target: nil, action: nil)
+    /// Setup, Replace, Edit, Rewrite, Close: a hidden button leaves no gap.
+    private let buttonRow = NSStackView()
+    /// Takes the body's place while the suggestion is being edited. TextKit 1, so its height can be
+    /// read from the layout manager.
+    private let editor = NSTextView(usingTextLayoutManager: false)
+    private let editorScroll = NSScrollView()
     private let card = NSVisualEffectView()
     private var widthConstraint: NSLayoutConstraint!
+    /// The hidden body keeps the editor's slot: this gives it the editor's text height.
+    private var bodyEditHeight: NSLayoutConstraint!
+    private(set) var isEditing = false
+    /// The suggestion as it was when editing first began; nil until then. Lets editing start again
+    /// after an edit emptied the text.
+    private var editBaseline: String?
     private var dragStartScreen: NSPoint?
     private var dragStartOrigin: NSPoint?
 
@@ -116,26 +130,64 @@ final class BubbleChromeView: NSView {
         // Escape handled by panel key monitor; keep button clickable.
         closeButton.isBordered = false
         closeButton.target = self
-        closeButton.action = #selector(tapDismiss)
+        closeButton.action = #selector(tapClose)
 
         xButton.isBordered = false
         xButton.imagePosition = .imageOnly
         xButton.target = self
         xButton.action = #selector(tapDismiss)
 
-        editButton.isBordered = false
-        editButton.imagePosition = .imageOnly
-        editButton.toolTip = String(localized: "在全面板編輯")
+        editButton.bezelStyle = .rounded
         editButton.target = self
         editButton.action = #selector(tapEdit)
 
-        for v in [titleLabel, statusLabel, bodyLabel, translationLabel, spinner, replaceButton, rewriteButton, setupButton, closeButton, xButton, editButton] {
+        buttonRow.orientation = .horizontal
+        buttonRow.spacing = 8
+        buttonRow.alignment = .centerY
+        for button in [setupButton, replaceButton, editButton, rewriteButton, closeButton] {
+            buttonRow.addArrangedSubview(button)
+        }
+
+        // Plain text, and nothing typed is changed behind the user's back: what they write is
+        // what Replace writes and what is learned from.
+        editor.font = bodyLabel.font
+        editor.textColor = .labelColor
+        editor.isRichText = false
+        editor.allowsUndo = true
+        editor.isAutomaticQuoteSubstitutionEnabled = false
+        editor.isAutomaticDashSubstitutionEnabled = false
+        editor.isAutomaticTextReplacementEnabled = false
+        editor.isAutomaticSpellingCorrectionEnabled = false
+        editor.drawsBackground = true
+        editor.backgroundColor = .textBackgroundColor
+        // The scroll view sits 4 × 3 pt outside the body, so the text stays where the body showed it.
+        editor.textContainerInset = NSSize(width: 4, height: 3)
+        editor.textContainer?.lineFragmentPadding = 0
+        editor.textContainer?.containerSize = NSSize(width: 0, height: CGFloat.greatestFiniteMagnitude)
+        editor.textContainer?.widthTracksTextView = true
+        editor.isVerticallyResizable = true
+        editor.isHorizontallyResizable = false
+        editor.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
+        editor.autoresizingMask = [.width]
+        editor.delegate = self
+        editorScroll.documentView = editor
+        editorScroll.hasVerticalScroller = true
+        editorScroll.autohidesScrollers = true
+        editorScroll.scrollerStyle = .overlay
+        editorScroll.drawsBackground = false
+        editorScroll.wantsLayer = true
+        editorScroll.layer?.cornerRadius = 6
+        editorScroll.layer?.masksToBounds = true
+        editorScroll.isHidden = true
+
+        for v in [titleLabel, statusLabel, bodyLabel, editorScroll, translationLabel, spinner, buttonRow, xButton] {
             v.translatesAutoresizingMaskIntoConstraints = false
             card.addSubview(v)
         }
         card.translatesAutoresizingMaskIntoConstraints = false
 
         widthConstraint = card.widthAnchor.constraint(equalToConstant: 280)
+        bodyEditHeight = bodyLabel.heightAnchor.constraint(equalToConstant: 0)
 
         NSLayoutConstraint.activate([
             card.leadingAnchor.constraint(equalTo: leadingAnchor),
@@ -155,11 +207,6 @@ final class BubbleChromeView: NSView {
             xButton.widthAnchor.constraint(equalToConstant: 24),
             xButton.heightAnchor.constraint(equalToConstant: 24),
 
-            editButton.trailingAnchor.constraint(equalTo: xButton.leadingAnchor, constant: -2),
-            editButton.centerYAnchor.constraint(equalTo: titleLabel.centerYAnchor),
-            editButton.widthAnchor.constraint(equalToConstant: 24),
-            editButton.heightAnchor.constraint(equalToConstant: 24),
-
             statusLabel.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 14),
             statusLabel.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -14),
             statusLabel.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 6),
@@ -172,23 +219,28 @@ final class BubbleChromeView: NSView {
             translationLabel.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -14),
             translationLabel.topAnchor.constraint(equalTo: bodyLabel.bottomAnchor, constant: 6),
 
-            replaceButton.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 14),
-            replaceButton.topAnchor.constraint(equalTo: translationLabel.bottomAnchor, constant: 12),
-            replaceButton.bottomAnchor.constraint(equalTo: card.bottomAnchor, constant: -12),
+            buttonRow.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 14),
+            buttonRow.topAnchor.constraint(equalTo: translationLabel.bottomAnchor, constant: 12),
+            buttonRow.bottomAnchor.constraint(equalTo: card.bottomAnchor, constant: -12),
 
-            rewriteButton.leadingAnchor.constraint(equalTo: replaceButton.trailingAnchor, constant: 8),
-            rewriteButton.centerYAnchor.constraint(equalTo: replaceButton.centerYAnchor),
-
-            setupButton.leadingAnchor.constraint(equalTo: replaceButton.leadingAnchor),
-            setupButton.centerYAnchor.constraint(equalTo: replaceButton.centerYAnchor),
-
-            closeButton.leadingAnchor.constraint(equalTo: rewriteButton.trailingAnchor, constant: 8),
-            closeButton.centerYAnchor.constraint(equalTo: replaceButton.centerYAnchor),
+            editorScroll.leadingAnchor.constraint(equalTo: bodyLabel.leadingAnchor, constant: -4),
+            editorScroll.trailingAnchor.constraint(equalTo: bodyLabel.trailingAnchor, constant: 4),
+            editorScroll.topAnchor.constraint(equalTo: bodyLabel.topAnchor, constant: -3),
+            editorScroll.bottomAnchor.constraint(equalTo: bodyLabel.bottomAnchor, constant: 3),
 
         ])
     }
 
     func apply(viewModel: FloatingPanelViewModel) {
+        // A rewrite or another ⌥⌘K replaced the text under the editor: that edit is over. Typed text
+        // reaches `resultText` at once, so they differ only then (marked text is not committed yet).
+        if isEditing, viewModel.isStreaming || (!editor.hasMarkedText() && editor.string != viewModel.resultText) {
+            endEditing()
+        }
+        if viewModel.isStreaming {
+            editBaseline = nil
+        }
+
         titleLabel.stringValue = viewModel.modeTitle
 
         if let err = viewModel.errorMessage, !err.isEmpty {
@@ -228,6 +280,7 @@ final class BubbleChromeView: NSView {
             bodyLabel.textColor = .labelColor
         }
 
+        // While editing too: the view model translates the edited text as it is typed.
         if viewModel.isTranslating && viewModel.translationText.isEmpty {
             translationLabel.isHidden = false
             translationLabel.stringValue = String(localized: "翻譯中…")
@@ -240,21 +293,26 @@ final class BubbleChromeView: NSView {
         }
 
         let canReplace = !viewModel.resultText.isEmpty
-        replaceButton.title = String(localized: "取代 ⏎")
+        // While editing ⏎ is a new line (and commits Zhuyin / Pinyin), so Replace is ⌘⏎ and esc ends the edit.
+        replaceButton.title = isEditing ? String(localized: "取代 ⌘⏎") : String(localized: "取代 ⏎")
         // The same request would only come back unchanged again: R retries in the idiomatic tone.
         rewriteButton.title = viewModel.unchangedAdvice == .tryIdiomatic ? String(localized: "改用道地 R") : String(localized: "重寫 R")
-        closeButton.title = String(localized: "關閉 esc")
+        closeButton.title = isEditing ? String(localized: "結束編輯 esc") : String(localized: "關閉 esc")
         replaceButton.isEnabled = canReplace
         rewriteButton.isEnabled = !viewModel.originalText.isEmpty && !viewModel.isStreaming
-        editButton.isEnabled = viewModel.canEditInFullPanel
-        // Not set up yet: Replace / Rewrite have nothing to act on, so offer the way forward. The hidden
-        // buttons keep their layout slot, and the setup button sits in the same place.
+        editButton.isEnabled = canBeginEditing(viewModel)
+        // Not set up yet: Replace / Edit / Rewrite have nothing to act on, so offer the way forward.
+        // While editing only Replace and the end of the edit are left.
         setupButton.isHidden = !viewModel.needsLocalAISetup
         replaceButton.isHidden = viewModel.needsLocalAISetup
-        rewriteButton.isHidden = viewModel.needsLocalAISetup
+        editButton.isHidden = viewModel.needsLocalAISetup || !offersEditing || isEditing
+        rewriteButton.isHidden = viewModel.needsLocalAISetup || isEditing
 
-        // Compact width for short text; grow height (not width) as content wraps.
-        let targetWidth = Self.idealCardWidth(viewModel: viewModel)
+        // Compact width for short text; grow height (not width) as content wraps. While editing the
+        // width stays put, so the lines being typed do not rewrap under the caret.
+        let targetWidth = isEditing
+            ? widthConstraint.constant
+            : Self.idealCardWidth(viewModel: viewModel, showsEdit: !editButton.isHidden)
         if abs(widthConstraint.constant - targetWidth) > 0.5 {
             widthConstraint.constant = targetWidth
         }
@@ -265,7 +323,7 @@ final class BubbleChromeView: NSView {
         layoutSubtreeIfNeeded()
     }
 
-    private static func idealCardWidth(viewModel: FloatingPanelViewModel) -> CGFloat {
+    private static func idealCardWidth(viewModel: FloatingPanelViewModel, showsEdit: Bool) -> CGFloat {
         let maxWidth: CGFloat = 360
         let horizontalPad: CGFloat = 28
         let buttonFont = NSFont.systemFont(ofSize: 13)
@@ -290,20 +348,83 @@ final class BubbleChromeView: NSView {
         let transW = translation.isEmpty
             ? 0
             : (translation as NSString).size(withAttributes: [.font: transFont]).width
-        // Room beside the title for the spinner and the two icon buttons (edit, close).
+        // Room beside the title for the spinner and the close icon.
         let titleW = (viewModel.modeTitle as NSString)
-            .size(withAttributes: [.font: NSFont.systemFont(ofSize: 13, weight: .semibold)]).width + 72
+            .size(withAttributes: [.font: NSFont.systemFont(ofSize: 13, weight: .semibold)]).width + 48
 
-        // Buttons + gaps + side padding (~取代 ⏎ / 重寫 R / 關閉 esc).
+        // Buttons + gaps + side padding (~取代 ⏎ / 編輯 E / 重寫 R / 關閉 esc).
         let b1 = (String(localized: "取代 ⏎") as NSString).size(withAttributes: [.font: buttonFont]).width + 24
         let rewriteTitle = viewModel.unchangedAdvice == .tryIdiomatic ? String(localized: "改用道地 R") : String(localized: "重寫 R")
         let b2 = (rewriteTitle as NSString).size(withAttributes: [.font: buttonFont]).width + 24
         let b3 = (String(localized: "關閉 esc") as NSString).size(withAttributes: [.font: buttonFont]).width + 16
-        let buttonsW = b1 + 8 + b2 + 8 + b3 + horizontalPad
+        let bEdit = showsEdit ? (String(localized: "編輯 E") as NSString).size(withAttributes: [.font: buttonFont]).width + 24 + 8 : 0
+        let buttonsW = b1 + 8 + bEdit + b2 + 8 + b3 + horizontalPad
 
         let content = max(bodyW, transW, titleW) + horizontalPad
         let minWidth = max(240, ceil(buttonsW))
-        return min(maxWidth, max(minWidth, ceil(content)))
+        // The text wraps at `maxWidth`; the row of buttons may need more (about 410 pt in Portuguese).
+        return max(minWidth, min(maxWidth, ceil(content)))
+    }
+
+    /// Editing can start once a finished suggestion is on screen, or again after an edit emptied it.
+    func canBeginEditing(_ viewModel: FloatingPanelViewModel) -> Bool {
+        offersEditing && !viewModel.isStreaming && (viewModel.canEditResult || editBaseline != nil)
+    }
+
+    /// Where keys should land: the editor while editing, else this view (⏎ / R / esc).
+    var focusTarget: NSView { isEditing ? editor : self }
+
+    /// Zhuyin / Pinyin is composing: its keys (⏎ commits, esc cancels) belong to the input method,
+    /// and the uncommitted text must not be written.
+    var editorHasMarkedText: Bool { isEditing && editor.hasMarkedText() }
+
+    /// The body becomes an editor holding `text`, with the caret at the end.
+    func beginEditing(_ text: String) {
+        guard !isEditing else { return }
+        if editBaseline == nil {
+            editBaseline = text
+        }
+        isEditing = true
+        editor.string = text
+        // One window, one editor: undo must not reach into an earlier suggestion's edit.
+        editor.undoManager?.removeAllActions()
+        bodyLabel.isHidden = true
+        editorScroll.isHidden = false
+        bodyEditHeight.constant = bodyLabel.frame.height
+        bodyEditHeight.isActive = true
+        layoutSubtreeIfNeeded()
+        fitEditorHeight()
+        window?.makeFirstResponder(editor)
+        let end = NSRange(location: (text as NSString).length, length: 0)
+        editor.setSelectedRange(end)
+        editor.scrollRangeToVisible(end)
+    }
+
+    /// Back to the read-only body; what was typed stays the result.
+    func endEditing() {
+        guard isEditing else { return }
+        isEditing = false
+        bodyEditHeight.isActive = false
+        editorScroll.isHidden = true
+        bodyLabel.isHidden = false
+        if window?.firstResponder === editor {
+            window?.makeFirstResponder(self)
+        }
+    }
+
+    /// A new suggestion or a closed bubble: nothing of the last edit carries over.
+    func resetEditing() {
+        endEditing()
+        editBaseline = nil
+    }
+
+    /// The hidden body gives the editor the height of its text, one line to twelve; past that the
+    /// editor scrolls.
+    private func fitEditorHeight() {
+        guard let layout = editor.layoutManager, let container = editor.textContainer else { return }
+        layout.ensureLayout(for: container)
+        let line = layout.defaultLineHeight(for: editor.font ?? .systemFont(ofSize: 14))
+        bodyEditHeight.constant = min(max(layout.usedRect(for: container).height, line), line * 12)
     }
 
     @objc private func tapReplace() {
@@ -326,11 +447,21 @@ final class BubbleChromeView: NSView {
         onDismiss?()
     }
 
+    /// The button beside Replace: ends the edit while editing, else closes the bubble.
+    @objc private func tapClose() {
+        if isEditing {
+            onEndEditing?()
+        } else {
+            onDismiss?()
+        }
+    }
+
 
     private func isControlHit(_ view: NSView?) -> Bool {
         var v: NSView? = view
         while let cur = v {
-            if cur is NSButton || cur is NSControl { return true }
+            // The editor's margins too: a press there is not the start of a drag.
+            if cur is NSButton || cur is NSControl || cur is NSText || cur is NSScrollView { return true }
             v = cur.superview
         }
         return false
@@ -374,6 +505,15 @@ final class BubbleChromeView: NSView {
     }
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+}
+
+extension BubbleChromeView: NSTextViewDelegate {
+    func textDidChange(_ notification: Notification) {
+        // Leaving the editor can commit marked text: that is not an edit of the result any more.
+        guard isEditing else { return }
+        fitEditorHeight()
+        onTextEdited?(editor.string)
+    }
 }
 
 private extension TranslationLanguage {

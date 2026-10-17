@@ -22,6 +22,9 @@
 "取代 ⏎" = "Substituir ⏎";
 "重寫 R" = "Reescrever R";
 "關閉 esc" = "Fechar esc";
+"編輯 E" = "Editar E";
+"取代 ⌘⏎" = "Substituir ⌘⏎";
+"結束編輯 esc" = "Concluir esc";
 "ChatGPT 判定為異常流量（403）。請改走 App 內 WebView 連線，或稍後重試／重新登入。" = "O ChatGPT considerou o tráfego incomum (403). Use a conexão por WebView dentro do app, ou tente novamente mais tarde / inicie a sessão de novo.";
 "登入 ChatGPT（非官方）" = "Iniciar Sessão no ChatGPT (Não Oficial)";
 "請登入你的 ChatGPT Plus／Pro 帳戶。看到聊天畫面後，若沒有自動關閉，按下方「完成登入」。此為非官方 session。" = "Inicie a sessão na sua conta ChatGPT Plus/Pro. Quando a tela de conversa aparecer, clique em “Concluir Início de Sessão” abaixo se esta janela não fechar sozinha. Esta é uma sessão não oficial.";
@@ -255,7 +258,6 @@
 "編輯這條記憶" = "Editar Esta Memória";
 "最多 %lld 字" = "Até %lld caracteres";
 "管理記憶…" = "Gerenciar Memórias…";
-"在全面板編輯" = "Editar no Painel Completo";
 "作夢" = "Sonhando";
 "上次作夢" = "Último sonho";
 "尚未作夢" = "Nenhum sonho ainda";

@@ -182,13 +182,75 @@ final class ReplaceDecisionTests: XCTestCase {
         XCTAssertEqual(ReplaceDecision.first(restored), .perform(.setSelectedText))
     }
 
+    func testRichTextIsWrittenOnlyWhereTheSuggestionChangesIt() {
+        let snapshot = snapshot(
+            field: "Hi @Davis Lin this is aa pen. Thanks",
+            original: "@Davis Lin this is aa pen.",
+            newText: "@Davis Lin this is a pen.",
+            isRichText: true
+        )
+        XCTAssertEqual(
+            ReplaceDecision.first(snapshot),
+            .perform(.replaceSpans([ReplaceSpan(location: 22, old: "aa", new: "a")], caret: 28))
+        )
+    }
+
+    func testRichTextNeverHasItsWholeValueWritten() {
+        for rangeRestored in [false, true] {
+            for field in ["prefix snippet suffix", "snippet", "snippet and snippet"] {
+                let snapshot = snapshot(
+                    field: field, original: "snippet", newText: "fixed",
+                    rangeRestored: rangeRestored, isRichText: true
+                )
+                var directive = ReplaceDecision.first(snapshot)
+                for _ in 0..<6 {
+                    guard case .perform(let attempt) = directive else { break }
+                    if case .setFieldValue = attempt {
+                        return XCTFail("whole-value write on a rich-text field \(field)")
+                    }
+                    directive = ReplaceDecision.afterAXWriteFailed(attempt, snapshot)
+                }
+            }
+        }
+    }
+
+    func testRichTextSpansThatDoNotReadBackFallBackToAPasteOverTheCheckedSelection() {
+        let attempt = ReplaceAttempt.replaceSpans([ReplaceSpan(location: 7, old: "snippet", new: "fixed")], caret: 12)
+        let restored = snapshot(
+            field: "prefix snippet suffix", original: "snippet", newText: "fixed",
+            rangeRestored: true, isRichText: true
+        )
+        XCTAssertEqual(ReplaceDecision.afterAXWriteFailed(attempt, restored), .perform(.pasteIntoRestoredSelection))
+        let whole = snapshot(field: "snippet", original: "snippet", newText: "fixed", isRichText: true)
+        XCTAssertEqual(ReplaceDecision.afterAXWriteFailed(attempt, whole), .perform(.selectAllAndPaste))
+        let neither = snapshot(field: "prefix snippet suffix", original: "snippet", newText: "fixed", isRichText: true)
+        XCTAssertEqual(ReplaceDecision.afterAXWriteFailed(attempt, neither), .failure(.notWholeField))
+    }
+
+    func testRichTextPiecesThatReadBackConfirmTheWriteDespiteAStaleFieldValue() {
+        XCTAssertEqual(
+            ReplaceDecision.afterSpans(
+                piecesReadBack: true, fieldBefore: "this is aa pen.", fieldAfter: nil, newText: "this is a pen."
+            ),
+            .success
+        )
+        XCTAssertEqual(
+            ReplaceDecision.afterSpans(
+                piecesReadBack: false, fieldBefore: "this is aa pen.", fieldAfter: "this is aa pen.",
+                newText: "this is a pen."
+            ),
+            .failure(.unverified)
+        )
+    }
+
     private func snapshot(
         field: String?,
         original: String,
         newText: String,
         hasCapture: Bool = true,
         sourceFrontmost: Bool = true,
-        rangeRestored: Bool = false
+        rangeRestored: Bool = false,
+        isRichText: Bool = false
     ) -> ReplaceSnapshot {
         ReplaceSnapshot(
             hasCapture: hasCapture,
@@ -198,7 +260,8 @@ final class ReplaceDecisionTests: XCTestCase {
             original: original,
             newText: newText,
             rangeRestored: rangeRestored,
-            liveSelectedText: nil
+            liveSelectedText: nil,
+            isRichText: isRichText
         )
     }
 }

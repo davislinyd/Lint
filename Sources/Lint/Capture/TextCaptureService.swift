@@ -259,7 +259,8 @@ final class TextCaptureService {
             newText: newText,
             rangeRestored: false,
             // The selection of the element that will be written, not of whatever else has focus now.
-            liveSelectedText: element.flatMap { Self.readStringAttribute($0, kAXSelectedTextAttribute as String) }
+            liveSelectedText: element.flatMap { Self.readStringAttribute($0, kAXSelectedTextAttribute as String) },
+            isRichText: element.map(Self.isRichText) ?? false
         )
         var directive = ReplaceDecision.first(snapshot)
         directive = restoreRangeIfRefused(&snapshot, element: element, range: last.selectedRange, directive: directive)
@@ -281,6 +282,7 @@ final class TextCaptureService {
                     snapshot.fieldValue = Self.readStringAttribute(focused, kAXValueAttribute as String)
                     snapshot.rangeRestored = false
                     snapshot.liveSelectedText = Self.readAXSelectedText()?.text
+                    snapshot.isRichText = Self.isRichText(focused)
                     directive = ReplaceDecision.first(snapshot)
                     directive = restoreRangeIfRefused(
                         &snapshot, element: element, range: last.selectedRange, directive: directive
@@ -332,6 +334,34 @@ final class TextCaptureService {
         if let previous { _ = setSelectedRange(element, previous) }
         log("replace restored range does not read as the original")
         return false
+    }
+
+    /// Select `text.utf16.count` characters at `location` until the field reports them as `text`. Chromium
+    /// applies a selection, and the text of a paste, a moment later, so the selection is set again each time.
+    private static func select(_ text: String, at location: Int, on element: AXUIElement) async -> Bool {
+        let range = CFRange(location: location, length: text.utf16.count)
+        for _ in 0..<10 {
+            guard setSelectedRange(element, range) else { return false }
+            try? await Task.sleep(for: .milliseconds(50))
+            if readStringAttribute(element, kAXSelectedTextAttribute as String) == text { return true }
+        }
+        return false
+    }
+
+    /// A deletion leaves the caret where the piece was.
+    private static func caretSettles(at location: Int, on element: AXUIElement) async -> Bool {
+        for _ in 0..<10 {
+            if let range = readSelectedRange(element), range.location == location, range.length == 0 { return true }
+            try? await Task.sleep(for: .milliseconds(50))
+        }
+        return false
+    }
+
+    /// A web contenteditable exposes its content as children; Chromium's `<input>` and `<textarea>` are leaves.
+    private static func isRichText(_ element: AXUIElement) -> Bool {
+        var count: CFIndex = 0
+        return AXUIElementGetAttributeValueCount(element, kAXChildrenAttribute as CFString, &count) == .success
+            && count > 0
     }
 
     /// The field value after a write. Chromium updates its accessibility tree a moment after an AX write,
@@ -386,6 +416,67 @@ final class TextCaptureService {
                 snapshot.rangeRestored = true
             }
             return ReplaceDecision.afterAXWriteFailed(attempt, snapshot)
+        case .replaceSpans(let spans, let caret):
+            guard let element else { return ReplaceDecision.afterAXWriteFailed(attempt, snapshot) }
+            Self.log("replace spans count=\(spans.count)")
+            // The keys go to whatever has keyboard focus. In Claude's browser pane it is elsewhere until the field
+            // is focused through Accessibility; if it still is, nothing is written.
+            if !Self.sameElement(element, Self.focusedElement()) {
+                AXUIElementSetAttributeValue(element, kAXFocusedAttribute as CFString, kCFBooleanTrue)
+                try? await Task.sleep(for: .milliseconds(150))
+                guard Self.sameElement(element, Self.focusedElement()) else {
+                    Self.log("replace span refused: keyboard focus is not on the field")
+                    return .failure(.sourceNotFrontmost)
+                }
+            }
+            // Check every piece before writing any, so a mismatch leaves the field untouched.
+            let previous = Self.readSelectedRange(element)
+            for (index, span) in spans.enumerated()
+            where !(await Self.select(span.old, at: span.location, on: element)) {
+                Self.log("replace span \(index + 1)/\(spans.count) does not read as the original")
+                if let previous { Self.setSelectedRange(element, previous) }
+                if !snapshot.rangeRestored, let range,
+                   Self.restoreRange(range, on: element, original: snapshot.original) {
+                    snapshot.rangeRestored = true
+                }
+                return ReplaceDecision.afterAXWriteFailed(attempt, snapshot)
+            }
+            // The editor gets a paste or a delete key. Chromium reports AXSelectedText as settable and a write
+            // to it as a success, but ignores it. Each piece is read again after its write.
+            var piecesReadBack = true
+            for (index, span) in spans.enumerated() {
+                guard await Self.select(span.old, at: span.location, on: element) else {
+                    Self.log("replace span \(index + 1)/\(spans.count) changed before its write")
+                    return .failure(.unverified)
+                }
+                let written: Bool
+                if span.new.isEmpty {
+                    Self.postHotkey(keyCode: 51, flags: []) // Delete: removes the selection
+                    written = await Self.caretSettles(at: span.location, on: element)
+                } else {
+                    await pasteViaClipboard(span.new)
+                    written = await Self.select(span.new, at: span.location, on: element)
+                }
+                piecesReadBack = piecesReadBack && written
+            }
+            Self.setSelectedRange(element, CFRange(location: caret, length: 0))
+            let after = piecesReadBack ? nil : await Self.readBack(element, newText: snapshot.newText)
+            let result = ReplaceDecision.afterSpans(
+                piecesReadBack: piecesReadBack,
+                fieldBefore: snapshot.fieldValue, fieldAfter: after, newText: snapshot.newText
+            )
+            if result != .success {
+                let focused = Self.focusedElement()
+                let focusedValue = focused.flatMap { Self.readStringAttribute($0, kAXValueAttribute as String) }
+                let expected = (snapshot.fieldValue?.utf16.count ?? 0)
+                    - snapshot.original.utf16.count + snapshot.newText.utf16.count
+                Self.log(
+                    "replace span readback chars=\(after.map { String($0.utf16.count) } ?? "unreadable") "
+                        + "expected=\(expected) focusSame=\(Self.sameElement(element, focused)) "
+                        + "focusedHasNew=\(focusedValue?.contains(snapshot.newText) == true)"
+                )
+            }
+            return result
         case .setSelectedText:
             guard let element else { return ReplaceDecision.afterAXWriteFailed(attempt, snapshot) }
             let err = AXUIElementSetAttributeValue(
@@ -500,6 +591,7 @@ final class TextCaptureService {
     private static func attemptName(_ attempt: ReplaceAttempt) -> String {
         switch attempt {
         case .setFieldValue: "setFieldValue"
+        case .replaceSpans: "replaceSpans"
         case .setSelectedText: "setSelectedText"
         case .pasteIntoRestoredSelection: "pasteIntoRestoredSelection"
         case .selectAllAndPaste: "selectAllAndPaste"

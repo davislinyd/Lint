@@ -8,6 +8,9 @@ import Foundation
 public enum ReplaceAttempt: Equatable, Sendable {
     /// Replace the one occurrence of the original snippet in the field value.
     case setFieldValue(String)
+    /// Rich text: select and write only the changed pieces of the one occurrence, last first, then put
+    /// the caret at `caret`, the end of the corrected snippet.
+    case replaceSpans([ReplaceSpan], caret: Int)
     case setSelectedText
     case pasteIntoRestoredSelection
     case selectAllAndPaste
@@ -49,6 +52,9 @@ public struct ReplaceSnapshot: Equatable, Sendable {
     /// `true` only when the captured range was selected again and that selection reads as the original.
     public var rangeRestored: Bool
     public var liveSelectedText: String?
+    /// The field holds rich text (a web contenteditable). Writing its whole value would flatten mentions,
+    /// links and formatting, and Chromium does it behind the editor's back, so the editor falls out of step.
+    public var isRichText: Bool
 
     public init(
         hasCapture: Bool,
@@ -58,7 +64,8 @@ public struct ReplaceSnapshot: Equatable, Sendable {
         original: String,
         newText: String,
         rangeRestored: Bool,
-        liveSelectedText: String?
+        liveSelectedText: String?,
+        isRichText: Bool
     ) {
         self.hasCapture = hasCapture
         self.sourceFrontmost = sourceFrontmost
@@ -68,6 +75,7 @@ public struct ReplaceSnapshot: Equatable, Sendable {
         self.newText = newText
         self.rangeRestored = rangeRestored
         self.liveSelectedText = liveSelectedText
+        self.isRichText = isRichText
     }
 }
 
@@ -86,6 +94,14 @@ public enum ReplaceDecision {
         switch attempt {
         case .setFieldValue:
             if canTargetSelection(snapshot) { return .perform(.setSelectedText) }
+            if let field = snapshot.fieldValue, allowsSelectAll(field: field, original: snapshot.original) {
+                return .perform(.selectAllAndPaste)
+            }
+            return .failure(.notWholeField)
+        case .replaceSpans:
+            // Nothing was written: the pieces did not read back. Paste over the checked selection instead;
+            // a rich-text field never gets its whole value written.
+            if canTargetSelection(snapshot) { return .perform(.pasteIntoRestoredSelection) }
             if let field = snapshot.fieldValue, allowsSelectAll(field: field, original: snapshot.original) {
                 return .perform(.selectAllAndPaste)
             }
@@ -109,6 +125,14 @@ public enum ReplaceDecision {
 
     public static func afterPaste(fieldBefore: String?, fieldAfter: String?, newText: String) -> ReplaceDirective {
         afterWrite(fieldBefore: fieldBefore, fieldAfter: fieldAfter, newText: newText)
+    }
+
+    /// Rich text: every piece read as its new text right after its write. Chromium can keep reporting a
+    /// contenteditable's old value after an edit, so the field value decides only when a piece did not.
+    public static func afterSpans(
+        piecesReadBack: Bool, fieldBefore: String?, fieldAfter: String?, newText: String
+    ) -> ReplaceDirective {
+        piecesReadBack ? .success : afterWrite(fieldBefore: fieldBefore, fieldAfter: fieldAfter, newText: newText)
     }
 
     /// A field that can be read after the write has to show the new text. One that could not be read
@@ -145,6 +169,11 @@ public enum ReplaceDecision {
 
     private static func edit(_ snapshot: ReplaceSnapshot) -> ReplaceDirective {
         if let field = snapshot.fieldValue {
+            if snapshot.isRichText, let range = singleOccurrence(field, of: snapshot.original) {
+                let base = field.utf16.distance(from: field.utf16.startIndex, to: range.lowerBound)
+                let spans = ReplaceSpans.spans(original: snapshot.original, newText: snapshot.newText, base: base)
+                return .perform(.replaceSpans(spans, caret: base + snapshot.newText.utf16.count))
+            }
             if let updated = replacingSingle(field, original: snapshot.original, with: snapshot.newText) {
                 return .perform(.setFieldValue(updated))
             }
@@ -166,9 +195,13 @@ public enum ReplaceDecision {
         snapshot.rangeRestored || liveMatches(snapshot.liveSelectedText, original: snapshot.original)
     }
 
+    private static func singleOccurrence(_ field: String, of original: String) -> Range<String.Index>? {
+        guard occurrenceCount(field, of: original) == 1 else { return nil }
+        return field.range(of: original)
+    }
+
     private static func replacingSingle(_ field: String, original: String, with newText: String) -> String? {
-        guard occurrenceCount(field, of: original) == 1, let range = field.range(of: original) else { return nil }
-        return field.replacingCharacters(in: range, with: newText)
+        singleOccurrence(field, of: original).map { field.replacingCharacters(in: $0, with: newText) }
     }
 
     private static func occurrenceCount(_ field: String, of original: String) -> Int {

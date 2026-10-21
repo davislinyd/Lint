@@ -180,7 +180,7 @@
       <figure class="hero-shot">
         <a class="shot en" href="assets/guide/en/bubble.png" target="_blank" rel="noopener"><img src="assets/guide/en/bubble.png" alt="The Lint suggestion bubble next to a selected sentence" width="872" height="604"></a>
         <a class="shot zh" href="assets/guide/zh/bubble.png" target="_blank" rel="noopener"><img src="assets/guide/zh/bubble.png" alt="選取的句子旁出現 Lint 的建議浮窗" width="872" height="604" loading="lazy"></a>
-        <figcaption><span class="en"><span class="kbd-inline">⌥⌘K</span> shows a suggestion right where you are writing, with a reference translation below it.</span><span class="zh"><span class="kbd-inline">⌥⌘K</span> 在你寫字的地方直接顯示建議，下方附上參考譯文。</span></figcaption>
+        <figcaption><span class="en"><span class="kbd-inline">⌥⌘K</span> shows a suggestion right where you are writing, with a reference translation below it. Press <span class="kbd-inline">E</span> to edit it there before you replace your text.</span><span class="zh"><span class="kbd-inline">⌥⌘K</span> 在你寫字的地方直接顯示建議，下方附上參考譯文。按 <span class="kbd-inline">E</span> 可以先在浮窗裡修改，再取代原文。</span></figcaption>
       </figure>
     </div>
   </section>
@@ -206,8 +206,8 @@
         </li>
         <li>
           <span class="step-num">4</span>
-          <p class="en">Replace your text, or copy the result</p>
-          <p class="zh">取代原文，或複製結果</p>
+          <p class="en">Replace your text, edit the suggestion first, or copy the result</p>
+          <p class="zh">取代原文、先修改建議再取代，或複製結果</p>
         </li>
       </ol>
     </div>
@@ -219,8 +219,8 @@
         <h2><span class="en">Every change, side by side</span><span class="zh">每一處修改，並排比對</span></h2>
         <p class="en"><span class="kbd-inline">⌥⌘L</span> opens a panel with your text on the left and the suggestion on the right, every change marked. Edit either side, replace the original, copy it, or ask again.</p>
         <p class="zh"><span class="kbd-inline">⌥⌘L</span> 打開雙欄面板，左邊是原文，右邊是建議，每一處修改都標出來。兩邊都能編輯，可以取代原文、複製，或重新產生。</p>
-        <p class="en"><strong>Proofread &amp; polish</strong> fixes grammar, wrong words and spelling, and keeps correct wording, names, numbers and your layout. Pick a tone: Preserve Tone, Idiomatic, Formal, Casual or Concise.</p>
-        <p class="zh"><strong>「文法校對與潤飾」</strong>修正文法、用錯的字與拼字，保留正確的用字、人名、數字與版面。語氣可選保留原語氣、「道地」、正式、輕鬆或簡潔。</p>
+        <p class="en"><strong>Proofread &amp; polish</strong> fixes grammar, wrong words and spelling, and keeps correct wording, names, numbers and your layout. Pick a tone: Idiomatic (the default), Preserve Tone, Formal, Casual or Concise. Idiomatic also rewrites English a native speaker would not write and untangles a sentence put together wrong, while keeping your voice. When nothing needs changing, Lint says so.</p>
+        <p class="zh"><strong>「文法校對與潤飾」</strong>修正文法、用錯的字與拼字，保留正確的用字、人名、數字與版面。語氣可選「道地」（預設）、保留原語氣、正式、輕鬆或簡潔。「道地」也會改寫母語者不會這樣說的英文，並把組得不對的句子理順，同時保留你的語氣。不需要修改時，Lint 會直接告訴你。</p>
         <p class="en"><strong>Write it in Chinese</strong> when you know what you mean but not how to say it: Idiomatic, Formal, Casual and Concise say it the way a native English speaker would, always in English. 「抱歉，這個需求我們這季排不進去，下季再評估看看。」 becomes “Sorry, we can't fit this request into this quarter. Let's reassess it next quarter.” Text that mixes Chinese and English is written all in English or keeps its Chinese, as you choose in Settings.</p>
         <p class="zh"><strong>直接寫中文</strong>：知道想說什麼、卻不知道英文怎麼說的時候，「道地」「正式」「輕鬆」「簡潔」會用英語母語者會說的方式寫成英文。「抱歉，這個需求我們這季排不進去，下季再評估看看。」會變成 “Sorry, we can't fit this request into this quarter. Let's reassess it next quarter.”。中英夾雜的文字要整段寫成英文還是保留中文，可在設定中選擇。</p>
       </div>
@@ -255,11 +255,13 @@
           <li>Or point Lint at an OpenAI-compatible endpoint such as Ollama or LM Studio.</li>
           <li>The local server only listens on 127.0.0.1, and API keys are kept in the Keychain.</li>
           <li>Switch models and start or stop the server right from the menu bar; its icon shows whether the model is loaded.</li>
+          <li>The menu also shows the CPU and memory Lint and its model use, counted as Activity Monitor does.</li>
         </ul>
         <ul class="ticks zh">
           <li>也可以改接 Ollama、LM Studio 等 OpenAI 相容端點。</li>
           <li>本機服務只監聽 127.0.0.1，API Key 存在鑰匙圈。</li>
           <li>在選單列就能切換模型、啟動或停止服務；圖示會顯示模型是否已載入。</li>
+          <li>選單也會顯示 Lint 與模型用了多少 CPU 和記憶體，算法與活動監視器相同。</li>
         </ul>
       </div>
       <figure>
@@ -275,15 +277,17 @@
         <h2><span class="en">Memory and dreaming, if you want them</span><span class="zh">記憶與作夢，想用再開</span></h2>
         <p class="en">Turn on Settings → Memory and Lint writes down the writing habits you keep correcting, such as a word you often misspell, as short rules, and reminds the model of them from the next suggestion on. While it dreams, it forgets the ones that don't come back. It is off by default.</p>
         <p class="zh">在「設定 → 記憶」開啟後，Lint 會把你反覆修正的寫作習慣（例如常拼錯的字）記成簡短規則，下一次建議就開始提醒模型；作夢時會忘掉沒再出現的。預設關閉。</p>
+        <p class="en">Add <strong>Observation Mode</strong> and Lint follows a suggestion to the text you actually send: it learns what you want left alone and your own way of writing, goes quiet in an app where you never use its suggestions, and uses the tone you favor in each app.</p>
+        <p class="zh">再開啟<strong>「觀察模式」</strong>，Lint 會一路看到你實際送出的文字：學會哪些地方你不想被改、你自己的寫法，在從不採用建議的 App 裡安靜下來，並在各 App 改用你常用的語氣。</p>
         <ul class="ticks en">
           <li>Everything stays on your Mac, in a database only you can read.</li>
-          <li>Only abstracted rules are kept, never the text around them.</li>
-          <li>Every memory can be read, pinned, disabled or deleted.</li>
+          <li>Only abstracted rules are kept, never the text around them; observed text is only compared in memory.</li>
+          <li>Every memory and per-app adjustment can be read and removed.</li>
         </ul>
         <ul class="ticks zh">
           <li>全部只存在你的 Mac，資料庫只有你本人可讀。</li>
-          <li>只保存抽象後的規則，不保存周圍的文字。</li>
-          <li>每一條記憶都能查看、釘選、停用或刪除。</li>
+          <li>只保存抽象後的規則，不保存周圍的文字；觀察到的文字只在記憶體裡比對。</li>
+          <li>每一條記憶與各 App 的調整都能查看與移除。</li>
         </ul>
       </div>
       <figure>
@@ -349,8 +353,8 @@
         </article>
         <article class="feature-card">
           <h3><span class="en">Replace that stays careful</span><span class="zh">謹慎的取代</span></h3>
-          <p class="en">Replace writes only over the text Lint checked. If that text changed in the meantime, Lint leaves your field alone.</p>
-          <p class="zh">取代只會寫在 Lint 檢查過的那段原文上；原文若在這之間被改動，Lint 就不動你的輸入框。</p>
+          <p class="en">Replace writes only over the text Lint checked. If that text changed in the meantime, Lint leaves your field alone. In a rich-text field in a browser or an Electron app, only the changed words are written, so mentions, links and formatting stay.</p>
+          <p class="zh">取代只會寫在 Lint 檢查過的那段原文上；原文若在這之間被改動，Lint 就不動你的輸入框。在瀏覽器或 Electron App 的富文字輸入框裡，只會改寫有變動的字，提及、連結與格式都會保留。</p>
         </article>
         <article class="feature-card">
           <h3><span class="en">Your own shortcuts and prompts</span><span class="zh">自訂快捷鍵與提示詞</span></h3>

@@ -488,6 +488,10 @@
 "啟動服務" = "Mulai Server";
 "停止服務" = "Hentikan Server";
 "重新啟動服務" = "Mulai Ulang Server";
+"Lint：CPU %@・記憶體 %@" = "Lint: CPU %@ · Memori %@";
+"AI 模型：CPU %@・記憶體 %@" = "Model AI: CPU %@ · Memori %@";
+"AI 模型：未執行" = "Model AI: Tidak berjalan";
+"模型檔 %@" = "Berkas model %@";
 "診斷" = "Diagnostik";
 "診斷記錄…" = "Log Diagnostik…";
 "記錄" = "Log";

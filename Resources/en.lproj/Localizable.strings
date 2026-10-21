@@ -488,6 +488,10 @@
 "啟動服務" = "Start Server";
 "停止服務" = "Stop Server";
 "重新啟動服務" = "Restart Server";
+"Lint：CPU %@・記憶體 %@" = "Lint: CPU %@ · Memory %@";
+"AI 模型：CPU %@・記憶體 %@" = "AI model: CPU %@ · Memory %@";
+"AI 模型：未執行" = "AI model: Not running";
+"模型檔 %@" = "Model file %@";
 "診斷" = "Diagnostics";
 "診斷記錄…" = "Diagnostic Log…";
 "記錄" = "Log";

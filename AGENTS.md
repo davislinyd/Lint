@@ -13,6 +13,24 @@ Rules for coding agents working in this repository. The human runbook for releas
 - No script may use Homebrew; the install path (`install.sh`, `fetch-llama-runtime.sh`, `sign-llama-runtime.sh`,
   `package-app.sh`) must not need `.git`.
 
+## Sensitive data: everything pushed is public
+
+The repository, its GitHub Pages site and its Releases are public. Files, commit messages, PR and issue text,
+release notes, screenshots and Actions logs are published the moment they are pushed, and a pushed commit cannot
+be taken back without rewriting history and deleting releases.
+
+- Never commit keys, certificates (`.p8`, `.p12`), passwords, tokens, notarization credentials, `.env` files or
+  signing material; they belong in the keychain or in GitHub secrets.
+- Names: the maintainer appears only as `Davis Lin`. Never write the maintainer's or anyone's Chinese (or other
+  non-Latin) real name, and no other real person's name, handle, email, phone number, address or ID number. Use
+  made-up names (Alice, Bob, `example.com`) in code, tests, fixtures, eval data and screenshots.
+- No real chats, emails, documents or work content, and nothing about an employer's internal matters. Test, eval
+  and screenshot text is written for this repository.
+- No `/Users/<name>` paths, private links (such as claude.ai session URLs), local logs or diagnostics from the
+  maintainer's Mac. Look at the whole screenshot (menu bar, notifications, file names, other apps) before adding it.
+- Before every push, read the diff and the commit messages for the above. If something like this is already
+  pushed, stop and tell the user; do not rewrite history or delete releases on your own.
+
 ## `dist/` is not scratch space
 
 `dist/Lint.app` and `dist/release/` hold builds the maintainer keeps. Do not delete or regenerate them unless

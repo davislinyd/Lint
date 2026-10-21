@@ -13,3 +13,4 @@ dist/
 # Internal handoff notes (contain personal signing info)
 HANDOFF.md
 docs/DEVLOG.md
+.octopulse

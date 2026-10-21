@@ -10,6 +10,15 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private var wasStreaming = false
     /// The menu's first row, kept so its title follows a download while the menu is open.
     private weak var statusRow: NSMenuItem?
+    /// The CPU and memory rows, kept so they follow the readings while the menu is open.
+    private weak var lintUsageRow: NSMenuItem?
+    private weak var modelUsageRow: NSMenuItem?
+    private weak var modelFileRow: NSMenuItem?
+    private var usageTask: Task<Void, Never>?
+    /// The previous reading per process: CPU use is the time it got between two readings.
+    private var lastSamples: [pid_t: ProcessResourceSample] = [:]
+    /// A server Lint attached to instead of launching, looked up once each time the menu opens.
+    private var attachedServerPID: Int32?
 
     init(app: AppModel) {
         self.app = app
@@ -26,9 +35,68 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     }
 
     func menuNeedsUpdate(_ menu: NSMenu) {
+        // A reading from the last time the menu was open would average the CPU over all that time.
+        lastSamples = [:]
+        attachedServerPID = nil
         rebuild()
+        lookUpAttachedServer()
         if app.localModelActivity != nil {
             Task { await app.localAI.refreshServerActivity() }
+        }
+    }
+
+    func menuWillOpen(_ menu: NSMenu) {
+        usageTask?.cancel()
+        usageTask = Task { [weak self] in
+            while (try? await Task.sleep(for: .seconds(1))) != nil {
+                self?.refreshUsage()
+            }
+        }
+    }
+
+    func menuDidClose(_ menu: NSMenu) {
+        usageTask?.cancel()
+        usageTask = nil
+    }
+
+    /// Puts Lint's and its model's latest CPU and memory in their rows.
+    private func refreshUsage() {
+        if let lint = usage(of: getpid()) {
+            lintUsageRow?.title = String(localized: "Lint：CPU \(lint.cpu)・記憶體 \(lint.memory)")
+        }
+        guard let modelUsageRow else { return }
+        if let pid = LocalLlamaServerManager.shared.runningPID ?? attachedServerPID, let model = usage(of: pid) {
+            modelUsageRow.title = String(localized: "AI 模型：CPU \(model.cpu)・記憶體 \(model.memory)")
+        } else {
+            modelUsageRow.title = String(localized: "AI 模型：未執行")
+        }
+        // An idle model has released its weights.
+        modelFileRow?.isHidden = app.localAI.activity != .running
+    }
+
+    /// `pid`'s CPU since the previous reading (— until there is one) and its memory, as Activity Monitor
+    /// shows them; nil when the process is gone.
+    private func usage(of pid: pid_t) -> (cpu: String, memory: String)? {
+        guard let sample = ProcessResourceSample.read(pid: pid) else { return nil }
+        let cpu = lastSamples[pid].flatMap(sample.cpuPercent(since:))
+        lastSamples[pid] = sample
+        return (
+            cpu.map { "\($0.formatted(.number.precision(.fractionLength(1))))%" } ?? "—",
+            ByteCountFormatter.string(fromByteCount: Int64(sample.footprint), countStyle: .memory)
+        )
+    }
+
+    /// The server requests go to when Lint did not launch it (one started in Terminal, or left running
+    /// by an earlier Lint): found by its port, off the main thread since that runs `lsof`.
+    private func lookUpAttachedServer() {
+        guard modelUsageRow != nil, LocalLlamaServerManager.shared.runningPID == nil,
+              case .running = app.localAI.serverStatus
+        else { return }
+        let port = app.localAI.configuration.port
+        Task { [weak self] in
+            let pid = await Task.detached { LocalLlamaServerManager.listeningPIDs(on: port).first }.value
+            self?.attachedServerPID = pid
+            self?.refreshUsage()
         }
     }
 
@@ -300,6 +368,30 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             setup.target = self
             menu.addItem(setup)
         }
+
+        menu.addItem(.separator())
+        let lintUsage = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+        lintUsage.isEnabled = false
+        menu.addItem(lintUsage)
+        lintUsageRow = lintUsage
+        modelUsageRow = nil
+        modelFileRow = nil
+        if app.writingRoute == .provider(.localLlama) {
+            let modelUsage = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+            modelUsage.isEnabled = false
+            menu.addItem(modelUsage)
+            modelUsageRow = modelUsage
+            // The weights are a file mapping the GPU reads, so they are not in the memory above.
+            let configuration = app.localAI.configuration
+            if configuration.modelSource == .managed, let size = configuration.managedModel.totalBytes {
+                let file = NSMenuItem(title: String(localized: "模型檔 \(ModelInstallError.formatBytes(size))"), action: nil, keyEquivalent: "")
+                file.isEnabled = false
+                file.indentationLevel = 1
+                menu.addItem(file)
+                modelFileRow = file
+            }
+        }
+        refreshUsage()
 
         menu.addItem(.separator())
         let check = NSMenuItem(title: String(localized: "檢查更新…"), action: #selector(checkForUpdates), keyEquivalent: "")

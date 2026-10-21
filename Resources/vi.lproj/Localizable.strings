@@ -488,6 +488,10 @@
 "啟動服務" = "Khởi động máy chủ";
 "停止服務" = "Dừng máy chủ";
 "重新啟動服務" = "Khởi động lại máy chủ";
+"Lint：CPU %@・記憶體 %@" = "Lint: CPU %@ · Bộ nhớ %@";
+"AI 模型：CPU %@・記憶體 %@" = "Mô hình AI: CPU %@ · Bộ nhớ %@";
+"AI 模型：未執行" = "Mô hình AI: Không chạy";
+"模型檔 %@" = "Tệp mô hình %@";
 "診斷" = "Chẩn đoán";
 "診斷記錄…" = "Nhật ký chẩn đoán…";
 "記錄" = "Nhật ký";

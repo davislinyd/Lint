@@ -488,6 +488,10 @@
 "啟動服務" = "Iniciar servidor";
 "停止服務" = "Parar servidor";
 "重新啟動服務" = "Reiniciar servidor";
+"Lint：CPU %@・記憶體 %@" = "Lint: CPU %@ · Memória %@";
+"AI 模型：CPU %@・記憶體 %@" = "Modelo de IA: CPU %@ · Memória %@";
+"AI 模型：未執行" = "Modelo de IA: Não está em execução";
+"模型檔 %@" = "Arquivo do modelo %@";
 "診斷" = "Diagnóstico";
 "診斷記錄…" = "Registro de Diagnóstico…";
 "記錄" = "Registro";

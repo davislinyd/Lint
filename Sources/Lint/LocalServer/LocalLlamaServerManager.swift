@@ -20,6 +20,12 @@ final class LocalLlamaServerManager: LocalServerControlling {
 
     private init() {}
 
+    /// Lint's own llama-server while it runs, loading included; nil for a server Lint attached to.
+    var runningPID: Int32? {
+        guard let process, process.isRunning else { return nil }
+        return process.processIdentifier
+    }
+
     /// True when the OpenAI-compatible `/v1/models` endpoint answers.
     ///
     /// This is also the check that runs while nothing is happening, so it must not undo
@@ -197,7 +203,7 @@ final class LocalLlamaServerManager: LocalServerControlling {
         return String(localized: "埠 \(port) 上沒有偵測到監聽中的服務")
     }
 
-    static func listeningPIDs(on port: Int) -> [Int32] {
+    nonisolated static func listeningPIDs(on port: Int) -> [Int32] {
         let proc = Process()
         proc.executableURL = URL(fileURLWithPath: "/usr/sbin/lsof")
         proc.arguments = ["-nP", "-iTCP:\(port)", "-sTCP:LISTEN", "-t"]

@@ -116,7 +116,7 @@ A check only asks the GitHub API for the latest release; none of your text is se
 
 ### Local AI notes
 
-- **Not set up yet:** if you ask for a suggestion before the model is installed, Lint shows "Local AI has not been set up yet" with a **Set Up Local AI** button (and a shortcut to pick another model source) instead of a connection error. The menu-bar item **Set Up Local AI…** reopens the setup window at any time; **Later** on the first-run screen only stops it from opening by itself.
+- **Not set up yet:** until Lint's local AI has its model and Lint may read text (Accessibility), opening Settings or pressing ⌥⌘K or ⌥⌘L opens the setup window instead, never a connection error. Its **Use Another Model Source…** link opens Settings, for example to use an OpenAI-compatible endpoint; Apple Intelligence and other model sources never lead back to it. The menu-bar item **Set Up Local AI…** reopens the setup window at any time; **Later** on the first-run screen only stops it from opening by itself at launch.
 - **Downloads are safe to interrupt:** cancel, lose the connection or even quit Lint, and the partial file stays under `~/Library/Application Support/Lint/Downloads`; downloading again continues from where it stopped. A file that fails its size, GGUF-header or SHA-256 check is deleted and never used, and the model only appears under `Models/` once every file has passed, in one step.
 - **Disk space:** before downloading, Lint checks for about 1.2× what is still missing and tells you how much it needs and how much the Mac has.
 - **Slow first start:** loading a 4–5 GB model can take minutes on a Mac that is short of memory. Lint waits up to 10 minutes and, if the server is still loading, leaves it running instead of starting over. If it fails, Settings → Model → Details shows the last lines it printed.
@@ -267,7 +267,7 @@ Lint 會到 GitHub Releases 檢查有沒有較新的正式版：預設每週一�
 
 ### 本機 AI 補充說明
 
-- **尚未設定：**還沒安裝模型就要求建議時，Lint 會顯示「本機 AI 尚未設定」與「設定本機 AI」按鈕（以及改用其他模型來源的捷徑），而不是連線錯誤。選單列的「設定本機 AI…」可隨時重新開啟設定視窗；首次畫面按「稍後」只是不再自動彈出。
+- **尚未設定：**在本機 AI 裝好模型、且 Lint 獲准讀取文字（輔助功能）之前，打開設定或按 ⌥⌘K、⌥⌘L 都會改開設定視窗，不會出現連線錯誤。視窗裡的「使用其他模型來源…」會打開設定，例如改用 OpenAI 相容端點；使用 Apple Intelligence 或其他模型來源時不會被導回。選單列的「設定本機 AI…」可隨時重新開啟設定視窗；首次畫面按「稍後」只是不在啟動時自動彈出。
 - **下載可以安全中斷：**取消、斷線甚至結束 Lint，已下載的部分都會留在 `~/Library/Application Support/Lint/Downloads`，再次下載會從中斷處接續。大小、GGUF 標頭或 SHA-256 任一項驗證失敗的檔案會被刪除、絕不使用；所有檔案都通過之後，模型才會一次出現在 `Models/`。
 - **磁碟空間：**下載前會檢查是否有「還缺的部分 ×1.2」的可用空間，並告訴你需要多少、這台 Mac 有多少。
 - **第一次啟動較慢：**在記憶體吃緊的 Mac 上，載入 4–5 GB 的模型可能要數分鐘。Lint 最多等 10 分鐘，若伺服器仍在載入，會讓它繼續跑而不是重來。失敗時，「設定 → 模型 → 詳細資訊」會顯示它最後印出的幾行。

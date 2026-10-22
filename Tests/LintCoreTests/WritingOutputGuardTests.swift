@@ -81,6 +81,26 @@ final class WritingOutputGuardTests: XCTestCase {
         XCTAssertFalse(TextScript.hasEnglish("12:30"))
     }
 
+    func testAnotherLanguageIsToldByItsScriptOrByTheRecognizer() {
+        for text in [
+            "내일 회의를 오후 3시로 옮겨도 될까요?", "내일 PR review 해주세요", "ขอโทษที่ตอบช้านะ", "すみません、あしたでもいいですか。",
+            "Xin lỗi vì trả lời muộn, mai mình nói chuyện được không?", "Maaf baru balas, kemarin saya sibuk sekali.",
+            "Ich finde den Plan zu riskant.", "감사합니다",
+        ] {
+            XCTAssertTrue(TextScript.isOtherLanguage(text), text)
+        }
+        for (text, why) in [
+            ("Thanks for the update.", "English"),
+            ("The invoice in 청구서_0412.pdf has two different amounts.", "a Korean file name in English text"),
+            ("Bob pls ping Carol re: Q3 OKR", "the recognizer is not sure of casual English, and that is not enough"),
+            ("Bitte", "too short to tell"),
+            ("報告已經寄給客戶。", "Chinese is told by its script, not here"),
+            ("See https://ko.example.com/안내 and /srv/데이터/a.txt", "a URL and a path are not prose"),
+        ] {
+            XCTAssertFalse(TextScript.isOtherLanguage(text), why)
+        }
+    }
+
     func testTheEditRatioCountsWordsHanCharactersAndPunctuation() {
         XCTAssertEqual(EditRatio.tokens("I'm fine, 謝謝!"), ["I'm", "fine", ",", "謝", "謝", "!"])
         XCTAssertEqual(EditRatio.between("same text", "same text"), 0)
@@ -391,6 +411,17 @@ final class WritingOutputGuardTests: XCTestCase {
         }
         XCTAssertFalse(
             WritingOutputGuard.assess(source: "Thanks for the update.", output: "Thanks for the update.", mode: .proofread, tone: .native).contains(.notEnglish)
+        )
+        for source in ["내일 회의를 오후 3시로 옮겨도 될까요?", "Maaf baru balas, kemarin saya sibuk sekali."] {
+            XCTAssertTrue(
+                WritingOutputGuard.assess(source: source, output: source, mode: .proofread, tone: .native).contains(.notEnglish),
+                "came back in its own language: \(source)"
+            )
+        }
+        XCTAssertFalse(
+            WritingOutputGuard.assess(
+                source: "청구서_0412.pdf 금액이 두 개가 달라요", output: "The amounts in 청구서_0412.pdf don't match.", mode: .proofread, tone: .native
+            ).contains(.notEnglish), "a Korean file name kept in English"
         )
     }
 

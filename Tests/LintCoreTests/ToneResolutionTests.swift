@@ -64,4 +64,40 @@ final class ToneResolutionTests: XCTestCase {
     func testChineseInAURLIsNotChineseText() {
         XCTAssertEqual(tone(.idiomatic, "See https://zh.wikipedia.org/wiki/台北 for the details."), .idiomatic)
     }
+
+    func testAnotherLanguageIsWrittenInEnglishWhateverTheSetting() {
+        let texts = [
+            "내일 회의를 오후 3시로 옮겨도 될까요?",
+            "ขอโทษที่ตอบช้านะ เมื่อวานยุ่งมาก",
+            "すみません、あしたでもいいですか。",
+            "Xin lỗi vì trả lời muộn, mai mình nói chuyện được không?",
+            "Maaf baru balas, kemarin saya sibuk sekali.",
+            "Perdón por la demora, ayer estuve muy ocupado.",
+            "감사합니다",
+            "내일 PR review 해주세요",
+        ]
+        let expected: [WritingTone: WritingTone] = [
+            .idiomatic: .native, .formal: .nativeFormal, .casual: .nativeCasual, .concise: .nativeConcise,
+        ]
+        for text in texts {
+            for (menu, written) in expected {
+                for handling in MixedTextHandling.allCases {
+                    XCTAssertEqual(tone(menu, text, handling), written, "\(text) \(menu) \(handling)")
+                }
+            }
+            XCTAssertEqual(tone(.preserve, text), .preserve, text)
+        }
+    }
+
+    func testEnglishWithAWordOfAnotherLanguageStaysEnglish() {
+        for text in [
+            "The invoice in 청구서_0412.pdf, the invoice has two amounts is different, is it?",
+            "Merci for the help, see you tomorrow",
+            "Hi Alice, can u send me the file asap",
+            "np",
+            "Danke",
+        ] {
+            XCTAssertEqual(tone(.idiomatic, text), .idiomatic, text)
+        }
+    }
 }

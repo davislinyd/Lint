@@ -8,9 +8,9 @@ import XCTest
 final class WritingEvalFixtureTests: XCTestCase {
     func testTheFixturesCoverLintsWorkloadAndAreWellFormed() throws {
         let fixtures = try WritingEvalFixtures.load()
-        XCTAssertEqual(fixtures.version, 11)
-        XCTAssertGreaterThanOrEqual(fixtures.cases.count, 60, "the set is meant to be about 60-170 cases")
-        XCTAssertLessThanOrEqual(fixtures.cases.count, 170)
+        XCTAssertEqual(fixtures.version, 12)
+        XCTAssertGreaterThanOrEqual(fixtures.cases.count, 60, "the set is meant to be about 60-180 cases")
+        XCTAssertLessThanOrEqual(fixtures.cases.count, 180)
         XCTAssertEqual(Set(fixtures.cases.map(\.id)).count, fixtures.cases.count, "ids are unique")
 
         let categories = Set(fixtures.cases.map(\.category))
@@ -22,7 +22,7 @@ final class WritingEvalFixtureTests: XCTestCase {
             "fragment", "clean-technical", "clean-business", "clean-casual", "casual-preserve",
             "ip-address", "shell-command", "code-identifier", "currency", "file-path", "product-names",
             "english-natural", "english-holdout", "mixed-english",
-            "native-zh", "native-mixed", "native-english", "native-urls", "native-list", "native-already-english",
+            "native-zh", "native-other", "native-mixed", "native-english", "native-urls", "native-list", "native-already-english",
             "native-casual", "native-formal", "native-genz", "idiomatic", "idiomatic-already", "idiomatic-structure", "tone-casual", "native-concise",
         ] {
             XCTAssertTrue(categories.contains(wanted), "no fixture for \(wanted)")
@@ -178,6 +178,26 @@ final class WritingEvalFixtureTests: XCTestCase {
         XCTAssertTrue(
             WritingEvalChecks.run(native, output: native.input).contains { $0.check == "language" }, "the input left as it was"
         )
+        for id in ["native-other-01", "native-other-05"] {
+            let other = try XCTUnwrap(fixtures.cases.first { $0.id == id })
+            XCTAssertTrue(WritingEvalChecks.run(other, output: other.input).contains { $0.check == "english-only" }, "\(id) left as it was")
+        }
+    }
+
+    /// Text in another language is written in English (`WritingTone.effective`); none of the English
+    /// Lint edits may be taken for another language (`TextScript.isOtherLanguage`).
+    func testEveryFixtureIsTakenForTheLanguageItIsIn() throws {
+        let fixtures = try WritingEvalFixtures.load()
+        let others = fixtures.cases.filter { $0.category == "native-other" }
+        XCTAssertGreaterThanOrEqual(others.count, 8)
+        for testCase in others {
+            XCTAssertEqual(WritingTone.idiomatic.effective(for: testCase.input, mode: .proofread, mixed: .keepChinese), .native, testCase.id)
+        }
+        let english = fixtures.cases.filter { $0.category != "native-other" && !WritingOutputGuard.containsCJK($0.input) }
+        XCTAssertGreaterThanOrEqual(english.count, 100)
+        for testCase in english {
+            XCTAssertFalse(TextScript.isOtherLanguage(testCase.input), testCase.id)
+        }
     }
 
     func testAFormalNativeAnswerHasNoContractions() throws {

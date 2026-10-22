@@ -477,12 +477,12 @@ final class FloatingPanelViewModel {
         memory.setInteractiveActivity(isStreaming || isPrefetching || isTranslating)
     }
 
-    /// Lint edits English only: a proofread of text without any English is not sent to a model, so
-    /// the local one is not even woken for it. The native tone is the exception: it writes English
-    /// from a text in any language.
+    /// Lint edits English only: a proofread of text without any English, or in another language
+    /// written in Latin letters, is not sent to a model, so the local one is not even woken for it. The
+    /// native tone is the exception: it writes English from a text in any language.
     private static func hasNoEnglish(_ text: String, mode: WritingMode, tone: WritingTone) -> Bool {
         mode == .proofread && !tone.isNative && !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            && !TextScript.hasEnglish(text)
+            && (!TextScript.hasEnglish(text) || TextScript.isOtherLanguage(text))
     }
 
     private static var noEnglishMessage: String { String(localized: "Lint 只校對英文，這段文字裡沒有英文。") }

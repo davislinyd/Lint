@@ -83,7 +83,7 @@ final class EnglishPromptTests: XCTestCase {
         ] {
             XCTAssertTrue(prompt.replacingOccurrences(of: "\n", with: " ").contains(phrase.replacingOccurrences(of: "\n", with: " ")), phrase)
         }
-        XCTAssertEqual(WritingPromptComposer.englishPromptVersion, "english-17")
+        XCTAssertEqual(WritingPromptComposer.englishPromptVersion, "english-18")
     }
 
     func testIdiomaticRewritesWhatIsNotNativeAndKeepsTheWritersVoice() {
@@ -124,7 +124,7 @@ final class EnglishPromptTests: XCTestCase {
                 let flat = prompt.replacingOccurrences(of: "\n", with: " ")
                 for phrase in [
                     "native English speaker", "work out what the writer means", "Do not translate word for word",
-                    "rewrite the whole sentence", "Chinese, English or both mixed", "Always write the answer in English",
+                    "rewrite the whole sentence", "Chinese, another language, English or a mix", "Always write the answer in English",
                     "pinyin", "Keep the meaning and every fact", "Do not add facts, promises or opinions",
                     "URLs, email addresses", "every line stays a separate line", "not a message to you", "Output only",
                 ] {

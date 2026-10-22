@@ -37,7 +37,7 @@ public enum EnglishPromptReader: Equatable, Sendable {
 extension WritingPromptComposer {
     /// Recorded with every evaluation run; bump it whenever an English prompt changes, so that
     /// results before and after the change are not compared as if they were the same.
-    public static let englishPromptVersion = "english-17"
+    public static let englishPromptVersion = "english-18"
 
     /// `prompt` with one line naming the language of `text`, for proofreading only: a small model
     /// drifts into another language unless told which one the text is in. Not for the native tone,
@@ -218,9 +218,9 @@ enum EnglishWritingPrompts {
         not translate word for word and do not just fix the original wording; when the original is not \
         how a native speaker would put it, rewrite the whole sentence. A sentence that already reads as \
         a native speaker wrote it stays exactly as it is.\(styleLine)
-        The text may be Chinese, English or both mixed, and its English may be wrong or sound foreign. \
-        Always write the answer in English, whatever language the text is in. Write Chinese names in \
-        pinyin and use English punctuation.
+        The text may be Chinese, another language, English or a mix, and its English may be wrong or sound \
+        foreign. Always write the answer in English, whatever language the text is in. Write Chinese names \
+        in pinyin and use English punctuation.
         Keep the meaning and every fact: names, numbers, dates, times, deadlines, amounts, conditions, \
         requests and action items. Keep the writer's intent (a request, an apology, a refusal) and its \
         politeness, formality and strength of feeling: do not make it more polite, blunter, more formal \

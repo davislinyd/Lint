@@ -113,9 +113,10 @@ enum WritingEvalChecks {
         if let detail = languageFailure(testCase.outputLanguage, in: output) {
             failures.append(Failure(check: "language", detail: detail))
         }
-        // The native tone is asked for English, all of it: not a Chinese word, name or punctuation mark.
-        if testCase.writingTone.isNative, WritingOutputGuard.containsCJK(output) {
-            failures.append(Failure(check: "english-only", detail: "Chinese is left in the answer"))
+        // The native tone is asked for English, all of it: not a Chinese word, name or punctuation mark,
+        // and not an answer still in the text's own language.
+        if testCase.writingTone.isNative, WritingOutputGuard.containsCJK(output) || TextScript.isOtherLanguage(output) {
+            failures.append(Failure(check: "english-only", detail: "another language is left in the answer"))
         }
         // The formal style is asked for no contractions at all: a hard rule that can be checked.
         if testCase.writingTone == .nativeFormal, let found = contractions(in: output).first {

@@ -1,6 +1,6 @@
 {
-  "version": 11,
-  "about": "Lint's own writing fixtures: English proofreading and tone rewrites (also the English inside mixed Chinese-English text, whose Chinese is left alone), English-to-Traditional-Chinese translation for reference, and the native-speaker tone (Chinese, mixed or broken English in, a native speaker's English out) in its styles (standard, casual, formal, Gen Z and concise); and English that is correct but not what a native speaker would say, whose fix has to keep the writer's voice (keepsVoice), including sentences built wrong (a subject said twice, clauses out of order) around file and product names in another script. Every sentence was written for this repository; nothing is taken from a benchmark corpus. They exist to compare engines on Lint's actual workload, not to score a model in general.",
+  "version": 12,
+  "about": "Lint's own writing fixtures: English proofreading and tone rewrites (also the English inside mixed Chinese-English text, whose Chinese is left alone), English-to-Traditional-Chinese translation for reference, and the native-speaker tone (Chinese, another language, mixed or broken English in, a native speaker's English out) in its styles (standard, casual, formal, Gen Z and concise); and English that is correct but not what a native speaker would say, whose fix has to keep the writer's voice (keepsVoice), including sentences built wrong (a subject said twice, clauses out of order) around file and product names in another script. Every sentence was written for this repository; nothing is taken from a benchmark corpus. They exist to compare engines on Lint's actual workload, not to score a model in general.",
   "cases": [
     {
       "id": "en-grammar-01",
@@ -1527,6 +1527,93 @@
       "preserveLineStructure": true,
       "note": "A list stays a list of three lines with its markers; each item is English, and \"by next Friday\" is kept.",
       "keepsVoice": true
+    },
+    {
+      "id": "native-other-01",
+      "category": "native-other",
+      "mode": "proofread",
+      "tone": "native",
+      "input": "내일 회의를 오후 3시로 옮겨도 될까요? 자료는 오늘 저녁까지 Alice에게 보내 드릴게요.",
+      "outputLanguage": "en",
+      "mustPreserve": [
+        "Alice"
+      ],
+      "note": "Korean. Asks to move tomorrow's meeting to 3 PM (a question, kept a question) and promises to send Alice the material by this evening. No Korean is left."
+    },
+    {
+      "id": "native-other-02",
+      "category": "native-other",
+      "mode": "proofread",
+      "tone": "native",
+      "input": "すみません、今週はちょっと忙しいので、来週あらためてご連絡してもいいですか？",
+      "outputLanguage": "en",
+      "note": "Japanese. A polite apology and a request to get back in touch next week; the apology and the question stay, nothing is promised that the text does not promise."
+    },
+    {
+      "id": "native-other-03",
+      "category": "native-other",
+      "mode": "proofread",
+      "tone": "native",
+      "input": "ขอโทษที่ตอบช้านะ เมื่อวานยุ่งมาก พรุ่งนี้ว่างคุยกันไหม",
+      "outputLanguage": "en",
+      "note": "Thai, casual. Sorry for the late reply, yesterday was busy, free to talk tomorrow? A casual native message, still asking."
+    },
+    {
+      "id": "native-other-04",
+      "category": "native-other",
+      "mode": "proofread",
+      "tone": "native",
+      "input": "Bob ơi, anh gửi giúp em file báo cáo trước 5 giờ chiều nay được không? Cảm ơn anh nhiều!",
+      "outputLanguage": "en",
+      "mustPreserve": [
+        "Bob"
+      ],
+      "note": "Vietnamese in Latin letters. Asks Bob to send the report file before 5 PM today, with warm thanks; the request and the exclamation stay."
+    },
+    {
+      "id": "native-other-05",
+      "category": "native-other",
+      "mode": "proofread",
+      "tone": "native",
+      "input": "Maaf, saya belum sempat cek PR-nya. Besok pagi saya review dan kabari kamu ya.",
+      "outputLanguage": "en",
+      "mustPreserve": [
+        "PR"
+      ],
+      "note": "Indonesian with English work words (PR, review). Sorry, not looked at the PR yet; will review it tomorrow morning and get back to you. Casual, not stiff."
+    },
+    {
+      "id": "native-other-06",
+      "category": "native-other",
+      "mode": "proofread",
+      "tone": "native",
+      "input": "Perdón por la demora. Ayer tuve un problema con el servidor y no pude terminar el informe; te lo envío mañana antes de las 10.",
+      "outputLanguage": "en",
+      "mustPreserve": [
+        "10"
+      ],
+      "note": "Spanish. An apology, the reason (a server problem yesterday) and a promise to send the report tomorrow before 10; no other time or detail is added."
+    },
+    {
+      "id": "native-other-07",
+      "category": "native-other",
+      "mode": "proofread",
+      "tone": "native",
+      "input": "Ich finde den Plan zu riskant. Lass uns zuerst einen kleinen Test machen und dann entscheiden.",
+      "outputLanguage": "en",
+      "note": "German. An opinion (\"I think the plan is too risky\") and a suggestion to run a small test first, then decide; not turned into an order."
+    },
+    {
+      "id": "native-other-08",
+      "category": "native-other",
+      "mode": "proofread",
+      "tone": "native",
+      "input": "Oi Alice, você pode revisar o contrato até sexta? O cliente quer assinar na segunda.",
+      "outputLanguage": "en",
+      "mustPreserve": [
+        "Alice"
+      ],
+      "note": "Brazilian Portuguese. Asks Alice to review the contract by Friday because the client wants to sign on Monday; both days stay."
     },
     {
       "id": "native-12",

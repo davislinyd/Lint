@@ -8,7 +8,7 @@ import Foundation
 /// The menus offer five tones (`WritingMode.tones`); each request is written in the tone one of them
 /// becomes for its text (`effective(for:mode:mixed:)`). The `native…` tones take what the text means,
 /// in any language, and say it the way a native English speaker would: they are what idiomatic,
-/// formal, casual and concise become for Chinese text. `professional` and `nativeGenZ` are no longer
+/// formal, casual and concise become for text in Chinese or another language. `professional` and `nativeGenZ` are no longer
 /// offered (they mean formal and casual now) but stay readable, because settings, prompt overrides
 /// and the memory database written by earlier versions name them.
 public enum WritingTone: String, CaseIterable, Identifiable, Sendable, Codable {
@@ -48,9 +48,9 @@ public enum WritingTone: String, CaseIterable, Identifiable, Sendable, Codable {
         case .casual: String(localized: "輕鬆")
         case .concise: String(localized: "簡潔")
         case .professional: String(localized: "專業")
-        // What a menu tone becomes for Chinese text; seen only where prompts are edited.
+        // What a menu tone becomes for text in another language; seen only where prompts are edited.
         case .native, .nativeFormal, .nativeCasual, .nativeConcise:
-            menuTone.title + " · " + String(localized: "中文 → 英文")
+            menuTone.title + " · " + String(localized: "其他語言 → 英文")
         case .nativeGenZ: String(localized: "母語人士") + " · " + String(localized: "Gen Z")
         }
     }

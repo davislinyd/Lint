@@ -29,9 +29,9 @@ extension WritingTone {
         }
     }
 
-    /// What a menu tone becomes when the answer is to be English written from Chinese; nil for
-    /// preserve, which edits English only.
-    var fromChinese: WritingTone? {
+    /// What a menu tone becomes when the answer is to be English written from another language; nil
+    /// for preserve, which edits English only.
+    var fromOtherLanguage: WritingTone? {
         switch menuTone {
         case .idiomatic: .native
         case .formal: .nativeFormal
@@ -43,13 +43,17 @@ extension WritingTone {
 
     /// The tone a request is written in, for its text. Proofreading English text, or text that mixes
     /// Chinese and English when the Chinese is to be kept, is an edit in the menu tone; text that is
-    /// Chinese, or mixed text that is to be written in English, gets the tone that writes English from
-    /// Chinese. Preserve is always an edit of the English. A translation and a custom prompt take the
-    /// menu tone as it is.
+    /// Chinese, mixed text that is to be written in English, or text in another language
+    /// (`TextScript.isOtherLanguage`, by the language most of it is in) gets the tone that writes
+    /// English from it. Preserve is always an edit of the English. A translation and a custom prompt
+    /// take the menu tone as it is.
     public func effective(for text: String, mode: WritingMode, mixed: MixedTextHandling) -> WritingTone {
         let tone = menuTone
-        guard mode == .proofread, let english = tone.fromChinese, Self.containsChinese(text) else { return tone }
-        return !TextScript.hasEnglish(text) || mixed == .toEnglish ? english : tone
+        guard mode == .proofread, let english = tone.fromOtherLanguage else { return tone }
+        if Self.containsChinese(text) {
+            return !TextScript.hasEnglish(text) || mixed == .toEnglish ? english : tone
+        }
+        return TextScript.isOtherLanguage(text) ? english : tone
     }
 
     /// Han characters in the prose: a Chinese name or word, not a URL that happens to contain one.

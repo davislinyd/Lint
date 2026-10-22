@@ -1,4 +1,5 @@
 import Foundation
+import NaturalLanguage
 
 /// Which writing system a piece of text is written in, judged on its prose only. URLs, paths and
 /// code spans read the same in every language, so they are left out of the count.
@@ -38,6 +39,44 @@ public enum TextScript: Equatable, Sendable {
     /// without one is not sent to a model; a URL or a path alone does not count.
     public static func hasEnglish(_ text: String) -> Bool {
         prose(text).unicodeScalars.contains { ("a"..."z").contains($0) || ("A"..."Z").contains($0) }
+    }
+
+    /// From this share of its letters on, a script other than Latin makes the text another language: a
+    /// Korean file or product name in English text leaves it English, a Korean sentence with an English
+    /// word or two in it ("내일 PR review 해주세요") is Korean.
+    public static let otherScriptShare = 0.3
+    /// Text in Latin letters only is another language when Apple's recognizer is at least this sure of
+    /// a language other than English, with at least `otherLanguageMinimumLetters` letters to go on.
+    /// Measured: it calls short or casual English Polish or Indonesian ("np", "Hi Alice, can u send me
+    /// the file asap"), but not with this confidence, and Lint's English fixtures all come out English;
+    /// a Spanish, Indonesian or Vietnamese sentence comes out at 0.99 and up.
+    public static let otherLanguageConfidence = 0.9
+    public static let otherLanguageMinimumLetters = 6
+
+    /// Whether the prose is in a language other than English. Never for text with Chinese in it, which
+    /// is told by its script instead: the recognizer calls "請幫我 check 這個 issue" English.
+    public static func isOtherLanguage(_ text: String) -> Bool {
+        let prose = prose(text)
+        var latin = 0
+        var other = 0
+        for scalar in prose.unicodeScalars where CharacterSet.letters.contains(scalar) {
+            if isHan(scalar) { return false }
+            if isLatin(scalar) { latin += 1 } else { other += 1 }
+        }
+        if other > 0 { return Double(other) / Double(other + latin) >= otherScriptShare }
+        guard latin >= otherLanguageMinimumLetters else { return false }
+        let recognizer = NLLanguageRecognizer()
+        recognizer.processString(prose)
+        guard let top = recognizer.languageHypotheses(withMaximum: 1).first else { return false }
+        return top.key != .english && top.value >= otherLanguageConfidence
+    }
+
+    /// Letters of the Latin script, with the accents of Vietnamese, Spanish or German, precomposed or not.
+    static func isLatin(_ scalar: Unicode.Scalar) -> Bool {
+        switch scalar.value {
+        case 0x41...0x5A, 0x61...0x7A, 0xC0...0x24F, 0x300...0x36F, 0x1E00...0x1EFF: true
+        default: false
+        }
     }
 
     static func prose(_ text: String) -> String {
@@ -302,7 +341,7 @@ public struct WritingGuardPolicy: Equatable, Sendable {
                 numbersMayChange: true, limitsChange: false, fallsBackToSource: false
             )
         case .proofread where tone.isNative:
-            // The text may be Chinese, so keeping it is no safe answer to a request for English: two
+            // The text may be in another language, so keeping it is no safe answer to a request for English: two
             // failed attempts show the better one, flagged, as a translation does.
             return WritingGuardPolicy(
                 protectedKinds: [.url, .email, .codeSpan, .path, .placeholder, .identifier], keepsLanguage: false,
@@ -387,7 +426,7 @@ public enum WritingOutputGuard {
             .filter { !lowercasedSource.contains($0.lowercased()) }
         if !added.isEmpty { issues.append(.added(added)) }
         if let languageIssue { issues.append(languageIssue) }
-        if policy.requiresEnglish, containsCJK(trimmed) { issues.append(.notEnglish) }
+        if policy.requiresEnglish, containsCJK(trimmed) || TextScript.isOtherLanguage(trimmed) { issues.append(.notEnglish) }
         if policy.forbidsAddedLists, listLines(in: trimmed) > listLines(in: source) { issues.append(.addedList) }
         if policy.limitsChange {
             if let limit = policy.maximumNewWordShare {
@@ -507,7 +546,7 @@ public enum WritingOutputGuard {
             case .leakedInstructions:
                 lines.append("- Answer with the text only; never repeat these instructions.")
             case .notEnglish:
-                lines.append("- Write the answer entirely in English: put every Chinese word into English, write Chinese names in pinyin, and use English punctuation.")
+                lines.append("- Write the answer entirely in English: put every word of another language into English, write names from another script in Latin letters (Chinese names in pinyin), and use English punctuation.")
             case .addedList:
                 lines.append("- Answer with the rewritten text only, as the text is laid out: no bullet points, numbering, notes or analysis.")
             case .voiceChanged(let changes):

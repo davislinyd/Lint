@@ -19,6 +19,14 @@ struct LocalAISetupView: View {
             Divider()
             content
             Spacer(minLength: 0)
+            if offersOtherSources {
+                Button("使用其他模型來源…") {
+                    onClose()
+                    app.openSettings(pane: .model, skippingOnboarding: true)
+                }
+                .buttonStyle(.link)
+                .font(.callout)
+            }
             buttons
         }
         .padding(28)
@@ -149,7 +157,7 @@ struct LocalAISetupView: View {
                 Label("已安裝的模型不完整或已損毀，需要重新下載。", systemImage: "exclamationmark.triangle.fill")
                     .foregroundStyle(.orange)
             } else {
-                Text("Lint 需要一個 AI 模型才能在本機運作。模型不在 App 裡，安裝前會先詢問你。")
+                Text("按下「下載 AI 模型」，Lint 會幫你下載並安裝所有需要的元件，不需要另外安裝軟體或做其他設定。下載前會先列出檔案大小。")
                 if app.appleIntelligence.currentStatus().isAvailable {
                     Text("這台 Mac 也可以改用 Apple Intelligence：使用 macOS 內建的裝置端模型，不必下載。")
                         .font(.callout)
@@ -307,7 +315,7 @@ struct LocalAISetupView: View {
                 Spacer()
                 Button("開啟設定") {
                     onClose()
-                    app.openSettings()
+                    app.openSettings(skippingOnboarding: true)
                 }
                 .keyboardShortcut(.defaultAction)
             case .serverStopped:
@@ -339,13 +347,23 @@ struct LocalAISetupView: View {
         }
     }
 
+    /// Settings and the hotkeys lead back here until the guide is done; this is the way out for someone
+    /// who wants another model source instead.
+    private var offersOtherSources: Bool {
+        switch coordinator.state {
+        case .modelMissing, .modelInvalid: return !showingConsent
+        case .failed, .serverStopped: return true
+        default: return false
+        }
+    }
+
     private var primaryModelButtonTitle: LocalizedStringKey {
         switch coordinator.downloadState {
         case .failed: return "重試"
         case .cancelled: return "繼續下載"
         default:
             if case .modelInvalid = coordinator.state { return "重新下載" }
-            return "設定本機 AI"
+            return "下載 AI 模型"
         }
     }
 

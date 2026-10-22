@@ -300,6 +300,8 @@
 /* Local AI setup (bundled runtime, managed model) */
 "設定本機 AI" = "Configurar IA Local";
 "設定本機 AI…" = "Configurar IA Local…";
+"下載 AI 模型" = "Baixar Modelo de IA";
+"使用其他模型來源…" = "Usar Outro Provedor de Modelo…";
 "歡迎使用 Lint" = "Boas-vindas ao Lint";
 "在你的 Mac 上本機執行 AI 校對，文字不會離開這台電腦。" = "Revise textos com uma IA que roda no seu Mac. Seu texto nunca sai deste computador.";
 "本機 AI 執行環境" = "Ambiente de execução de IA local";
@@ -318,7 +320,7 @@
 "正在啟動本機 AI（第一次載入模型需要一點時間）…" = "Iniciando a IA local (carregar o modelo leva um momento na primeira vez)…";
 "本機 AI 已準備好，但目前沒有執行。" = "A IA local está pronta, mas não está em execução agora.";
 "已安裝的模型不完整或已損毀，需要重新下載。" = "O modelo instalado está incompleto ou danificado e precisa ser baixado de novo.";
-"Lint 需要一個 AI 模型才能在本機運作。模型不在 App 裡，安裝前會先詢問你。" = "O Lint precisa de um modelo de IA para funcionar localmente. O modelo não vem com o app; o Lint pergunta antes de instalá-lo.";
+"按下「下載 AI 模型」，Lint 會幫你下載並安裝所有需要的元件，不需要另外安裝軟體或做其他設定。下載前會先列出檔案大小。" = "Clique em “Baixar Modelo de IA” e o Lint baixa e instala tudo o que é necessário. Você não precisa instalar nem configurar mais nada. O tamanho do download aparece antes.";
 "下載已取消。已下載的 %@ 會保留，繼續下載會從中斷處接續。" = "Download cancelado. Os %@ já baixados são mantidos, e retomar continua de onde parou.";
 "下載已取消。" = "Download cancelado.";
 "下載大小：約 %@" = "Tamanho do download: cerca de %@";

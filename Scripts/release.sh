@@ -445,6 +445,10 @@ build_dmg() {
   MOUNT="$vol"
   ditto "$APP" "$vol/Lint.app"
   ln -s /Applications "$vol/Applications"
+  # Window background and icon layout, made once with Finder by Scripts/make-dmg-layout.sh.
+  mkdir "$vol/.background" || die "cannot create .background in the DMG"
+  cp "$ROOT/Resources/DMG/background.tiff" "$vol/.background/background.tiff" || die "cannot copy the DMG background"
+  cp "$ROOT/Resources/DMG/DS_Store" "$vol/.DS_Store" || die "cannot copy the DMG window layout"
   rm -rf "$vol/.fseventsd" "$vol/.Spotlight-V100" "$vol/.Trashes"
   sync
   detach_volume "$vol" || die "cannot unmount the new disk image"

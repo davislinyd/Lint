@@ -43,7 +43,7 @@ struct ReleaseFixture {
             try fm.createSymbolicLink(atPath: bin.appendingPathComponent(tool).path, withDestinationPath: "mock-tool")
         }
 
-        // The repository: the scripts under test, the resources they verify against, a stand-in source file.
+        // The repository: the scripts under test, the resources they copy or verify against, a stand-in source file.
         let real = TestSupport.repoRoot
         let scripts = repo.appendingPathComponent("Scripts")
         let resources = repo.appendingPathComponent("Resources")
@@ -56,7 +56,7 @@ struct ReleaseFixture {
         try Self.fakePackageApp.write(to: package, atomically: true, encoding: .utf8)
         try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: package.path)
         for item in try fm.contentsOfDirectory(atPath: real.appendingPathComponent("Resources").path)
-        where item.hasSuffix(".lproj") || ["Info.plist", "Lint.entitlements", "LlamaRuntimeManifest.json"].contains(item) {
+        where item.hasSuffix(".lproj") || ["Info.plist", "Lint.entitlements", "LlamaRuntimeManifest.json", "DMG"].contains(item) {
             try fm.copyItem(at: real.appendingPathComponent("Resources/\(item)"), to: resources.appendingPathComponent(item))
         }
         try "print(\"Lint \(version)\")\n".write(to: repo.appendingPathComponent("Sources.swift"), atomically: true, encoding: .utf8)

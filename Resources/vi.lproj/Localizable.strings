@@ -300,6 +300,8 @@
 /* Local AI setup (bundled runtime, managed model) */
 "設定本機 AI" = "Thiết lập AI cục bộ";
 "設定本機 AI…" = "Thiết lập AI cục bộ…";
+"下載 AI 模型" = "Tải mô hình AI";
+"使用其他模型來源…" = "Dùng nhà cung cấp mô hình khác…";
 "歡迎使用 Lint" = "Chào mừng đến với Lint";
 "在你的 Mac 上本機執行 AI 校對，文字不會離開這台電腦。" = "Sửa văn bản bằng AI chạy ngay trên máy Mac của bạn. Văn bản của bạn không bao giờ rời khỏi máy tính này.";
 "本機 AI 執行環境" = "Môi trường chạy AI cục bộ";
@@ -318,7 +320,7 @@
 "正在啟動本機 AI（第一次載入模型需要一點時間）…" = "Đang khởi động AI cục bộ (lần đầu tải mô hình sẽ mất một chút thời gian)…";
 "本機 AI 已準備好，但目前沒有執行。" = "AI cục bộ đã sẵn sàng nhưng hiện không chạy.";
 "已安裝的模型不完整或已損毀，需要重新下載。" = "Mô hình đã cài không đầy đủ hoặc bị hỏng và cần được tải về lại.";
-"Lint 需要一個 AI 模型才能在本機運作。模型不在 App 裡，安裝前會先詢問你。" = "Lint cần một mô hình AI để chạy cục bộ. Mô hình không đi kèm ứng dụng; Lint sẽ hỏi bạn trước khi cài đặt.";
+"按下「下載 AI 模型」，Lint 會幫你下載並安裝所有需要的元件，不需要另外安裝軟體或做其他設定。下載前會先列出檔案大小。" = "Nhấn “Tải mô hình AI” và Lint sẽ tải về và cài đặt mọi thành phần cần thiết. Bạn không cần cài đặt hay thiết lập thêm gì. Dung lượng tải về sẽ được hiển thị trước.";
 "下載已取消。已下載的 %@ 會保留，繼續下載會從中斷處接續。" = "Đã hủy tải về. Phần %@ đã tải được giữ lại, và khi tiếp tục sẽ tải tiếp từ chỗ đã dừng.";
 "下載已取消。" = "Đã hủy tải về.";
 "下載大小：約 %@" = "Dung lượng tải về: khoảng %@";

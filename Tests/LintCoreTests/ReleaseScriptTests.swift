@@ -58,6 +58,12 @@ final class ReleaseScriptTests: XCTestCase {
         for name in ["Lint-0.3.1-macOS-arm64-preview.dmg", "Lint-0.3.1-macOS-arm64-preview.dmg.sha256", "Lint.app"] {
             XCTAssertTrue(FileManager.default.fileExists(atPath: release.appendingPathComponent(name).path), name)
         }
+        // The fake DMG is a tar archive; the Finder layout from Resources/DMG is inside it.
+        let contents = try TestSupport.run("/usr/bin/tar", ["-tf", release.appendingPathComponent("Lint-0.3.1-macOS-arm64-preview.dmg").path])
+        let entries = contents.stdout.split(separator: "\n").map(String.init)
+        for entry in ["./.DS_Store", "./.background/background.tiff"] {
+            XCTAssertTrue(entries.contains(entry), entry)
+        }
         XCTAssertFalse(FileManager.default.fileExists(atPath: release.appendingPathComponent("release-state.json").path))
     }
 

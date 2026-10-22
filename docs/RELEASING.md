@@ -71,13 +71,13 @@ Release 說明要寫明未簽章、怎麼開啟、以及每個預覽版都要重
 
 自動測試涵蓋不到簽章、Gatekeeper 與真實網路，所以 Draft Release 的 DMG 要在**沒有 Homebrew、llama.cpp、Ollama 的 Apple Silicon Mac**（或全新的使用者帳號）上照這份走一遍：
 
-1. 下載 DMG、拖進 Applications、開啟：Gatekeeper 不擋。
+1. 下載 DMG：視窗有紫色背景與從 Lint.app 指向 Applications 的「drag to here」箭頭，沒有工具列；拖進 Applications、開啟：Gatekeeper 不擋。
 2. 「設定本機 AI」視窗自動出現；執行環境顯示「Lint 內建 · llama.cpp <tag>」，模型顯示未安裝。
 3. 同意頁列出大小與所需空間；按「下載並安裝」**之前**不能有任何下載。
 4. 下載中按「取消下載」，再按「繼續下載」：從原進度接續。中途直接結束 Lint 再開，partial 仍在、可以接續。
 5. 完成後依序是驗證、安裝、啟動：`curl http://127.0.0.1:8000/v1/models` 回 200，`lsof -nP -iTCP:8000 -sTCP:LISTEN` 只監聽 `127.0.0.1`；輔助功能步驟能引導、授權後自動更新；校對成功。
 6. 對安裝後的 App 跑 `codesign --verify --deep --strict` 與 `spctl --assess --type execute`；`codesign -dvv .../LlamaRuntime/arm64/llama-server` 應是 Developer ID、Hardened Runtime、有時間戳、與 App 同一個 Team ID。
-7. 在設定移除模型後按 `⌥⌘K`：應顯示「本機 AI 尚未設定」與按鈕，不出現 Connection refused。
+7. 在設定移除模型後按 `⌥⌘K`：應打開「設定本機 AI」導引（開設定、按 `⌥⌘L` 也一樣，導引的「使用其他模型來源…」才會進設定），不出現 Connection refused。
 8. 全程沒有安裝或提到 Homebrew。
 
 ### 在自己的 Mac 上試新版而不動到真實資料

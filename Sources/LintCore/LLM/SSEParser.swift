@@ -19,6 +19,12 @@ public enum OpenAIStreamDelta: Sendable {
                 var content: String?
             }
             var delta: Delta?
+            var finishReason: String?
+
+            enum CodingKeys: String, CodingKey {
+                case delta
+                case finishReason = "finish_reason"
+            }
         }
         struct Usage: Decodable {
             var promptTokens: Int?
@@ -80,6 +86,12 @@ public enum OpenAIStreamDelta: Sendable {
             return .text(text)
         }
         return nil
+    }
+
+    /// `choices[0].finish_reason`, on the chunk that ends the answer.
+    public static func finishReason(fromPayload payload: String) -> String? {
+        guard let data = payload.data(using: .utf8) else { return nil }
+        return (try? JSONDecoder().decode(Chunk.self, from: data))?.choices?.first?.finishReason
     }
 }
 

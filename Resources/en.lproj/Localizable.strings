@@ -428,6 +428,7 @@
 "按「重新啟動」後新的閒置設定才會生效。" = "Click Restart to apply the new idle setting.";
 "留空即可：Lint 會依所選模型套用自己的參數（目前為 %@）。這裡填的參數會覆蓋同一個選項，例如長文可填 -c 16384。服務一律只綁定 127.0.0.1，額外參數裡的 --host 會被忽略。" = "Leave this empty: Lint passes its own arguments for the selected model (right now %@). Anything set here replaces Lint's copy of the same option — for long text, try -c 16384. The server always binds to 127.0.0.1 only; a --host in here is ignored.";
 "這段文字對本機 AI 來說太長了。請分段處理，或在「設定 → 模型 → 進階」的額外參數加上較大的 -c（例如 -c 16384）後重新啟動。" = "This text is too long for local AI. Work through it in parts, or add a larger -c (for example -c 16384) to the extra arguments in Settings → Model → Advanced and restart.";
+"本機 AI 在回覆完成前中斷了，請再試一次。" = "Local AI stopped before it finished its reply. Try again.";
 "建議" = "Recommended";
 "記憶體用量很高，可能當機" = "very high memory use, may freeze the Mac";
 "需下載 %@" = "%@ download";

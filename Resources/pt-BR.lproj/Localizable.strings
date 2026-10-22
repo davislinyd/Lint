@@ -428,6 +428,7 @@
 "按「重新啟動」後新的閒置設定才會生效。" = "Clique em Reiniciar para aplicar o novo ajuste de ociosidade.";
 "留空即可：Lint 會依所選模型套用自己的參數（目前為 %@）。這裡填的參數會覆蓋同一個選項，例如長文可填 -c 16384。服務一律只綁定 127.0.0.1，額外參數裡的 --host 會被忽略。" = "Deixe em branco: o Lint passa os próprios argumentos para o modelo selecionado (no momento, %@). O que for definido aqui substitui a opção equivalente do Lint — para textos longos, tente -c 16384. O servidor sempre se vincula apenas a 127.0.0.1; um --host aqui é ignorado.";
 "這段文字對本機 AI 來說太長了。請分段處理，或在「設定 → 模型 → 進階」的額外參數加上較大的 -c（例如 -c 16384）後重新啟動。" = "Este texto é longo demais para a IA local. Processe-o em partes ou adicione um -c maior (por exemplo, -c 16384) aos argumentos extras em Ajustes → Modelo → Avançado e reinicie.";
+"本機 AI 在回覆完成前中斷了，請再試一次。" = "A IA local parou antes de terminar a resposta. Tente novamente.";
 "建議" = "Recomendado";
 "記憶體用量很高，可能當機" = "uso de memória muito alto, pode travar o Mac";
 "需下載 %@" = "download de %@";

@@ -88,4 +88,91 @@ final class OpenAICompatibleProviderTests: XCTestCase {
         XCTAssertTrue(url.contains("alt=sse"))
         XCTAssertTrue(url.contains("key=gkey"))
     }
+
+    // MARK: - A reply that ran out of context
+
+    // The chunks llama-server b11046 sends at the end of a stream: `finish_reason` first, then usage.
+    // It says "length" both when the context is full and when `max_tokens` is reached.
+    private func ending(_ reason: String, completionTokens: Int) -> [String] {
+        [
+            #"{"choices":[{"index":0,"delta":{"content":"Section 1. Alice has"}}]}"#,
+            #"{"choices":[{"finish_reason":"\#(reason)","index":0,"delta":{}}]}"#,
+            #"{"choices":[],"usage":{"completion_tokens":\#(completionTokens),"prompt_tokens":924,"total_tokens":\#(924 + completionTokens)}}"#,
+        ]
+    }
+
+    private func streamedText(_ kind: ProviderKind, maxTokens: Int, chunks: [String], done: Bool = true) async throws -> String {
+        SSEStubProtocol.body = Data((chunks.map { "data: \($0)\n\n" }.joined() + (done ? "data: [DONE]\n\n" : "")).utf8)
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [SSEStubProtocol.self]
+        let provider = OpenAICompatibleProvider(
+            id: kind, baseURL: URL(string: "http://127.0.0.1:8000/v1")!, apiKey: "",
+            session: URLSession(configuration: configuration)
+        )
+        var text = ""
+        for try await event in provider.stream(ChatRequest(model: "m", systemPrompt: "s", userText: "u", maxTokens: maxTokens)) {
+            if case .text(let token) = event { text += token }
+        }
+        return text
+    }
+
+    func testALocalReplyCutShortByTheContextIsAnErrorNotASuggestion() async {
+        do {
+            _ = try await streamedText(.localLlama, maxTokens: 3000, chunks: ending("length", completionTokens: 100))
+            XCTFail("a reply that stopped at the end of the context must not come back as text")
+        } catch {
+            guard case LLMError.contextExhausted = error else { return XCTFail("unexpected error: \(error)") }
+            XCTAssertEqual(
+                error.localizedDescription,
+                LLMError.httpStatus(400, "exceed_context_size_error").localizedDescription,
+                "the same advice as a text that does not fit at all"
+            )
+        }
+    }
+
+    func testALocalReplyThatReachedItsOwnLimitIsKept() async throws {
+        // The warm-up asks for one token and the gloss for at most 512: stopping there is the point.
+        let text = try await streamedText(.localLlama, maxTokens: 100, chunks: ending("length", completionTokens: 100))
+        XCTAssertEqual(text, "Section 1. Alice has")
+    }
+
+    func testALocalReplyThatFinishedIsKept() async throws {
+        let text = try await streamedText(.localLlama, maxTokens: 3000, chunks: ending("stop", completionTokens: 100))
+        XCTAssertEqual(text, "Section 1. Alice has")
+    }
+
+    func testOtherOpenAICompatibleServersAreLeftAlone() async throws {
+        let text = try await streamedText(.openaiCompatible, maxTokens: 3000, chunks: ending("length", completionTokens: 100))
+        XCTAssertEqual(text, "Section 1. Alice has")
+        let cut = try await streamedText(.openaiCompatible, maxTokens: 3000, chunks: [ending("stop", completionTokens: 100)[0]], done: false)
+        XCTAssertEqual(cut, "Section 1. Alice has")
+    }
+
+    func testALocalReplyWhoseConnectionEndsBeforeItFinishesIsAnError() async {
+        // llama-server killed mid-answer: the connection just ends, with no finish_reason and no [DONE].
+        do {
+            _ = try await streamedText(.localLlama, maxTokens: 3000, chunks: [ending("stop", completionTokens: 100)[0]], done: false)
+            XCTFail("an answer that never finished must not come back as text")
+        } catch {
+            guard case LLMError.replyInterrupted = error else { return XCTFail("unexpected error: \(error)") }
+        }
+    }
+}
+
+/// Answers every request with `body` as a `text/event-stream`.
+final class SSEStubProtocol: URLProtocol, @unchecked Sendable {
+    nonisolated(unsafe) static var body = Data()
+
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func stopLoading() {}
+
+    override func startLoading() {
+        let response = HTTPURLResponse(
+            url: request.url!, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: ["Content-Type": "text/event-stream"]
+        )!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: Self.body)
+        client?.urlProtocolDidFinishLoading(self)
+    }
 }

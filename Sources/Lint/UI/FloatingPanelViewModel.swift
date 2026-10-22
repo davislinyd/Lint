@@ -346,10 +346,15 @@ final class FloatingPanelViewModel {
                         prefetchTranslationTask?.cancel()
                         scheduleTranslationOfResult()
                     }
+                } else {
+                    // No suggestion to gloss: what is on screen glosses an earlier one.
+                    clearTranslation()
                 }
                 return
             }
-            // Still running — attach the live buffer to the bubble UI.
+            // Still running — attach the live buffer to the bubble UI. The gloss on screen is of an
+            // earlier suggestion; this one gets its own when it is done.
+            clearTranslation()
             prefetchAttachedToUI = true
             isStreaming = true
             onPrefetchStateChange?()
@@ -707,11 +712,14 @@ final class FloatingPanelViewModel {
             if Task.isCancelled { return }
             DiagnosticLog.shared.log("write", "failed \(DiagnosticLog.describe(error))")
             prefetchError = error.localizedDescription
+            // What streamed in before the error is a cut-off answer, not a suggestion.
+            prefetchBuffer = ""
             prefetchFinished = true
             isPrefetching = false
             isPrefetchReady = false
             if prefetchAttachedToUI {
                 isStreaming = false
+                resultText = ""
                 errorMessage = error.localizedDescription
             }
             onPrefetchStateChange?()
@@ -1113,6 +1121,8 @@ final class FloatingPanelViewModel {
         } catch {
             guard tickets.isCurrent(ticket) else { return }
             DiagnosticLog.shared.log("write", "failed \(DiagnosticLog.describe(error))")
+            // What streamed in before the error is a cut-off answer, not a suggestion.
+            resultText = ""
             errorMessage = error.localizedDescription
             return
         }

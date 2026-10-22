@@ -69,10 +69,26 @@ public struct OpenAICompatibleProvider: LLMProvider {
                         request: request,
                         timeout: id == .localLlama ? Self.localRequestTimeout : nil
                     )
+                    var finished = false
+                    var stoppedAtLength = false
                     for try await payload in HTTPStream.ssePayloads(session: session, request: urlRequest) {
+                        if id == .localLlama, let reason = OpenAIStreamDelta.finishReason(fromPayload: payload) {
+                            finished = true
+                            stoppedAtLength = reason == "length"
+                        }
                         if let event = OpenAIStreamDelta.event(fromPayload: payload) {
                             continuation.yield(event)
+                            // llama-server says "length" both when the context is full and when
+                            // `max_tokens` is reached; only the usage that follows tells them apart.
+                            if stoppedAtLength, case .usage(let usage) = event, usage.completionTokens < request.maxTokens {
+                                throw LLMError.contextExhausted
+                            }
                         }
+                    }
+                    // llama-server always ends an answer with a finish_reason. A connection that ends
+                    // without one (the server quit mid-answer) leaves a cut-off text, not an answer.
+                    if id == .localLlama, !finished, !Task.isCancelled {
+                        throw LLMError.replyInterrupted
                     }
                     continuation.finish()
                 } catch {

@@ -172,6 +172,10 @@ public enum LLMError: Error, LocalizedError, Sendable {
     case emptyAPIKey
     case notLoggedInToChatGPT
     case httpStatus(Int, String)
+    /// Lint's local model stopped writing because its context was full, not because it was done.
+    case contextExhausted
+    /// The connection to Lint's local model ended before the answer did (the server quit, say).
+    case replyInterrupted
     case decoding
     case unresolvedProvider
 
@@ -187,13 +191,21 @@ public enum LLMError: Error, LocalizedError, Sendable {
             // llama-server's own words for "the prompt does not fit" are raw JSON; the text is
             // never cut short, so say what happened and what to do about it.
             body.contains("exceed_context_size_error")
-                ? String(localized: "這段文字對本機 AI 來說太長了。請分段處理，或在「設定 → 模型 → 進階」的額外參數加上較大的 -c（例如 -c 16384）後重新啟動。")
+                ? Self.textTooLongForLocalAI
                 : String(localized: "HTTP \(code)：\(body)")
+        case .contextExhausted:
+            Self.textTooLongForLocalAI
+        case .replyInterrupted:
+            String(localized: "本機 AI 在回覆完成前中斷了，請再試一次。")
         case .decoding:
             String(localized: "無法解析模型回應")
         case .unresolvedProvider:
             String(localized: "尚未決定要用哪個 AI 引擎")
         }
+    }
+
+    private static var textTooLongForLocalAI: String {
+        String(localized: "這段文字對本機 AI 來說太長了。請分段處理，或在「設定 → 模型 → 進階」的額外參數加上較大的 -c（例如 -c 16384）後重新啟動。")
     }
 }
 

@@ -101,6 +101,49 @@ final class WritingOutputGuardTests: XCTestCase {
         }
     }
 
+    func testAScriptOfItsOwnIsMeasuredApartFromHanAndLatin() {
+        XCTAssertEqual(TextScript.otherScriptShare("Thanks for the update."), 0)
+        XCTAssertEqual(TextScript.otherScriptShare("감사합니다"), 1)
+        XCTAssertEqual(TextScript.otherScriptShare("報告已經寄給客戶。"), 0, "Han is not another script here")
+        XCTAssertTrue(TextScript.writesInAnotherScript("내일 PR review 해주세요"))
+        XCTAssertTrue(TextScript.writesInAnotherScript("この PR を review してください"))
+        XCTAssertFalse(TextScript.writesInAnotherScript("The invoice in 청구서_0412.pdf has two different amounts."))
+        XCTAssertFalse(TextScript.writesInAnotherScript("See https://ko.example.com/안내 for the details."), "a URL is not prose")
+    }
+
+    /// Text in another script mixed with English gets the usual language line: told that it "mixes
+    /// another language", Gemma left the English uncorrected (see `WritingOutputGuard.assess`).
+    func testTextInAnotherScriptGetsTheUsualLanguageLine() {
+        XCTAssertEqual(
+            WritingOutputGuard.languageInstruction(for: "내일 회의 전에 이 PR 좀 봐주세요, the build have failed"),
+            "The text is in English: answer in English, do not translate it."
+        )
+        XCTAssertTrue(
+            WritingOutputGuard.languageInstruction(for: "這個 PR 我 review 過了，有幾個 edge case 還沒 handle")
+                .hasPrefix("The text mixes Chinese and English:")
+        )
+    }
+
+    func testEveryToneKeepsTheWordsOfATextInAnotherScript() {
+        let source = "어제 회의에서 말씀드린 대로 오늘 오후까지 수정해서 다시 올려드릴게요. The test is fail on CI because of timeout."
+        let kept = "어제 회의에서 말씀드린 대로 오늘 오후까지 수정해서 다시 올려드릴게요. The test fails on CI because of a timeout."
+        let translated = "As I mentioned in yesterday's meeting, I'll fix it and upload it again by this afternoon. The test fails on CI because of a timeout."
+        for tone in [WritingTone.preserve, .idiomatic, .formal, .casual, .concise] {
+            XCTAssertFalse(
+                WritingOutputGuard.assess(source: source, output: kept, mode: .proofread, tone: tone).contains { if case .missing = $0 { true } else { false } },
+                "\(tone)"
+            )
+            let issues = WritingOutputGuard.assess(source: source, output: translated, mode: .proofread, tone: tone)
+            XCTAssertTrue(issues.contains { if case .missing(let words) = $0 { words.contains("어제") } else { false } }, "\(tone): \(issues)")
+        }
+        // An English text with a Korean name in it is held to that name only where its tone protects it.
+        XCTAssertFalse(
+            WritingOutputGuard.assess(
+                source: "Please send the invoice in 청구서_0412.pdf to Bob.", output: "Please send the invoice to Bob.", mode: .proofread, tone: .formal
+            ).contains { if case .missing = $0 { true } else { false } }
+        )
+    }
+
     func testTheEditRatioCountsWordsHanCharactersAndPunctuation() {
         XCTAssertEqual(EditRatio.tokens("I'm fine, 謝謝!"), ["I'm", "fine", ",", "謝", "謝", "!"])
         XCTAssertEqual(EditRatio.between("same text", "same text"), 0)

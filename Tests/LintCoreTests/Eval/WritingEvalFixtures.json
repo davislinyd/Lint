@@ -1,6 +1,6 @@
 {
-  "version": 12,
-  "about": "Lint's own writing fixtures: English proofreading and tone rewrites (also the English inside mixed Chinese-English text, whose Chinese is left alone), English-to-Traditional-Chinese translation for reference, and the native-speaker tone (Chinese, another language, mixed or broken English in, a native speaker's English out) in its styles (standard, casual, formal, Gen Z and concise); and English that is correct but not what a native speaker would say, whose fix has to keep the writer's voice (keepsVoice), including sentences built wrong (a subject said twice, clauses out of order) around file and product names in another script. Every sentence was written for this repository; nothing is taken from a benchmark corpus. They exist to compare engines on Lint's actual workload, not to score a model in general.",
+  "version": 13,
+  "about": "Lint's own writing fixtures: English proofreading and tone rewrites (also the English inside text that mixes English with Chinese or another script, which is left alone), English-to-Traditional-Chinese translation for reference, and the native-speaker tone (Chinese, another language, mixed or broken English in, a native speaker's English out) in its styles (standard, casual, formal, Gen Z and concise); and English that is correct but not what a native speaker would say, whose fix has to keep the writer's voice (keepsVoice), including sentences built wrong (a subject said twice, clauses out of order) around file and product names in another script. Every sentence was written for this repository; nothing is taken from a benchmark corpus. They exist to compare engines on Lint's actual workload, not to score a model in general.",
   "cases": [
     {
       "id": "en-grammar-01",
@@ -1399,6 +1399,70 @@
       "outputLanguage": "mixed",
       "expectUnchanged": true,
       "note": "Already correct: casual code-switching, nothing in English to fix and the Chinese is left alone."
+    },
+    {
+      "id": "mixed-other-01",
+      "category": "mixed-other",
+      "mode": "proofread",
+      "tone": "idiomatic",
+      "input": "어제 회의에서 말씀드린 대로 오늘 오후까지 수정해서 다시 올려드릴게요. The test is fail on CI because of timeout.",
+      "outputLanguage": "mixed",
+      "mustFix": [
+        "is fail on"
+      ],
+      "mustPreserve": [
+        "어제 회의에서 말씀드린 대로 오늘 오후까지 수정해서 다시 올려드릴게요."
+      ],
+      "note": "Korean mixed with English, kept: the Korean sentence stays exactly as written and only the English is fixed (\"The test fails on CI because of a timeout\"). Nothing is translated either way.",
+      "keepsVoice": true
+    },
+    {
+      "id": "mixed-other-02",
+      "category": "mixed-other",
+      "mode": "proofread",
+      "tone": "idiomatic",
+      "input": "すみません、きのうのミーティングのメモをおくります。Please check it and tell me if anything are missing.",
+      "outputLanguage": "mixed",
+      "mustFix": [
+        "anything are missing"
+      ],
+      "mustPreserve": [
+        "すみません、きのうのミーティングのメモをおくります。"
+      ],
+      "note": "Japanese (kana) mixed with English, kept: the Japanese stays as written; \"if anything is missing\" is fixed.",
+      "keepsVoice": true
+    },
+    {
+      "id": "mixed-other-03",
+      "category": "mixed-other",
+      "mode": "proofread",
+      "tone": "idiomatic",
+      "input": "ขอบคุณมากสำหรับความช่วยเหลือเมื่อวานนะครับ I already update the document and sent to the team.",
+      "outputLanguage": "mixed",
+      "mustFix": [
+        "I already update the"
+      ],
+      "mustPreserve": [
+        "ขอบคุณมากสำหรับความช่วยเหลือเมื่อวานนะครับ"
+      ],
+      "note": "Thai mixed with English, kept: the Thai thanks stays as written; the English becomes \"I've already updated the document and sent it to the team\".",
+      "keepsVoice": true
+    },
+    {
+      "id": "mixed-other-04",
+      "category": "mixed-other",
+      "mode": "proofread",
+      "tone": "idiomatic",
+      "input": "Спасибо, я посмотрю ваш отчёт завтра утром. The numbers in the second table is not match with last month.",
+      "outputLanguage": "mixed",
+      "mustFix": [
+        "is not match"
+      ],
+      "mustPreserve": [
+        "Спасибо, я посмотрю ваш отчёт завтра утром."
+      ],
+      "note": "Russian mixed with English, kept: the Russian stays as written; \"the numbers in the second table don't match last month's\".",
+      "keepsVoice": true
     },
     {
       "id": "native-01",

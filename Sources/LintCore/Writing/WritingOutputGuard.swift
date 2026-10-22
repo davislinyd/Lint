@@ -41,10 +41,10 @@ public enum TextScript: Equatable, Sendable {
         prose(text).unicodeScalars.contains { ("a"..."z").contains($0) || ("A"..."Z").contains($0) }
     }
 
-    /// From this share of its letters on, a script other than Latin makes the text another language: a
-    /// Korean file or product name in English text leaves it English, a Korean sentence with an English
-    /// word or two in it ("내일 PR review 해주세요") is Korean.
-    public static let otherScriptShare = 0.3
+    /// From this share of its letters on, a script other than Latin or Han makes the text another
+    /// language: a Korean file or product name in English text leaves it English, a Korean sentence
+    /// with an English word or two in it ("내일 PR review 해주세요") is Korean.
+    public static let otherScriptMinimumShare = 0.3
     /// Text in Latin letters only is another language when Apple's recognizer is at least this sure of
     /// a language other than English, with at least `otherLanguageMinimumLetters` letters to go on.
     /// Measured: it calls short or casual English Polish or Indonesian ("np", "Hi Alice, can u send me
@@ -53,22 +53,47 @@ public enum TextScript: Equatable, Sendable {
     public static let otherLanguageConfidence = 0.9
     public static let otherLanguageMinimumLetters = 6
 
+    /// Letters of a script other than Latin or Han (Hangul, kana, Thai, Cyrillic…) as a share of the
+    /// letters in the prose.
+    public static func otherScriptShare(_ text: String) -> Double {
+        let counts = scriptCounts(in: prose(text))
+        let total = counts.latin + counts.han + counts.other
+        return total == 0 ? 0 : Double(counts.other) / Double(total)
+    }
+
+    /// Enough of the prose is in a script of its own (Korean, Japanese kana, Thai…) for the text to be
+    /// in that language, whatever English it mixes in.
+    public static func writesInAnotherScript(_ text: String) -> Bool {
+        otherScriptShare(text) >= otherScriptMinimumShare
+    }
+
     /// Whether the prose is in a language other than English. Never for text with Chinese in it, which
     /// is told by its script instead: the recognizer calls "請幫我 check 這個 issue" English.
     public static func isOtherLanguage(_ text: String) -> Bool {
         let prose = prose(text)
-        var latin = 0
-        var other = 0
-        for scalar in prose.unicodeScalars where CharacterSet.letters.contains(scalar) {
-            if isHan(scalar) { return false }
-            if isLatin(scalar) { latin += 1 } else { other += 1 }
-        }
-        if other > 0 { return Double(other) / Double(other + latin) >= otherScriptShare }
-        guard latin >= otherLanguageMinimumLetters else { return false }
+        let counts = scriptCounts(in: prose)
+        if counts.han > 0 { return false }
+        if counts.other > 0 { return Double(counts.other) / Double(counts.other + counts.latin) >= otherScriptMinimumShare }
+        guard counts.latin >= otherLanguageMinimumLetters else { return false }
         let recognizer = NLLanguageRecognizer()
         recognizer.processString(prose)
         guard let top = recognizer.languageHypotheses(withMaximum: 1).first else { return false }
         return top.key != .english && top.value >= otherLanguageConfidence
+    }
+
+    /// The letters of the prose by script: Latin, Han, and every other script together.
+    private static func scriptCounts(in prose: String) -> (latin: Int, han: Int, other: Int) {
+        var counts = (latin: 0, han: 0, other: 0)
+        for scalar in prose.unicodeScalars where CharacterSet.letters.contains(scalar) {
+            if isHan(scalar) {
+                counts.han += 1
+            } else if isLatin(scalar) {
+                counts.latin += 1
+            } else {
+                counts.other += 1
+            }
+        }
+        return counts
     }
 
     /// Letters of the Latin script, with the accents of Vietnamese, Spanish or German, precomposed or not.
@@ -415,7 +440,15 @@ public enum WritingOutputGuard {
         // A change of language says it all: the other-language words it dropped or brought in are the
         // same finding, and are not reported a second time.
         let languageIssue = policy.keepsLanguage ? languageChange(from: source, to: trimmed) : nil
-        let literalKinds = languageIssue == nil ? policy.protectedKinds : policy.protectedKinds.subtracting([.foreignWord])
+        var literalKinds = languageIssue == nil ? policy.protectedKinds : policy.protectedKinds.subtracting([.foreignWord])
+        // A text in another script that is to keep it (Korean, Thai…) keeps its words in every tone, and
+        // an answer that translated them is retried with those words listed. Measured on Gemma 4 E4B: its
+        // first answer translated the Korean of such a text every time, and that retry kept it and fixed
+        // the English; telling the model up front, or on the retry, that the text "mixes another language
+        // and English" left the English of a Thai text uncorrected in most runs.
+        if policy.keepsLanguage, languageIssue == nil, TextScript.writesInAnotherScript(source) {
+            literalKinds.insert(.foreignWord)
+        }
         let missing = ProtectedLiterals.missing(from: output, source: source, kinds: literalKinds)
         if !missing.isEmpty { issues.append(.missing(missing)) }
         // A translation may legitimately write a number the source spelled out ("ten" → "10").

@@ -284,6 +284,10 @@ final class EnglishPromptTests: XCTestCase {
             WritingPromptComposer.withLanguageLine("P", for: "這個 PR 我 review 過了，有幾個 edge case 還沒 handle", mode: .proofread, tone: .formal),
             "P\nThe text mixes Chinese and English: change only the English; leave the Chinese exactly as written, and do not translate either part."
         )
+        XCTAssertEqual(
+            WritingPromptComposer.withLanguageLine("P", for: "내일 회의 전에 이 PR 좀 봐주세요, the build have failed", mode: .proofread, tone: .idiomatic),
+            "P\nThe text is in English: answer in English, do not translate it.", "Korean mixed with English gets the usual line up front"
+        )
         XCTAssertEqual(WritingPromptComposer.withLanguageLine("P", for: "Thanks for the update.", mode: .translate, tone: .preserve), "P")
         XCTAssertEqual(WritingPromptComposer.withLanguageLine("P", for: "Thanks for the update.", mode: .custom, tone: .preserve), "P")
     }

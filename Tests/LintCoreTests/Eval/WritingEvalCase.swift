@@ -194,15 +194,17 @@ enum WritingEvalChecks {
 
     static func languageFailure(_ expected: WritingEvalCase.Language, in output: String) -> String? {
         let ratio = hanRatio(of: output)
+        // Han plus the scripts of their own (Korean, kana, Thai…): what is not English in the answer.
+        let nonLatin = ratio + TextScript.otherScriptShare(output)
         switch expected {
         case .any: return nil
         case .en:
-            return ratio > 0.15 ? "expected English, Han characters are \(percent(ratio)) of it" : nil
+            return nonLatin > 0.15 ? "expected English, other scripts are \(percent(nonLatin)) of it" : nil
         case .zhHant:
             return ratio < 0.4 ? "expected Traditional Chinese, Han characters are only \(percent(ratio))" : nil
         case .mixed:
-            return (0.05...0.95).contains(ratio)
-                ? nil : "expected both languages, Han characters are \(percent(ratio))"
+            return (0.05...0.95).contains(nonLatin)
+                ? nil : "expected both languages, other scripts are \(percent(nonLatin))"
         }
     }
 

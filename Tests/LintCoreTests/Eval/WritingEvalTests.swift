@@ -8,7 +8,7 @@ import XCTest
 final class WritingEvalFixtureTests: XCTestCase {
     func testTheFixturesCoverLintsWorkloadAndAreWellFormed() throws {
         let fixtures = try WritingEvalFixtures.load()
-        XCTAssertEqual(fixtures.version, 12)
+        XCTAssertEqual(fixtures.version, 13)
         XCTAssertGreaterThanOrEqual(fixtures.cases.count, 60, "the set is meant to be about 60-180 cases")
         XCTAssertLessThanOrEqual(fixtures.cases.count, 180)
         XCTAssertEqual(Set(fixtures.cases.map(\.id)).count, fixtures.cases.count, "ids are unique")
@@ -21,7 +21,7 @@ final class WritingEvalFixtureTests: XCTestCase {
             "short-email", "business-writing", "already-correct", "preservation",
             "fragment", "clean-technical", "clean-business", "clean-casual", "casual-preserve",
             "ip-address", "shell-command", "code-identifier", "currency", "file-path", "product-names",
-            "english-natural", "english-holdout", "mixed-english",
+            "english-natural", "english-holdout", "mixed-english", "mixed-other",
             "native-zh", "native-other", "native-mixed", "native-english", "native-urls", "native-list", "native-already-english",
             "native-casual", "native-formal", "native-genz", "idiomatic", "idiomatic-already", "idiomatic-structure", "tone-casual", "native-concise",
         ] {
@@ -58,7 +58,7 @@ final class WritingEvalFixtureTests: XCTestCase {
             if testCase.writingMode == .translate {
                 XCTAssertEqual(testCase.outputLanguage, .zhHant, "\(testCase.id): translation only goes into Chinese")
             } else {
-                let expected: WritingEvalCase.Language = testCase.category == "mixed-english" ? .mixed : .en
+                let expected: WritingEvalCase.Language = ["mixed-english", "mixed-other"].contains(testCase.category) ? .mixed : .en
                 XCTAssertEqual(testCase.outputLanguage, expected, "\(testCase.id): only English is proofread")
             }
         }
@@ -191,9 +191,19 @@ final class WritingEvalFixtureTests: XCTestCase {
         let others = fixtures.cases.filter { $0.category == "native-other" }
         XCTAssertGreaterThanOrEqual(others.count, 8)
         for testCase in others {
-            XCTAssertEqual(WritingTone.idiomatic.effective(for: testCase.input, mode: .proofread, mixed: .keepChinese), .native, testCase.id)
+            XCTAssertEqual(WritingTone.idiomatic.effective(for: testCase.input, mode: .proofread, mixed: .toEnglish), .native, testCase.id)
         }
-        let english = fixtures.cases.filter { $0.category != "native-other" && !WritingOutputGuard.containsCJK($0.input) }
+        // Another script mixed with English follows the setting, as Chinese does.
+        let mixed = fixtures.cases.filter { $0.category == "mixed-other" }
+        XCTAssertGreaterThanOrEqual(mixed.count, 4)
+        for testCase in mixed {
+            XCTAssertTrue(TextScript.writesInAnotherScript(testCase.input), testCase.id)
+            XCTAssertEqual(WritingTone.idiomatic.effective(for: testCase.input, mode: .proofread, mixed: .keepOtherLanguage), .idiomatic, testCase.id)
+            XCTAssertEqual(WritingTone.idiomatic.effective(for: testCase.input, mode: .proofread, mixed: .toEnglish), .native, testCase.id)
+        }
+        let english = fixtures.cases.filter {
+            !["native-other", "mixed-other"].contains($0.category) && !WritingOutputGuard.containsCJK($0.input)
+        }
         XCTAssertGreaterThanOrEqual(english.count, 100)
         for testCase in english {
             XCTAssertFalse(TextScript.isOtherLanguage(testCase.input), testCase.id)
@@ -225,6 +235,8 @@ final class WritingEvalFixtureTests: XCTestCase {
         XCTAssertNotNil(WritingEvalChecks.languageFailure(.zhHant, in: "The migration finished."))
         XCTAssertNil(WritingEvalChecks.languageFailure(.mixed, in: "這個 PR 我 review 過了"))
         XCTAssertNotNil(WritingEvalChecks.languageFailure(.mixed, in: "I reviewed the PR already"))
+        XCTAssertNil(WritingEvalChecks.languageFailure(.mixed, in: "어제 회의에서 말씀드린 대로 오늘 오후까지 올려드릴게요. The test fails on CI."))
+        XCTAssertNotNil(WritingEvalChecks.languageFailure(.en, in: "감사합니다, 내일 확인하겠습니다."))
         XCTAssertNil(WritingEvalChecks.languageFailure(.any, in: "anything at all"))
     }
 }

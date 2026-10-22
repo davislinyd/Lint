@@ -201,9 +201,9 @@
 "改用道地 R" = "Tự nhiên R";
 "其他語言 → 英文" = "Ngôn ngữ khác → Tiếng Anh";
 "整段寫成英文" = "Viết toàn bộ bằng tiếng Anh";
-"保留中文，只改英文" = "Giữ tiếng Trung, chỉ sửa tiếng Anh";
-"中英夾雜的文字" = "Văn bản lẫn tiếng Trung và tiếng Anh";
-"校對時，「道地」「正式」「輕鬆」「簡潔」會把中文或其他語言寫成英文；中英夾雜的文字照這裡的選擇。「保留原語氣」一律只改英文。" = "Khi hiệu đính, Tự nhiên, Trang trọng, Thoải mái và Ngắn gọn sẽ viết tiếng Trung hoặc ngôn ngữ khác thành tiếng Anh; văn bản lẫn tiếng Trung và tiếng Anh theo lựa chọn ở đây. Giữ giọng văn gốc luôn chỉ sửa tiếng Anh.";
+"保留其他語言，只改英文" = "Giữ ngôn ngữ khác, chỉ sửa tiếng Anh";
+"夾雜英文的文字" = "Văn bản lẫn tiếng Anh";
+"校對時，「道地」「正式」「輕鬆」「簡潔」會把中文或其他語言寫成英文；中文、日文、韓文等夾雜英文時照這裡的選擇，越南文、印尼文等用拉丁字母的語言則一律寫成英文。「保留原語氣」一律只改英文。" = "Khi hiệu đính, Tự nhiên, Trang trọng, Thoải mái và Ngắn gọn sẽ viết tiếng Trung hoặc ngôn ngữ khác thành tiếng Anh. Tiếng Trung, tiếng Nhật, tiếng Hàn và các ngôn ngữ tương tự lẫn tiếng Anh sẽ theo lựa chọn ở đây; các ngôn ngữ dùng chữ Latinh như tiếng Việt hoặc tiếng Indonesia luôn được viết thành tiếng Anh. Giữ giọng văn gốc luôn chỉ sửa tiếng Anh.";
 "正式" = "Trang trọng";
 "簡潔" = "Ngắn gọn";
 "專業" = "Chuyên nghiệp";

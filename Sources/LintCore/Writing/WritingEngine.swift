@@ -73,6 +73,17 @@ public enum WritingEngineRouter {
         default: return false
         }
     }
+
+    /// Whether the first-run guide still has something to do, so Settings and the hotkeys show it
+    /// instead: Lint's local AI is the way forward but not installed, or it takes the requests while
+    /// Lint may not read text yet. Whether the server runs right now does not matter.
+    public static func onboardingPending(
+        selected: ProviderKind, apple: AppleIntelligenceStatus, localAIReady: Bool, accessibilityTrusted: Bool
+    ) -> Bool {
+        if offersLocalAISetup(selected: selected, apple: apple, localAIReady: localAIReady) { return true }
+        return !accessibilityTrusted
+            && route(selected: selected, apple: apple, localAIReady: localAIReady) == .provider(.localLlama)
+    }
 }
 
 /// The one-time choice of engine for this version. Deterministic: it reads only stored settings,

@@ -300,6 +300,8 @@
 /* Local AI setup (bundled runtime, managed model) */
 "設定本機 AI" = "Siapkan AI Lokal";
 "設定本機 AI…" = "Siapkan AI Lokal…";
+"下載 AI 模型" = "Unduh Model AI";
+"使用其他模型來源…" = "Gunakan Penyedia Model Lain…";
 "歡迎使用 Lint" = "Selamat Datang di Lint";
 "在你的 Mac 上本機執行 AI 校對，文字不會離開這台電腦。" = "Periksa tulisan dengan AI yang berjalan di Mac Anda. Teks Anda tidak pernah keluar dari komputer ini.";
 "本機 AI 執行環境" = "Runtime AI lokal";
@@ -318,7 +320,7 @@
 "正在啟動本機 AI（第一次載入模型需要一點時間）…" = "Memulai AI lokal (memuat model butuh sedikit waktu pada kali pertama)…";
 "本機 AI 已準備好，但目前沒有執行。" = "AI lokal sudah siap tetapi saat ini tidak berjalan.";
 "已安裝的模型不完整或已損毀，需要重新下載。" = "Model yang terinstal tidak lengkap atau rusak dan perlu diunduh ulang.";
-"Lint 需要一個 AI 模型才能在本機運作。模型不在 App 裡，安裝前會先詢問你。" = "Lint memerlukan model AI untuk berjalan secara lokal. Model tidak disertakan di app; Lint akan bertanya sebelum menginstalnya.";
+"按下「下載 AI 模型」，Lint 會幫你下載並安裝所有需要的元件，不需要另外安裝軟體或做其他設定。下載前會先列出檔案大小。" = "Pilih “Unduh Model AI” dan Lint akan mengunduh serta menginstal semua komponen yang diperlukan. Anda tidak perlu menginstal atau mengatur apa pun lagi. Ukuran unduhan ditampilkan lebih dulu.";
 "下載已取消。已下載的 %@ 會保留，繼續下載會從中斷處接續。" = "Unduhan dibatalkan. Bagian %@ yang sudah diunduh tetap disimpan, dan melanjutkan akan meneruskan dari titik terakhir.";
 "下載已取消。" = "Unduhan dibatalkan.";
 "下載大小：約 %@" = "Ukuran unduhan: sekitar %@";

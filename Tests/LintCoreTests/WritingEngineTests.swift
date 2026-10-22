@@ -93,6 +93,30 @@ final class WritingEngineTests: XCTestCase {
         }
     }
 
+    func testTheGuideIsPendingUntilLocalAIIsInstalledAndLintMayReadText() {
+        func pending(_ selected: ProviderKind, _ apple: AppleIntelligenceStatus, ready: Bool, trusted: Bool) -> Bool {
+            WritingEngineRouter.onboardingPending(
+                selected: selected, apple: apple, localAIReady: ready, accessibilityTrusted: trusted
+            )
+        }
+        // Lint's local AI takes the requests: both the model and Accessibility are needed.
+        XCTAssertTrue(pending(.localLlama, .available, ready: false, trusted: true))
+        XCTAssertTrue(pending(.localLlama, .available, ready: true, trusted: false))
+        XCTAssertFalse(pending(.localLlama, .available, ready: true, trusted: true))
+        XCTAssertTrue(pending(.automatic, .deviceNotEligible, ready: false, trusted: true))
+        XCTAssertTrue(pending(.automatic, .deviceNotEligible, ready: true, trusted: false))
+        XCTAssertFalse(pending(.automatic, .deviceNotEligible, ready: true, trusted: true))
+        // Apple Intelligence or another provider takes them: the guide has nothing to do.
+        for status in everyStatus {
+            XCTAssertFalse(pending(.appleIntelligence, status, ready: false, trusted: false))
+        }
+        XCTAssertFalse(pending(.automatic, .available, ready: false, trusted: false))
+        XCTAssertFalse(pending(.automatic, .available, ready: true, trusted: false))
+        for kind in [ProviderKind.openai, .openaiCompatible, .anthropic, .gemini] {
+            XCTAssertFalse(pending(kind, .deviceNotEligible, ready: false, trusted: false), "\(kind)")
+        }
+    }
+
     func testOnlyPermanentReasonsCountAsPermanent() {
         XCTAssertEqual(everyStatus.filter(\.isPermanent), [.deviceNotEligible, .unsupportedOS])
         for status in everyStatus {

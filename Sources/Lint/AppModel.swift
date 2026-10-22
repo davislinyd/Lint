@@ -182,6 +182,14 @@ final class AppModel: NSObject, NSWindowDelegate {
         ) || (settings.providerKind == .localLlama && !localAI.isSetupComplete)
     }
 
+    /// The first-run guide was closed before it was done: Settings and the hotkeys show it instead.
+    var onboardingPending: Bool {
+        WritingEngineRouter.onboardingPending(
+            selected: settings.providerKind, apple: appleIntelligence.currentStatus(),
+            localAIReady: !localAI.needsSetup, accessibilityTrusted: AccessibilityPermission.isTrusted
+        )
+    }
+
     /// At launch: look at what local AI still needs, and start the server if it is ready to start.
     func ensureLocalServerIfNeeded() async {
         guard !usesAppleIntelligence else { return }
@@ -241,12 +249,14 @@ final class AppModel: NSObject, NSWindowDelegate {
     }
 
     func runCapture() {
+        if onboardingPending { return presentLocalAISetup() }
         panel.run()
     }
 
     /// ⌥⌘K — run the pending chip / focused field check without clicking. Asking for a suggestion in
     /// an app that had gone quiet says that Lint is wanted there again.
     func runCheckHotkey() {
+        if onboardingPending { return presentLocalAISetup() }
         forgetAdjustment(for: NSWorkspace.shared.frontmostApplication?.bundleIdentifier, quiet: true, tone: false)
         panel.activateCheckFromHotkey(capture: capture)
     }
@@ -287,7 +297,9 @@ final class AppModel: NSObject, NSWindowDelegate {
         }
     }
 
-    func openSettings(pane: SettingsPane? = nil, scrollToUpdateSection: Bool = false) {
+    /// Shows the first-run guide instead while it is pending, unless the guide itself sends the user here.
+    func openSettings(pane: SettingsPane? = nil, scrollToUpdateSection: Bool = false, skippingOnboarding: Bool = false) {
+        if !skippingOnboarding, onboardingPending { return presentLocalAISetup() }
         if let pane { settingsPane = pane }
         if scrollToUpdateSection { scrollToUpdateSectionRequest = UUID() }
         if settingsWindow == nil {

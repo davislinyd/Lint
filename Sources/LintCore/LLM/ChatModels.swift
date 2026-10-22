@@ -187,7 +187,7 @@ public enum LLMError: Error, LocalizedError, Sendable {
             // llama-server's own words for "the prompt does not fit" are raw JSON; the text is
             // never cut short, so say what happened and what to do about it.
             body.contains("exceed_context_size_error")
-                ? String(localized: "這段文字對本機 AI 來說太長了。請分段處理，或在「設定 → 模型 → 進階」的額外參數加上較大的 -c（例如 -c 8192）後重新啟動。")
+                ? String(localized: "這段文字對本機 AI 來說太長了。請分段處理，或在「設定 → 模型 → 進階」的額外參數加上較大的 -c（例如 -c 16384）後重新啟動。")
                 : String(localized: "HTTP \(code)：\(body)")
         case .decoding:
             String(localized: "無法解析模型回應")

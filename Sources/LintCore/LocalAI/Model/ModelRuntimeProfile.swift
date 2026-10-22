@@ -31,7 +31,7 @@ public struct ModelRuntimeProfile: Equatable, Sendable {
 
     public init(
         reasoningArguments: [String] = [],
-        contextTokens: Int = 3072,
+        contextTokens: Int = 8192,
         kvCacheType: String = "q8_0",
         batchTokens: Int = 512,
         ubatchTokens: Int = 256

@@ -426,8 +426,8 @@
 "30 分鐘" = "30 phút";
 "閒置一段時間沒有使用本機 AI 時，Lint 會請 llama-server 釋放模型佔用的記憶體；服務本身仍在執行。下一次的建議會多花幾秒重新載入模型。" = "Sau một thời gian không có gợi ý nào, Lint yêu cầu llama-server giải phóng bộ nhớ mà mô hình đang chiếm; bản thân máy chủ vẫn chạy. Gợi ý tiếp theo sẽ mất thêm vài giây để tải lại mô hình.";
 "按「重新啟動」後新的閒置設定才會生效。" = "Bấm Khởi động lại để áp dụng cài đặt rảnh mới.";
-"留空即可：Lint 會依所選模型套用自己的參數（目前為 %@）。這裡填的參數會覆蓋同一個選項，例如長文可填 -c 8192。服務一律只綁定 127.0.0.1，額外參數裡的 --host 會被忽略。" = "Hãy để trống: Lint tự truyền tham số phù hợp với mô hình đã chọn (hiện tại là %@). Tham số điền ở đây sẽ thay cho tùy chọn tương ứng của Lint — với văn bản dài, hãy thử -c 8192. Máy chủ luôn chỉ gắn với 127.0.0.1; --host điền ở đây sẽ bị bỏ qua.";
-"這段文字對本機 AI 來說太長了。請分段處理，或在「設定 → 模型 → 進階」的額外參數加上較大的 -c（例如 -c 8192）後重新啟動。" = "Văn bản này quá dài đối với AI cục bộ. Hãy xử lý từng phần, hoặc thêm -c lớn hơn (ví dụ -c 8192) vào tham số bổ sung trong Cài đặt → Mô hình → Nâng cao rồi khởi động lại.";
+"留空即可：Lint 會依所選模型套用自己的參數（目前為 %@）。這裡填的參數會覆蓋同一個選項，例如長文可填 -c 16384。服務一律只綁定 127.0.0.1，額外參數裡的 --host 會被忽略。" = "Hãy để trống: Lint tự truyền tham số phù hợp với mô hình đã chọn (hiện tại là %@). Tham số điền ở đây sẽ thay cho tùy chọn tương ứng của Lint — với văn bản dài, hãy thử -c 16384. Máy chủ luôn chỉ gắn với 127.0.0.1; --host điền ở đây sẽ bị bỏ qua.";
+"這段文字對本機 AI 來說太長了。請分段處理，或在「設定 → 模型 → 進階」的額外參數加上較大的 -c（例如 -c 16384）後重新啟動。" = "Văn bản này quá dài đối với AI cục bộ. Hãy xử lý từng phần, hoặc thêm -c lớn hơn (ví dụ -c 16384) vào tham số bổ sung trong Cài đặt → Mô hình → Nâng cao rồi khởi động lại.";
 "建議" = "Khuyên dùng";
 "記憶體用量很高，可能當機" = "tốn rất nhiều bộ nhớ, có thể làm treo máy Mac";
 "需下載 %@" = "cần tải %@";

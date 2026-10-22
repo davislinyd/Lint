@@ -104,7 +104,7 @@ Apple: `SystemLanguageModel`, variant "AFM 3 Core", context 4096, prompt `apple-
 Gemma: **Gemma 4 E4B** (`google/gemma-4-E4B-it-qat-q4_0-gguf`, `gemma-4-E4B_q4_0-it.gguf`, SHA-256
 `676c3507…fbaee`), llama.cpp b11046, the arguments Lint used by default at the time
 (`--jinja --no-skip-chat-parsing -ngl 99 -fa on -c 4096 -np 1 -t 6 --reasoning off`), standard
-prompts, temperature 0.3, no guard. Lint now tunes per model instead (context 3072, q8_0 KV cache,
+prompts, temperature 0.3, no guard. Lint now tunes per model instead (context 8192, q8_0 KV cache,
 idle release); Gemma was not re-measured with that tuning. **Gemma 4 12B, Lint's actual quality reference, was not
 measured**: loading it drove free memory to 6% on this Mac and the safety monitor stopped it; the
 maintainer chose E4B instead. A 12B comparison is still open.

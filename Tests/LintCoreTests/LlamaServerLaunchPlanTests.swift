@@ -40,7 +40,7 @@ final class LlamaServerLaunchPlanTests: XCTestCase {
     // MARK: - Lint's own tuning
 
     private let sharedTuning = [
-        "--jinja", "--no-skip-chat-parsing", "-ngl", "99", "-fa", "on", "-c", "3072",
+        "--jinja", "--no-skip-chat-parsing", "-ngl", "99", "-fa", "on", "-c", "8192",
         "-np", "1", "-t", "6", "-ctk", "q8_0", "-ctv", "q8_0", "-b", "512", "-ub", "256",
         "--lazy-mode", "on", "--cache-ram", "128",
     ]
@@ -63,9 +63,9 @@ final class LlamaServerLaunchPlanTests: XCTestCase {
 
         // A profile is data, so a different one really does change the command line.
         let other = plan(profile: ModelRuntimeProfile(
-            reasoningArguments: [], contextTokens: 8192, kvCacheType: "f16", batchTokens: 2048, ubatchTokens: 512
+            reasoningArguments: [], contextTokens: 4096, kvCacheType: "f16", batchTokens: 2048, ubatchTokens: 512
         )).arguments
-        XCTAssertEqual(value(after: "-c", in: other), "8192")
+        XCTAssertEqual(value(after: "-c", in: other), "4096")
         XCTAssertEqual(value(after: "-ctk", in: other), "f16")
         XCTAssertEqual(value(after: "-b", in: other), "2048")
         XCTAssertEqual(value(after: "-ub", in: other), "512")
@@ -73,7 +73,7 @@ final class LlamaServerLaunchPlanTests: XCTestCase {
     }
 
     func testEverySizedOptionAppearsExactlyOnce() {
-        for extra in ["", "-c 8192", "--ctx-size=8192 -ctk f16", "--verbose", "-ngl 40 -t 2 --reasoning auto"] {
+        for extra in ["", "-c 4096", "--ctx-size=4096 -ctk f16", "--verbose", "-ngl 40 -t 2 --reasoning auto"] {
             let arguments = plan(profile: ModelCatalog.gemma4_12bQATQ4_0.runtimeProfile, idleSleepSeconds: 300, extra: extra).arguments
             for flag in ["-c", "-ctk", "-ctv", "-b", "-ub", "-ngl", "-fa", "-np", "-t", "--reasoning", "--sleep-idle-seconds", "--lazy-mode", "--cache-ram", "--jinja", "--host", "--port"] {
                 XCTAssertLessThanOrEqual(
@@ -87,19 +87,19 @@ final class LlamaServerLaunchPlanTests: XCTestCase {
     func testTheUsersOwnArgumentsWinOverLintsTuningAndNeverDuplicateIt() {
         let arguments = plan(
             profile: ModelCatalog.gemma4_12bQATQ4_0.runtimeProfile,
-            extra: "-c 8192 -ctk f16 -ctv f16 -b 2048 -ub 512 --reasoning auto"
+            extra: "-c 4096 -ctk f16 -ctv f16 -b 2048 -ub 512 --reasoning auto"
         ).arguments
-        XCTAssertEqual(value(after: "-c", in: arguments), "8192")
+        XCTAssertEqual(value(after: "-c", in: arguments), "4096")
         XCTAssertEqual(value(after: "-ctk", in: arguments), "f16")
         XCTAssertEqual(value(after: "-ctv", in: arguments), "f16")
         XCTAssertEqual(value(after: "-b", in: arguments), "2048")
         XCTAssertEqual(value(after: "-ub", in: arguments), "512")
         XCTAssertEqual(value(after: "--reasoning", in: arguments), "auto")
-        XCTAssertFalse(arguments.contains("3072"))
+        XCTAssertFalse(arguments.contains("8192"))
         XCTAssertFalse(arguments.contains("q8_0"))
         // The long spellings and `--flag=value` are the same option.
-        let long = plan(extra: "--ctx-size=8192 --cache-type-k q4_0 --n-gpu-layers 20 --no-jinja").arguments
-        XCTAssertFalse(long.contains("3072"))
+        let long = plan(extra: "--ctx-size=4096 --cache-type-k q4_0 --n-gpu-layers 20 --no-jinja").arguments
+        XCTAssertFalse(long.contains("8192"))
         XCTAssertFalse(long.contains("-ctk"), "--cache-type-k already set it")
         XCTAssertFalse(long.contains("-ngl"))
         XCTAssertFalse(long.contains("--jinja"))

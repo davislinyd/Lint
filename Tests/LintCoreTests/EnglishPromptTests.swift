@@ -26,7 +26,7 @@ final class EnglishPromptTests: XCTestCase {
             for tone in WritingTone.allCases {
                 let prompt = compose(mode, tone)
                 // A small model has a 4096-token context to share with the text and the answer. The native
-                // tones carry the most (the idea, a few examples, a style): the local server's context is 3072, and
+                // tones carry the most (the idea, a few examples, a style): the local server's context is 8192, and
                 // `WritingChunkBudget` takes the instructions off what is left for the text.
                 // The idiomatic tone carries more still: what to rebuild, what to leave, and an example of each.
                 let limit = mode != .proofread ? 650 : tone == .idiomatic ? 740 : tone.isNative ? 720 : 650

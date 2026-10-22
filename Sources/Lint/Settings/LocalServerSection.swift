@@ -396,7 +396,7 @@ struct LocalServerSection: View {
                 Text("額外參數")
                 CodeEditor(text: Bindable(app.settings).localServerExtraArgs)
                     .frame(minHeight: 56, maxHeight: 96)
-                Text("留空即可：Lint 會依所選模型套用自己的參數（目前為 \(tuningSummary)）。這裡填的參數會覆蓋同一個選項，例如長文可填 -c 8192。服務一律只綁定 127.0.0.1，額外參數裡的 --host 會被忽略。")
+                Text("留空即可：Lint 會依所選模型套用自己的參數（目前為 \(tuningSummary)）。這裡填的參數會覆蓋同一個選項，例如長文可填 -c 16384。服務一律只綁定 127.0.0.1，額外參數裡的 --host 會被忽略。")
                     .sectionNote()
             }
         } header: {

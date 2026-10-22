@@ -101,7 +101,7 @@ final class ModelCatalogTests: XCTestCase {
             XCTAssertEqual(gemma.runtimeProfile.reasoningArguments, ["--reasoning", "off"], "\(gemma.id): Gemma 4 thinks unless told not to")
         }
         for model in ModelCatalog.all {
-            XCTAssertEqual(model.runtimeProfile.contextTokens, 3072, model.id)
+            XCTAssertEqual(model.runtimeProfile.contextTokens, 8192, model.id)
             XCTAssertEqual(model.runtimeProfile.kvCacheType, "q8_0", model.id)
         }
     }

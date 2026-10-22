@@ -426,8 +426,8 @@
 "30 分鐘" = "30 minutos";
 "閒置一段時間沒有使用本機 AI 時，Lint 會請 llama-server 釋放模型佔用的記憶體；服務本身仍在執行。下一次的建議會多花幾秒重新載入模型。" = "Depois de um tempo sem sugestões, o Lint pede ao llama-server que libere a memória ocupada pelo modelo; o servidor continua em execução. A próxima sugestão leva alguns segundos a mais enquanto o modelo é carregado de novo.";
 "按「重新啟動」後新的閒置設定才會生效。" = "Clique em Reiniciar para aplicar o novo ajuste de ociosidade.";
-"留空即可：Lint 會依所選模型套用自己的參數（目前為 %@）。這裡填的參數會覆蓋同一個選項，例如長文可填 -c 8192。服務一律只綁定 127.0.0.1，額外參數裡的 --host 會被忽略。" = "Deixe em branco: o Lint passa os próprios argumentos para o modelo selecionado (no momento, %@). O que for definido aqui substitui a opção equivalente do Lint — para textos longos, tente -c 8192. O servidor sempre se vincula apenas a 127.0.0.1; um --host aqui é ignorado.";
-"這段文字對本機 AI 來說太長了。請分段處理，或在「設定 → 模型 → 進階」的額外參數加上較大的 -c（例如 -c 8192）後重新啟動。" = "Este texto é longo demais para a IA local. Processe-o em partes ou adicione um -c maior (por exemplo, -c 8192) aos argumentos extras em Ajustes → Modelo → Avançado e reinicie.";
+"留空即可：Lint 會依所選模型套用自己的參數（目前為 %@）。這裡填的參數會覆蓋同一個選項，例如長文可填 -c 16384。服務一律只綁定 127.0.0.1，額外參數裡的 --host 會被忽略。" = "Deixe em branco: o Lint passa os próprios argumentos para o modelo selecionado (no momento, %@). O que for definido aqui substitui a opção equivalente do Lint — para textos longos, tente -c 16384. O servidor sempre se vincula apenas a 127.0.0.1; um --host aqui é ignorado.";
+"這段文字對本機 AI 來說太長了。請分段處理，或在「設定 → 模型 → 進階」的額外參數加上較大的 -c（例如 -c 16384）後重新啟動。" = "Este texto é longo demais para a IA local. Processe-o em partes ou adicione um -c maior (por exemplo, -c 16384) aos argumentos extras em Ajustes → Modelo → Avançado e reinicie.";
 "建議" = "Recomendado";
 "記憶體用量很高，可能當機" = "uso de memória muito alto, pode travar o Mac";
 "需下載 %@" = "download de %@";

@@ -124,7 +124,7 @@ struct GeneralSettingsPane: View {
                     Text(verbatim: language.englishName).tag(language)
                 }
             }
-            Picker("中英夾雜的文字", selection: Bindable(app.settings).mixedTextHandling) {
+            Picker("夾雜英文的文字", selection: Bindable(app.settings).mixedTextHandling) {
                 ForEach(MixedTextHandling.allCases) { handling in
                     Text(handling.title).tag(handling)
                 }
@@ -137,7 +137,7 @@ struct GeneralSettingsPane: View {
                     .sectionNote()
                 Text("「翻譯」模式與建議下方的參考譯文都用翻譯語言，立即生效。Lint 只把英文翻成這個語言，不會翻成英文。")
                     .sectionNote()
-                Text("校對時，「道地」「正式」「輕鬆」「簡潔」會把中文或其他語言寫成英文；中英夾雜的文字照這裡的選擇。「保留原語氣」一律只改英文。")
+                Text("校對時，「道地」「正式」「輕鬆」「簡潔」會把中文或其他語言寫成英文；中文、日文、韓文等夾雜英文時照這裡的選擇，越南文、印尼文等用拉丁字母的語言則一律寫成英文。「保留原語氣」一律只改英文。")
                     .sectionNote()
             }
         }

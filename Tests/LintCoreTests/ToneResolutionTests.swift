@@ -33,9 +33,9 @@ final class ToneResolutionTests: XCTestCase {
 
     func testMixedTextFollowsTheSetting() {
         XCTAssertEqual(tone(.idiomatic, mixed, .toEnglish), .native)
-        XCTAssertEqual(tone(.idiomatic, mixed, .keepChinese), .idiomatic)
+        XCTAssertEqual(tone(.idiomatic, mixed, .keepOtherLanguage), .idiomatic)
         XCTAssertEqual(tone(.formal, mixed, .toEnglish), .nativeFormal)
-        XCTAssertEqual(tone(.casual, mixed, .keepChinese), .casual)
+        XCTAssertEqual(tone(.casual, mixed, .keepOtherLanguage), .casual)
         XCTAssertEqual(tone(.concise, mixed, .toEnglish), .nativeConcise)
     }
 
@@ -74,7 +74,7 @@ final class ToneResolutionTests: XCTestCase {
             "Maaf baru balas, kemarin saya sibuk sekali.",
             "Perdón por la demora, ayer estuve muy ocupado.",
             "감사합니다",
-            "내일 PR review 해주세요",
+            "Saya sudah deploy API-nya tapi masih timeout terus.",
         ]
         let expected: [WritingTone: WritingTone] = [
             .idiomatic: .native, .formal: .nativeFormal, .casual: .nativeCasual, .concise: .nativeConcise,
@@ -86,6 +86,22 @@ final class ToneResolutionTests: XCTestCase {
                 }
             }
             XCTAssertEqual(tone(.preserve, text), .preserve, text)
+        }
+    }
+
+    /// Korean, Japanese kana or Thai mixed with English follows the setting, as Chinese does.
+    func testAnotherScriptMixedWithEnglishFollowsTheSetting() {
+        let expected: [WritingTone: WritingTone] = [
+            .idiomatic: .native, .formal: .nativeFormal, .casual: .nativeCasual, .concise: .nativeConcise,
+        ]
+        for text in ["내일 PR review 해주세요", "この PR を review してください", "ช่วย review PR นี้หน่อย"] {
+            for (menu, written) in expected {
+                XCTAssertEqual(tone(menu, text, .toEnglish), written, "\(text) \(menu)")
+                XCTAssertEqual(tone(menu, text, .keepOtherLanguage), menu, "\(text) \(menu)")
+            }
+            for handling in MixedTextHandling.allCases {
+                XCTAssertEqual(tone(.preserve, text, handling), .preserve, text)
+            }
         }
     }
 

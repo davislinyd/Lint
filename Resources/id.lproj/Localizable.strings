@@ -201,9 +201,9 @@
 "改用道地 R" = "Alami R";
 "其他語言 → 英文" = "Bahasa lain → Inggris";
 "整段寫成英文" = "Tulis semuanya dalam bahasa Inggris";
-"保留中文，只改英文" = "Pertahankan Mandarin, ubah bahasa Inggris saja";
-"中英夾雜的文字" = "Teks campuran Mandarin dan Inggris";
-"校對時，「道地」「正式」「輕鬆」「簡潔」會把中文或其他語言寫成英文；中英夾雜的文字照這裡的選擇。「保留原語氣」一律只改英文。" = "Saat mengoreksi, Alami, Formal, Santai, dan Ringkas menulis Mandarin atau bahasa lain menjadi bahasa Inggris; teks campuran mengikuti pilihan di sini. Pertahankan Nada selalu hanya mengubah bahasa Inggris.";
+"保留其他語言，只改英文" = "Pertahankan bahasa lain, ubah bahasa Inggris saja";
+"夾雜英文的文字" = "Teks bercampur bahasa Inggris";
+"校對時，「道地」「正式」「輕鬆」「簡潔」會把中文或其他語言寫成英文；中文、日文、韓文等夾雜英文時照這裡的選擇，越南文、印尼文等用拉丁字母的語言則一律寫成英文。「保留原語氣」一律只改英文。" = "Saat mengoreksi, Alami, Formal, Santai, dan Ringkas menulis Mandarin atau bahasa lain menjadi bahasa Inggris. Mandarin, Jepang, Korea, dan sejenisnya yang bercampur bahasa Inggris mengikuti pilihan di sini; bahasa berhuruf Latin, seperti Vietnam atau Indonesia, selalu ditulis dalam bahasa Inggris. Pertahankan Nada selalu hanya mengubah bahasa Inggris.";
 "正式" = "Formal";
 "簡潔" = "Ringkas";
 "專業" = "Profesional";

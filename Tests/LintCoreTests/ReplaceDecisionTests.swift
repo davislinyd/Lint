@@ -187,12 +187,43 @@ final class ReplaceDecisionTests: XCTestCase {
             field: "Hi @Davis Lin this is aa pen. Thanks",
             original: "@Davis Lin this is aa pen.",
             newText: "@Davis Lin this is a pen.",
-            isRichText: true
+            isRichText: true,
+            selectionStart: 3
         )
         XCTAssertEqual(
             ReplaceDecision.first(snapshot),
             .perform(.replaceSpans([ReplaceSpan(location: 22, old: "aa", new: "a")], caret: 28))
         )
+    }
+
+    func testRichTextPiecesAreWhereTheSelectionCoordinatesPutTheOriginal() {
+        // Chromium's AXValue has a line break after every paragraph and list item; the coordinates of
+        // AXSelectedTextRange do not, so the sentence starts at 23 there, not at its index 25 in the value.
+        let snapshot = snapshot(
+            field: "Intro line.\n• Point one.\nIt only work on macOS.",
+            original: "It only work on macOS.",
+            newText: "It only works on macOS.",
+            isRichText: true,
+            selectionStart: 23
+        )
+        XCTAssertEqual(
+            ReplaceDecision.first(snapshot),
+            .perform(.replaceSpans([ReplaceSpan(location: 31, old: "work", new: "works")], caret: 46))
+        )
+    }
+
+    func testRichTextWithoutACheckedStartIsNotWrittenInPieces() {
+        // Where the original sits in AXValue says nothing about where a selection would find it.
+        let unchecked = snapshot(
+            field: "Intro line.\n• Point one.\nIt only work on macOS.",
+            original: "It only work on macOS.",
+            newText: "It only works on macOS.",
+            isRichText: true
+        )
+        XCTAssertEqual(ReplaceDecision.first(unchecked), .failure(.notWholeField))
+        var selected = unchecked
+        selected.liveSelectedText = "It only work on macOS."
+        XCTAssertEqual(ReplaceDecision.first(selected), .perform(.pasteIntoRestoredSelection))
     }
 
     func testRichTextNeverHasItsWholeValueWritten() {
@@ -250,7 +281,8 @@ final class ReplaceDecisionTests: XCTestCase {
         hasCapture: Bool = true,
         sourceFrontmost: Bool = true,
         rangeRestored: Bool = false,
-        isRichText: Bool = false
+        isRichText: Bool = false,
+        selectionStart: Int? = nil
     ) -> ReplaceSnapshot {
         ReplaceSnapshot(
             hasCapture: hasCapture,
@@ -261,7 +293,8 @@ final class ReplaceDecisionTests: XCTestCase {
             newText: newText,
             rangeRestored: rangeRestored,
             liveSelectedText: nil,
-            isRichText: isRichText
+            isRichText: isRichText,
+            selectionStart: selectionStart
         )
     }
 }

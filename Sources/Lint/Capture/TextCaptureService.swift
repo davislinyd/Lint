@@ -262,8 +262,13 @@ final class TextCaptureService {
             liveSelectedText: element.flatMap { Self.readStringAttribute($0, kAXSelectedTextAttribute as String) },
             isRichText: element.map(Self.isRichText) ?? false
         )
+        if snapshot.isRichText, let element {
+            snapshot.selectionStart = Self.selectionStart(of: last.text, in: element, captured: last.selectedRange)
+            Self.log("replace rich text selectionStart=\(snapshot.selectionStart.map(String.init) ?? "unchecked")")
+        }
+        var target = Self.targetRange(snapshot, captured: last.selectedRange)
         var directive = ReplaceDecision.first(snapshot)
-        directive = restoreRangeIfRefused(&snapshot, element: element, range: last.selectedRange, directive: directive)
+        directive = await restoreRangeIfRefused(&snapshot, element: element, range: target, directive: directive)
 
         var triedRefocus = false
         for _ in 0..<8 {
@@ -283,9 +288,12 @@ final class TextCaptureService {
                     snapshot.rangeRestored = false
                     snapshot.liveSelectedText = Self.readAXSelectedText()?.text
                     snapshot.isRichText = Self.isRichText(focused)
+                    snapshot.selectionStart = snapshot.isRichText
+                        ? Self.selectionStart(of: last.text, in: focused, captured: last.selectedRange) : nil
+                    target = Self.targetRange(snapshot, captured: last.selectedRange)
                     directive = ReplaceDecision.first(snapshot)
-                    directive = restoreRangeIfRefused(
-                        &snapshot, element: element, range: last.selectedRange, directive: directive
+                    directive = await restoreRangeIfRefused(
+                        &snapshot, element: element, range: target, directive: directive
                     )
                     continue
                 }
@@ -298,7 +306,7 @@ final class TextCaptureService {
             case .perform(let attempt):
                 Self.log("replace attempt \(Self.attemptName(attempt))")
                 directive = await perform(
-                    attempt, element: element, snapshot: &snapshot, range: last.selectedRange
+                    attempt, element: element, snapshot: &snapshot, range: target
                 )
             }
         }
@@ -311,12 +319,12 @@ final class TextCaptureService {
         element: AXUIElement?,
         range: CFRange?,
         directive: ReplaceDirective
-    ) -> ReplaceDirective {
+    ) async -> ReplaceDirective {
         guard case .failure(let reason) = directive, reason == .notWholeField || reason == .ambiguous else {
             return directive
         }
         guard !snapshot.rangeRestored, let element, let range,
-              Self.restoreRange(range, on: element, original: snapshot.original) else {
+              await Self.restoreRange(range, on: element, original: snapshot.original) else {
             return directive
         }
         snapshot.rangeRestored = true
@@ -324,12 +332,21 @@ final class TextCaptureService {
     }
 
     /// Select the captured range again. It counts only when that selection reads as the original; if it
-    /// does not, the selection goes back where it was, so nothing is written over different text.
-    private static func restoreRange(_ range: CFRange, on element: AXUIElement, original: String) -> Bool {
-        let previous = readSelectedRange(element)
-        guard setSelectedRange(element, range) else { return false }
-        if ReplaceDecision.liveMatches(readStringAttribute(element, kAXSelectedTextAttribute as String), original: original) {
-            return true
+    /// does not, the selection goes back where it was (`fallback`, when the caller knows it better), so
+    /// nothing is written over different text. Chromium applies a selection a moment later, so it is set
+    /// again until it reads as the original, as `select` does.
+    private static func restoreRange(
+        _ range: CFRange, on element: AXUIElement, original: String, fallback: CFRange? = nil
+    ) async -> Bool {
+        let previous = fallback ?? readSelectedRange(element)
+        for _ in 0..<10 {
+            guard setSelectedRange(element, range) else { return false }
+            try? await Task.sleep(for: .milliseconds(50))
+            if ReplaceDecision.liveMatches(
+                readStringAttribute(element, kAXSelectedTextAttribute as String), original: original
+            ) {
+                return true
+            }
         }
         if let previous { _ = setSelectedRange(element, previous) }
         log("replace restored range does not read as the original")
@@ -346,6 +363,66 @@ final class TextCaptureService {
             if readStringAttribute(element, kAXSelectedTextAttribute as String) == text { return true }
         }
         return false
+    }
+
+    /// Chromium applies a selection made through Accessibility a moment later: wait until the selection
+    /// reads as `original`, at most as long as `select` tries.
+    private static func selectionSettles(on element: AXUIElement, as original: String) async -> Bool {
+        for _ in 0..<10 {
+            if ReplaceDecision.liveMatches(readStringAttribute(element, kAXSelectedTextAttribute as String), original: original) {
+                return true
+            }
+            try? await Task.sleep(for: .milliseconds(50))
+        }
+        return false
+    }
+
+    /// Where `original` starts in the coordinates of AXSelectedTextRange, read there to check it. Chromium
+    /// leaves the line breaks between paragraphs and list items out of them although AXValue has them, so
+    /// an index in AXValue, or a capture range taken from it (a paragraph around the caret), can point past
+    /// the text by one for every such break before it.
+    private static func selectionStart(of original: String, in element: AXUIElement, captured: CFRange?) -> Int? {
+        if let captured, captured.length == original.utf16.count, readString(element, in: captured) == original {
+            return captured.location
+        }
+        guard let text = selectionCoordinateText(of: element),
+              let found = text.range(of: original),
+              text.range(of: original, range: found.upperBound..<text.endIndex) == nil else { return nil }
+        return text.utf16.distance(from: text.utf16.startIndex, to: found.lowerBound)
+    }
+
+    /// The whole field as AXStringForRange reads it. Those coordinates are at most as long as AXValue (one
+    /// shorter for every break they leave out), and a range past their end reads nothing.
+    private static func selectionCoordinateText(of element: AXUIElement) -> String? {
+        guard let value = readStringAttribute(element, kAXValueAttribute as String) else { return nil }
+        var low = 0
+        var high = value.utf16.count
+        var text: String?
+        while low <= high {
+            let length = (low + high) / 2
+            if let read = readString(element, in: CFRange(location: 0, length: length)) {
+                text = read
+                low = length + 1
+            } else {
+                high = length - 1
+            }
+        }
+        return text
+    }
+
+    private static func readString(_ element: AXUIElement, in range: CFRange) -> String? {
+        var range = range
+        guard let value = AXValueCreate(.cfRange, &range) else { return nil }
+        var result: CFTypeRef?
+        guard AXUIElementCopyParameterizedAttributeValue(
+            element, kAXStringForRangeParameterizedAttribute as CFString, value, &result
+        ) == .success else { return nil }
+        return result as? String
+    }
+
+    /// Where to select the original again: where it was checked to start, else where it was captured.
+    private static func targetRange(_ snapshot: ReplaceSnapshot, captured: CFRange?) -> CFRange? {
+        snapshot.selectionStart.map { CFRange(location: $0, length: snapshot.original.utf16.count) } ?? captured
     }
 
     /// A deletion leaves the caret where the piece was.
@@ -381,6 +458,8 @@ final class TextCaptureService {
             Self.postHotkey(keyCode: 0) // A
             try? await Task.sleep(for: .milliseconds(80))
         }
+        // A selection Lint set through Accessibility a moment ago may not be applied yet.
+        if let element = last.axElement { _ = await Self.selectionSettles(on: element, as: last.text) }
         let copied = await copySelection()
         guard ReplaceDecision.liveMatches(copied, original: last.text) else {
             if last.selectedAll { Self.postHotkey(keyCode: 124, flags: []) } // Right arrow: collapse, nothing written
@@ -412,7 +491,7 @@ final class TextCaptureService {
                 )
             }
             if !snapshot.rangeRestored, let range,
-               Self.restoreRange(range, on: element, original: snapshot.original) {
+               await Self.restoreRange(range, on: element, original: snapshot.original) {
                 snapshot.rangeRestored = true
             }
             return ReplaceDecision.afterAXWriteFailed(attempt, snapshot)
@@ -436,13 +515,17 @@ final class TextCaptureService {
                 Self.log("replace span \(index + 1)/\(spans.count) does not read as the original")
                 if let previous { Self.setSelectedRange(element, previous) }
                 if !snapshot.rangeRestored, let range,
-                   Self.restoreRange(range, on: element, original: snapshot.original) {
+                   await Self.restoreRange(range, on: element, original: snapshot.original, fallback: previous) {
                     snapshot.rangeRestored = true
                 }
                 return ReplaceDecision.afterAXWriteFailed(attempt, snapshot)
             }
             // The editor gets a paste or a delete key. Chromium reports AXSelectedText as settable and a write
             // to it as a success, but ignores it. Each piece is read again after its write.
+            // The clipboard is saved once and put back after the last piece: Brave sometimes ignored a ⌘V
+            // that came right after the clipboard was restored, so every piece after the first was lost.
+            let clipboard = PasteboardMemory.snapshot()
+            defer { PasteboardMemory.restore(clipboard) }
             var piecesReadBack = true
             for (index, span) in spans.enumerated() {
                 guard await Self.select(span.old, at: span.location, on: element) else {
@@ -454,7 +537,7 @@ final class TextCaptureService {
                     Self.postHotkey(keyCode: 51, flags: []) // Delete: removes the selection
                     written = await Self.caretSettles(at: span.location, on: element)
                 } else {
-                    await pasteViaClipboard(span.new)
+                    await pasteKeepingClipboard(span.new)
                     written = await Self.select(span.new, at: span.location, on: element)
                 }
                 piecesReadBack = piecesReadBack && written
@@ -491,6 +574,10 @@ final class TextCaptureService {
             }
             return ReplaceDecision.afterAXWriteFailed(attempt, snapshot)
         case .pasteIntoRestoredSelection:
+            if let element, !(await Self.selectionSettles(on: element, as: snapshot.original)) {
+                Self.log("replace selection does not read as the original before the paste")
+                return .failure(.notWholeField)
+            }
             await pasteViaClipboard(snapshot.newText)
             let after = await Self.readBack(element, newText: snapshot.newText)
             return ReplaceDecision.afterPaste(
@@ -948,13 +1035,18 @@ final class TextCaptureService {
 
     private func pasteViaClipboard(_ text: String) async {
         let snapshot = PasteboardMemory.snapshot()
+        await pasteKeepingClipboard(text)
+        PasteboardMemory.restore(snapshot)
+    }
+
+    /// Paste `text` and leave it on the clipboard; the caller puts back what was there.
+    private func pasteKeepingClipboard(_ text: String) async {
         let pb = NSPasteboard.general
         pb.clearContents()
         pb.setString(text, forType: .string)
         let pid = lastCapture?.sourceAppPID
         Self.postHotkey(keyCode: 9, to: pid) // V
         try? await Task.sleep(for: .milliseconds(350))
-        PasteboardMemory.restore(snapshot)
     }
 
     private static func postHotkey(keyCode: CGKeyCode, to pid: pid_t? = nil, flags: CGEventFlags = .maskCommand) {

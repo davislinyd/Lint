@@ -55,6 +55,10 @@ public struct ReplaceSnapshot: Equatable, Sendable {
     /// The field holds rich text (a web contenteditable). Writing its whole value would flatten mentions,
     /// links and formatting, and Chromium does it behind the editor's back, so the editor falls out of step.
     public var isRichText: Bool
+    /// Where `original` starts in the coordinates of AXSelectedTextRange, checked by reading it there; nil
+    /// when that could not be checked. Not its index in `fieldValue`: Chromium's AXValue has a line break
+    /// after every paragraph and list item, and those coordinates leave them out.
+    public var selectionStart: Int?
 
     public init(
         hasCapture: Bool,
@@ -65,7 +69,8 @@ public struct ReplaceSnapshot: Equatable, Sendable {
         newText: String,
         rangeRestored: Bool,
         liveSelectedText: String?,
-        isRichText: Bool
+        isRichText: Bool,
+        selectionStart: Int? = nil
     ) {
         self.hasCapture = hasCapture
         self.sourceFrontmost = sourceFrontmost
@@ -76,6 +81,7 @@ public struct ReplaceSnapshot: Equatable, Sendable {
         self.rangeRestored = rangeRestored
         self.liveSelectedText = liveSelectedText
         self.isRichText = isRichText
+        self.selectionStart = selectionStart
     }
 }
 
@@ -169,10 +175,15 @@ public enum ReplaceDecision {
 
     private static func edit(_ snapshot: ReplaceSnapshot) -> ReplaceDirective {
         if let field = snapshot.fieldValue {
-            if snapshot.isRichText, let range = singleOccurrence(field, of: snapshot.original) {
-                let base = field.utf16.distance(from: field.utf16.startIndex, to: range.lowerBound)
-                let spans = ReplaceSpans.spans(original: snapshot.original, newText: snapshot.newText, base: base)
-                return .perform(.replaceSpans(spans, caret: base + snapshot.newText.utf16.count))
+            if snapshot.isRichText {
+                if let base = snapshot.selectionStart {
+                    let spans = ReplaceSpans.spans(original: snapshot.original, newText: snapshot.newText, base: base)
+                    return .perform(.replaceSpans(spans, caret: base + snapshot.newText.utf16.count))
+                }
+                // No checked place to select the pieces at: write only over a selection that reads as the original.
+                if canTargetSelection(snapshot) { return .perform(.pasteIntoRestoredSelection) }
+                if allowsSelectAll(field: field, original: snapshot.original) { return .perform(.selectAllAndPaste) }
+                return .failure(.notWholeField)
             }
             if let updated = replacingSingle(field, original: snapshot.original, with: snapshot.newText) {
                 return .perform(.setFieldValue(updated))

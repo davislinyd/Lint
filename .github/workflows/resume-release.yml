@@ -164,7 +164,11 @@ jobs:
           state="$PENDING/release-state.json"
           [ "$(plutil -extract releaseStatus raw -o - "$state")" = finalized ] || { echo "::error::the state is not finalized"; exit 1; }
           dmg="$PENDING/$(plutil -extract dmgFileName raw -o - "$state")"
-          gh release create "$TAG" "$dmg" "$dmg.sha256" \
+          # The same DMG under a fixed name for /releases/latest/download/; the updater ignores it.
+          name="$(basename "$dmg")"
+          stable="$RUNNER_TEMP/Lint-${name#Lint-*-}"
+          cp "$dmg" "$stable"
+          gh release create "$TAG" "$dmg" "$dmg.sha256" "$stable" \
             --repo "$GITHUB_REPOSITORY" \
             --verify-tag \
             --draft \

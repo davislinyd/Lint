@@ -95,6 +95,7 @@ final class UpdateTests: XCTestCase {
             asset(name: "Lint-0.5.2-macOS-arm64.dmg", digest: "sha256:\(hex)"),
             asset(name: "Lint-0.5.2-macOS-arm64.dmg.sha256", size: 80),
             asset(name: "Lint-0.5.2-macOS-x86_64.dmg", digest: "sha256:\(hex)"),
+            asset(name: "Lint-macOS-arm64.dmg", digest: "sha256:\(hex)"),
         ])
         let release = try GitHubReleaseCatalog.parse(data: data, architecture: .arm64)
         XCTAssertEqual(release.version.dotted, "0.5.2")

@@ -272,7 +272,12 @@ jobs:
           DMG_PATH: ${{ steps.release.outputs.dmg }}
           CHECKSUM_PATH: ${{ steps.release.outputs.sha256 }}
         run: |
-          gh release create "$TAG" "$DMG_PATH" "$CHECKSUM_PATH" \
+          # The same DMG under a fixed name, so /releases/latest/download/Lint-macOS-<arch>.dmg always works.
+          # The updater ignores it: the name has no version.
+          name="$(basename "$DMG_PATH")"
+          stable="$RUNNER_TEMP/Lint-${name#Lint-*-}"
+          cp "$DMG_PATH" "$stable"
+          gh release create "$TAG" "$DMG_PATH" "$CHECKSUM_PATH" "$stable" \
             --repo "$GITHUB_REPOSITORY" \
             --verify-tag \
             --draft \

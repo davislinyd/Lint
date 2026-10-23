@@ -138,12 +138,12 @@ git push origin v0.2.0
 ```
 
    tag 必須是 `vMAJOR.MINOR.PATCH`、與 Info.plist 版本相同、指向 `main` 上的 commit，否則 workflow 會在載入任何金鑰之前就失敗。沒有 `v` 前綴的 tag（例如早期本機的 `0.2.0`）不會觸發 workflow。
-3. Actions → **Release** 跑完後（Apple 沒在時間內處理完則是 PENDING，見下節），Releases 頁會出現 **Draft**，內含 `Lint-<版本>-macOS-arm64.dmg` 與 `.sha256`。`CFBundleVersion` 會是這次 run 的編號。
+3. Actions → **Release** 跑完後（Apple 沒在時間內處理完則是 PENDING，見下節），Releases 頁會出現 **Draft**，內含 `Lint-<版本>-macOS-arm64.dmg`、`.sha256`，以及同一個 DMG 的固定檔名副本 `Lint-macOS-arm64.dmg`。發佈後 <https://github.com/davislinyd/Lint/releases/latest/download/Lint-macOS-arm64.dmg> 永遠指向最新版。`CFBundleVersion` 會是這次 run 的編號。
 4. 在**另一台 Mac** 下載並測試：開啟 DMG、拖進 Applications、啟動、輔助功能授權、LLM、記憶資料庫（檔名仍是 `LintLearning.sqlite`）。
 5. 沒問題就在 GitHub 上按 **Publish release**。等流程穩定幾次之後，才考慮把 workflow 的 `--draft` 拿掉。
 
    發佈之後它就是 Latest。0.5.2 起的 App 內更新只讀 `/releases/latest`（Draft 與 Pre-release 不算），所以按下 Publish 就等於把這一版推給已安裝的使用者。更新程式只接受以下條件的 DMG，所以**不要改資產檔名**：
-   - 檔名是 `Lint-<版本>-macOS-<arch>.dmg`。
+   - 檔名是 `Lint-<版本>-macOS-<arch>.dmg`。沒有版本號的 `Lint-macOS-<arch>.dmg` 只給固定下載連結用，更新程式會略過它。
    - SHA-256 要符合 GitHub 的 asset digest 與 `.sha256`；兩者都有時必須一致。
    - 裡面的 App 是 `app.lint.assistant`，以 team `N964GDJY6A` 的 Developer ID 簽署，並啟用 Hardened Runtime。
 

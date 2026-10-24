@@ -98,7 +98,7 @@ struct LocalAPISection: View {
                 Text(originError).font(.caption).foregroundStyle(.red)
             }
             HStack {
-                Text("網頁要用本機模型，網址必須在這份清單裡。預設只有這台 Mac 上的網頁（localhost）；加入的網站必須是 https。")
+                Text("網頁要用本機模型，網址必須在這份清單裡。預設只有這台 Mac 上的網頁（localhost）；加入的網站必須是 https，而且只能在 Chrome、Brave 等瀏覽器使用：Safari 不讓 https 網站連到這台 Mac 的 http 服務。")
                     .sectionNote()
                 if settings.localAPIAllowedOrigins != AllowedOrigin.defaults {
                     Button("恢復預設") { settings.localAPIAllowedOrigins = AllowedOrigin.defaults }

@@ -526,7 +526,7 @@
 "舊的金鑰會立刻失效，使用它的 app 要改用新的金鑰。" = "The old key stops working at once; apps that use it need the new one.";
 "允許的網站" = "Allowed websites";
 "加入" = "Add";
-"網頁要用本機模型，網址必須在這份清單裡。預設只有這台 Mac 上的網頁（localhost）；加入的網站必須是 https。" = "A web page can use the local model only if its site is on this list. By default only pages on this Mac (localhost) are; websites you add must use https.";
+"網頁要用本機模型，網址必須在這份清單裡。預設只有這台 Mac 上的網頁（localhost）；加入的網站必須是 https，而且只能在 Chrome、Brave 等瀏覽器使用：Safari 不讓 https 網站連到這台 Mac 的 http 服務。" = "A web page can use the local model only if its site is on this list. By default only pages on this Mac (localhost) are; websites you add must use https, and work only in browsers such as Chrome or Brave: Safari does not let https websites connect to this Mac's http services.";
 "恢復預設" = "Restore Defaults";
 "請輸入 https:// 開頭的網站，例如 https://example.com，不含路徑。" = "Enter a website that starts with https://, such as https://example.com, without a path.";
 "Lint 目前沒有使用本機模型，其他 app 暫時無法使用。" = "Lint is not using its local model right now, so other apps cannot use it.";

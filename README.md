@@ -132,7 +132,7 @@ Settings → Model → **Other Apps** lets apps and web pages on this Mac call L
 - **Address and key:** `http://127.0.0.1:8001/v1` (the API port can be changed), with the key shown there, sent as `Authorization: Bearer <key>` or `X-Api-Key: <key>`. **Regenerate…** replaces the key at once. Only connections from this Mac are accepted; `Host` must be `127.0.0.1` or `localhost`.
 - **Routes:** `POST /v1/chat/completions`, `POST /v1/completions`, `GET /v1/models` and `GET /health`. Nothing else of llama-server's (such as `/props` or `/slots`) is reachable.
 - **Lint comes first:** the model answers one request at a time. When Lint needs it (a suggestion, a translation, warming up while you type), the request from another app is interrupted at once; if it had not sent anything back yet, Lint sends it again when it is done, so the app only waits longer. A streamed answer that was already under way ends with an error (`preempted_by_lint`). While Lint is using the model, and for 3 seconds after, or while you type, other requests wait (at most 8 waiting, up to 2 minutes each); beyond that they get `503` with `Retry-After`.
-- **Web pages:** a page can use the API only if its site is in **Allowed websites**: by default pages on this Mac (`http://localhost`, `http://127.0.0.1`, `https://localhost`, any port). Websites you add must use `https`. A page needs the key too.
+- **Web pages:** a page can use the API only if its site is in **Allowed websites**: by default pages on this Mac (`http://localhost`, `http://127.0.0.1`, `https://localhost`, any port). Websites you add must use `https`. A page needs the key too. Checked on 2026-10-24: Chrome and Brave let an allowed `https` website reach the API port; Safari does not let any `https` page connect to an `http` address on this Mac (its mixed-content rule), so in Safari only pages served from this Mac (`http://localhost`) can use it.
 - **Only while Lint runs and uses its local model:** with Apple Intelligence or another source, the API answers `503`. Turning it on or off, a new key or a new website applies at once; the model is not restarted.
 - **Upgrading from an earlier Lint:** scripts that called `http://127.0.0.1:8000` directly no longer work, since Lint's own llama-server now takes only Lint's key. Use the API port and its key.
 
@@ -300,7 +300,7 @@ Lint 會到 GitHub Releases 檢查有沒有較新的正式版：預設每週一�
 - **網址與金鑰：**`http://127.0.0.1:8001/v1`（API 埠可以改），金鑰顯示在同一處，以 `Authorization: Bearer <金鑰>` 或 `X-Api-Key: <金鑰>` 送出。**「重新產生…」**會立刻換掉金鑰。只接受這台 Mac 的連線；`Host` 必須是 `127.0.0.1` 或 `localhost`。
 - **路徑：**`POST /v1/chat/completions`、`POST /v1/completions`、`GET /v1/models` 與 `GET /health`。llama-server 的其他路徑（例如 `/props`、`/slots`）都碰不到。
 - **Lint 優先：**模型一次只處理一個請求。Lint 需要時（建議、翻譯、打字時的暖機），其他 app 的請求會立刻被中斷；如果它還沒收到任何回應，Lint 用完後會自動重送，那個 app 只會覺得比較慢。已經開始串流的回答則以錯誤（`preempted_by_lint`）結束。Lint 使用模型時與之後 3 秒內、或你正在打字時，其他請求會等候（最多 8 個、每個最多 2 分鐘），超過時回 `503` 並附 `Retry-After`。
-- **網頁：**網站必須在**「允許的網站」**裡才能使用：預設是這台 Mac 上的網頁（`http://localhost`、`http://127.0.0.1`、`https://localhost`，任何埠）。自己加入的網站必須是 `https`。網頁一樣需要金鑰。
+- **網頁：**網站必須在**「允許的網站」**裡才能使用：預設是這台 Mac 上的網頁（`http://localhost`、`http://127.0.0.1`、`https://localhost`，任何埠）。自己加入的網站必須是 `https`。網頁一樣需要金鑰。2026-10-24 實測：Chrome 與 Brave 會讓允許清單上的 `https` 網站使用 API 埠；Safari 不讓任何 `https` 網頁連到這台 Mac 的 `http` 位址（混合內容限制），所以在 Safari 只有這台 Mac 上的網頁（`http://localhost`）能用。
 - **只在 Lint 執行且使用本機模型時可用：**使用 Apple Intelligence 或其他來源時回 `503`。開關、新金鑰、新網站都立即生效，不會重新啟動模型。
 - **從舊版 Lint 升級：**直接呼叫 `http://127.0.0.1:8000` 的腳本不再能用，因為 Lint 自己的 llama-server 現在只接受 Lint 的金鑰。請改用 API 埠與它的金鑰。
 

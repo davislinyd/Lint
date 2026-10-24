@@ -526,7 +526,7 @@
 "舊的金鑰會立刻失效，使用它的 app 要改用新的金鑰。" = "Khóa cũ sẽ hết hiệu lực ngay; ứng dụng dùng nó cần khóa mới.";
 "允許的網站" = "Trang web được phép";
 "加入" = "Thêm";
-"網頁要用本機模型，網址必須在這份清單裡。預設只有這台 Mac 上的網頁（localhost）；加入的網站必須是 https。" = "Trang web chỉ dùng được mô hình cục bộ nếu trang đó có trong danh sách này. Mặc định chỉ có các trang trên máy Mac này (localhost); trang web bạn thêm phải dùng https.";
+"網頁要用本機模型，網址必須在這份清單裡。預設只有這台 Mac 上的網頁（localhost）；加入的網站必須是 https，而且只能在 Chrome、Brave 等瀏覽器使用：Safari 不讓 https 網站連到這台 Mac 的 http 服務。" = "Trang web chỉ dùng được mô hình cục bộ nếu trang đó có trong danh sách này. Mặc định chỉ có các trang trên máy Mac này (localhost); trang web bạn thêm phải dùng https và chỉ hoạt động trên các trình duyệt như Chrome hoặc Brave: Safari không cho trang web https kết nối tới dịch vụ http trên máy Mac này.";
 "恢復預設" = "Khôi phục mặc định";
 "請輸入 https:// 開頭的網站，例如 https://example.com，不含路徑。" = "Hãy nhập một trang web bắt đầu bằng https://, ví dụ https://example.com, không kèm đường dẫn.";
 "Lint 目前沒有使用本機模型，其他 app 暫時無法使用。" = "Lint hiện không dùng mô hình cục bộ nên ứng dụng khác tạm thời không dùng được.";

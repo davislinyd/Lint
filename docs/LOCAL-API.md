@@ -55,6 +55,8 @@ Lint（LLMService → OpenAICompatibleProvider）──────────�
 | 外部擠掉 Lint 的 prompt | 約 1070 token 的 prompt 重算約 1.4 秒；`--cache-ram 128` 有時能還原；打字開始時的暖機會把它放回 |
 | b11046 旗標 | `--api-key-file /dev/stdin` 可用；Bearer 與 `X-Api-Key` 都接受；有金鑰時 `/v1/models`、`/props` 回 401、`/health` 公開；`--alias` 讓 `/v1/models` 不再露出模型路徑；`--cors-origins http://lint.invalid` 讓其他網站讀不到回應 |
 | Chrome 155 | 公開網站打 `127.0.0.1` 沒有權限提示或私有網路阻擋；新來源的第一個請求多等約 2 秒；曾有兩次第一個請求卡住 20 秒、原因不明、之後未重現 |
+| 實機：Lint 優先 | 外部 400 token 任務進行中按 ⌥⌘K：建議 0.4／1.3 秒（閒置 0.6／0.3 秒）；外部請求被中斷 3 次、自動重送 3 次，最後拿到完整回答 |
+| 實機：瀏覽器（錯的金鑰，讀得到 401 即代表放行） | Chrome、Brave 156、Safari 27：這台 Mac 的網頁（`http://localhost`）可用，預檢通過；直連 llama-server 一律被擋；不在清單的 https 網站被擋。加入清單的 https 網站：Chrome、Brave 可用；**Safari 不行**，它不讓 https 網頁連到這台 Mac 的任何 http 位址（混合內容；對照用的 `no-cors` 請求一樣失敗） |
 
 ## 已知取捨
 
@@ -62,4 +64,4 @@ Lint（LLMService → OpenAICompatibleProvider）──────────�
 - 外部用過模型後，Lint 的下一個請求可能要重算 prompt（約 1.4 秒），打字時的暖機會先處理掉大部分。
 - 從舊版升級後，直接打 `:8000` 的腳本會收到 401，要改用 API 埠與金鑰；用「OpenAI 相容端點」指向 Lint 自己 `:8000` 的設定也一樣。
 - 自訂 `llama-server` 只會加上金鑰參數，不加 CORS 參數（舊版可能不認得，會無法啟動）。
-- Safari、Brave 對 `http://127.0.0.1` 的行為還沒在實機上測過。
+- Safari 只能讓這台 Mac 上的網頁使用；加入清單的 https 網站在 Safari 用不了（瀏覽器限制，不是 Lint）。要支援，API 埠得改用本機信任的 https 憑證，目前不做。

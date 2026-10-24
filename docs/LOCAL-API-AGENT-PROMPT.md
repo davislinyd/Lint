@@ -3,8 +3,9 @@
 Lint 0.16.0 and later can share its local model with other apps on the same Mac (Settings → Model → **Other Apps**,
 off by default). The text below the line is a prompt for an AI agent (Claude Code, Codex, Cursor and the like): paste it
 into the agent's instructions (for example `CLAUDE.md` or `AGENTS.md`), or point the agent at this file. Then give the
-agent the key: in Lint, Settings → Model → Other Apps → Key → **Copy**, and set it as the environment variable
-`LINT_API_KEY` where the agent runs. Human-oriented details are in the README and the guide's
+agent a key: in Lint, Settings → Model → Other Apps, make one for it with **Add Key** (named after the agent, so you can
+revoke it alone later) or use an existing one, press **Copy**, and set it as the environment variable `LINT_API_KEY`
+where the agent runs. Human-oriented details are in the README and the guide's
 [Other apps](https://davislinyd.github.io/Lint/guide.html#local-api) section.
 
 ---
@@ -49,9 +50,9 @@ remote model. The user's own use of Lint always comes first, so your requests ca
 1. `GET {base without /v1}/health`. If the connection is refused, Lint is not running or Other Apps is off. Ask the
    user to open Lint, choose **Local llama.cpp** under Settings → Model → Model Source, and turn on
    **Let other apps use the local model** under Other Apps. Do not try to start or configure Lint yourself.
-2. `GET /v1/models` with the key. `401 invalid_api_key` (or no `LINT_API_KEY` at all) means you need the key. Ask the
-   user to copy it (Settings → Model → Other Apps → Key → Copy) and set it as `LINT_API_KEY` in your environment,
-   rather than pasting it into the conversation.
+2. `GET /v1/models` with the key. `401 invalid_api_key` (or no `LINT_API_KEY` at all) means you need a key, or yours
+   was revoked. Ask the user to give you one (Settings → Model → Other Apps → **Add Key**, then **Copy**) and set it as
+   `LINT_API_KEY` in your environment, rather than pasting it into the conversation.
 
 ### Making requests
 
@@ -116,7 +117,7 @@ Errors use the OpenAI shape `{"error":{"message":"…","type":"…","code":"…"
 
 | Status | `code` | What to do |
 |---|---|---|
-| 401 | `invalid_api_key` | The key is missing or wrong, or the user regenerated it. Ask for the new key; do not retry. |
+| 401 | `invalid_api_key` | The key is missing or wrong, or the user revoked it. Ask for a key; do not retry. |
 | 403 | `invalid_host` | Use `127.0.0.1` or `localhost` as the host. |
 | 403 | `origin_not_allowed` | A web page whose site is not in Lint's Allowed websites (see below). |
 | 404 | `unknown_endpoint` | The route does not exist here. Use one of the four routes. |
@@ -150,8 +151,10 @@ error was; do not keep retrying in a loop.
 ### Web pages
 
 - A web page can call the API only if its site is in Lint's **Allowed websites** (by default pages served from this
-  Mac: `http://localhost`, `http://127.0.0.1` and `https://localhost`, any port). The user can add `https` websites.
-- Safari does not let any `https` page reach this Mac's `http` address, so in Safari only pages served from this Mac
-  work. Chrome and Brave let allowed `https` websites in.
-- The key ends up in the page's JavaScript. Use it only in pages the user runs for themselves on this Mac, never in a
-  page served to other people.
+  Mac: `http://localhost`, `http://127.0.0.1` and `https://localhost`, any port). The user can add `http` or `https`
+  websites, and `https://*.example.com` for every subdomain, or turn on **Allow any website** (off by default). A local
+  file (`file://`) and browser extensions are always refused.
+- Safari does not let any `https` page reach this Mac's `http` address, so in Safari no `https` page works. Chrome and
+  Brave let allowed `https` websites in.
+- The key ends up in the page's JavaScript. Use it only in pages the user runs for themselves, never in a page served
+  to other people, and give each page its own key so it can be revoked alone.

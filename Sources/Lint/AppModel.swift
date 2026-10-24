@@ -13,8 +13,8 @@ final class AppModel: NSObject, NSWindowDelegate {
     /// Puts Lint's requests to its local model ahead of other apps' (Settings → Model → Other Apps).
     let modelGate = ModelPriorityGate()
     let llm: LLMService
-    /// The key other apps give Lint's API port.
-    let localAPIKeys: LocalAPIKeyStore
+    /// The keys other apps give Lint's API port.
+    let localAPIKeyring: LocalAPIKeyring
     /// Lint's API port for other apps; off unless switched on in Settings.
     let localAPI: LocalAPIService
     let memory = MemoryCoordinator()
@@ -38,12 +38,12 @@ final class AppModel: NSObject, NSWindowDelegate {
         let settings = SettingsStore(keychain: keychain)
         self.settings = settings
         llm = LLMService(localModel: LocalModelAccess(key: LocalLlamaServerManager.shared.serverKey, gate: modelGate))
-        let keys = LocalAPIKeyStore(keychain: keychain)
-        localAPIKeys = keys
+        let keyring = LocalAPIKeyring(keychain: keychain)
+        localAPIKeyring = keyring
         let starter = LocalModelStarter()
         localAPI = LocalAPIService(proxy: LocalAPIProxy(
             gate: modelGate, serverKey: LocalLlamaServerManager.shared.serverKey,
-            userKey: { try? keys.current() },
+            keys: { keyring.lookup() },
             ensureBackend: { try await starter.ensure() }
         ))
         updates = UpdateCoordinator(settings: settings)
@@ -232,11 +232,11 @@ final class AppModel: NSObject, NSWindowDelegate {
 
     /// Listens on the API port while it is switched on and Lint's requests go to its local model.
     func reconcileLocalAPI() {
-        // The key is not touched here: Settings and the first request read it, off the main thread.
+        // The keys are not touched here: Settings and the first request read them, off the main thread.
         let enabled = settings.localAPIEnabled && writingRoute == .provider(.localLlama)
         let configuration = LocalAPIService.Configuration(
             enabled: enabled, port: settings.localAPIPort, upstreamPort: settings.localServerPort,
-            allowedOrigins: settings.localAPIAllowedOrigins
+            allowedOrigins: settings.localAPIAllowedOrigins, allowAnyWebsite: settings.localAPIAllowAnyWebsite
         )
         Task { await localAPI.apply(configuration) }
     }

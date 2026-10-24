@@ -4,8 +4,8 @@ import Observation
 /// What `LocalAPIService` needs from the proxy, so its start/stop logic is tested without sockets.
 public protocol LocalAPIListening: AnyObject, Sendable {
     @discardableResult
-    func start(port: Int, upstreamPort: Int, allowedOrigins: [String], allowAnyWebsite: Bool, allowBrowserExtensions: Bool) async throws -> Int
-    func update(upstreamPort: Int, allowedOrigins: [String], allowAnyWebsite: Bool, allowBrowserExtensions: Bool)
+    func start(port: Int, upstreamPort: Int, allowedOrigins: [String], allowBrowserExtensions: Bool) async throws -> Int
+    func update(upstreamPort: Int, allowedOrigins: [String], allowBrowserExtensions: Bool)
     func stop()
 }
 
@@ -30,20 +30,16 @@ public final class LocalAPIService {
         /// llama-server's port.
         public var upstreamPort: Int
         public var allowedOrigins: [String]
-        /// Any http or https page may call (with a key), not only the allowed websites.
-        public var allowAnyWebsite: Bool
         /// Browser extensions may call (with a key).
         public var allowBrowserExtensions: Bool
 
         public init(
-            enabled: Bool, port: Int, upstreamPort: Int, allowedOrigins: [String], allowAnyWebsite: Bool = false,
-            allowBrowserExtensions: Bool = false
+            enabled: Bool, port: Int, upstreamPort: Int, allowedOrigins: [String], allowBrowserExtensions: Bool = false
         ) {
             self.enabled = enabled
             self.port = port
             self.upstreamPort = upstreamPort
             self.allowedOrigins = allowedOrigins
-            self.allowAnyWebsite = allowAnyWebsite
             self.allowBrowserExtensions = allowBrowserExtensions
         }
     }
@@ -95,7 +91,7 @@ public final class LocalAPIService {
         }
         if case .listening(let port) = state, port == target.port {
             proxy.update(
-                upstreamPort: target.upstreamPort, allowedOrigins: target.allowedOrigins, allowAnyWebsite: target.allowAnyWebsite,
+                upstreamPort: target.upstreamPort, allowedOrigins: target.allowedOrigins,
                 allowBrowserExtensions: target.allowBrowserExtensions
             )
             return
@@ -103,7 +99,7 @@ public final class LocalAPIService {
         do {
             let port = try await proxy.start(
                 port: target.port, upstreamPort: target.upstreamPort, allowedOrigins: target.allowedOrigins,
-                allowAnyWebsite: target.allowAnyWebsite, allowBrowserExtensions: target.allowBrowserExtensions
+                allowBrowserExtensions: target.allowBrowserExtensions
             )
             state = .listening(port: port)
         } catch {

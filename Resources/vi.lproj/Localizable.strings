@@ -509,7 +509,7 @@
 "API 埠不能和本機模型的埠（%@）相同。" = "Cổng API không được trùng với cổng của mô hình cục bộ (%@).";
 "埠 %@ 已被其他程式使用，請改用別的埠。" = "Cổng %@ đang được ứng dụng khác sử dụng. Hãy chọn cổng khác.";
 "讓其他 app 使用本機模型" = "Cho phép ứng dụng khác dùng mô hình cục bộ";
-"這台 Mac 上的其他 app 和網頁可以用 OpenAI 相容 API 呼叫本機模型，需要下面的金鑰，只接受這台 Mac 的連線。Lint 自己要用模型時永遠優先：其他請求會等候，或被中斷後自動重送。" = "Ứng dụng và trang web khác trên máy Mac này có thể gọi mô hình cục bộ qua API tương thích OpenAI. Chúng cần khóa bên dưới, và chỉ kết nối từ máy Mac này được chấp nhận. Lint luôn được ưu tiên: khi Lint cần mô hình, các yêu cầu khác sẽ chờ, hoặc bị ngắt rồi tự động gửi lại.";
+"這台 Mac 上的腳本、其他 app、瀏覽器擴充功能和自製網頁，可以用 OpenAI 相容 API 呼叫本機模型，需要下面的金鑰，只接受這台 Mac 的連線。Lint 自己要用模型時永遠優先：其他請求會等候，或被中斷後自動重送。" = "Tập lệnh, ứng dụng khác, tiện ích mở rộng trình duyệt và trang web tự làm trên máy Mac này có thể gọi mô hình cục bộ qua API tương thích OpenAI. Chúng cần một trong các khóa bên dưới, và chỉ kết nối từ máy Mac này được chấp nhận. Lint luôn được ưu tiên: khi Lint cần mô hình, các yêu cầu khác sẽ chờ, hoặc bị ngắt rồi tự động gửi lại.";
 "狀態" = "Trạng thái";
 "網址" = "Địa chỉ";
 "API 埠" = "Cổng API";
@@ -542,9 +542,7 @@
 "最多 %@ 把金鑰；請先註銷用不到的。" = "Tối đa %@ khóa; hãy thu hồi các khóa không dùng nữa trước.";
 "無法把金鑰存進鑰匙圈。" = "Không lưu được khóa vào Chuỗi khóa.";
 "預設" = "Mặc định";
-"網頁要用本機模型，網址必須在這份清單裡。預設只有這台 Mac 上的網頁（localhost）。可以加入 http 或 https 網站；https://*.example.com 代表 example.com 底下的所有子網域。Safari 不讓 https 網站連到這台 Mac 的 http 服務，所以 https 網站只能在 Chrome、Brave 等瀏覽器使用。" = "Trang web chỉ dùng được mô hình cục bộ nếu trang đó có trong danh sách này. Mặc định chỉ có các trang trên máy Mac này (localhost). Bạn có thể thêm trang web http hoặc https; https://*.example.com là mọi tên miền con của example.com. Safari không cho trang web https kết nối tới dịch vụ http trên máy Mac này, nên trang web https chỉ hoạt động trên các trình duyệt như Chrome hoặc Brave.";
-"允許任何網站（不建議）" = "Cho phép mọi trang web (không khuyến nghị)";
-"任何 http 或 https 網站只要有金鑰就能使用，不必在上面的清單裡；本機檔案（file://）仍然不行。" = "Mọi trang web http hoặc https đều dùng được nếu có khóa, dù không có trong danh sách trên; tệp cục bộ (file://) vẫn không dùng được.";
+"自製網頁要用本機模型，網址必須在這份清單裡。預設只有這台 Mac 上的網頁（localhost）；架在區域網路或自己網域上的網頁，可以加入它的 http 或 https 網址，https://*.example.com 代表 example.com 底下的所有子網域。Safari 不讓 https 網頁連到這台 Mac 的 http 服務，所以 https 網頁只能在 Chrome、Brave 等瀏覽器使用。" = "Trang web tự làm chỉ dùng được mô hình cục bộ nếu địa chỉ của nó có trong danh sách này. Mặc định chỉ có các trang trên máy Mac này (localhost). Với trang trên mạng nội bộ hoặc tên miền của bạn, hãy thêm địa chỉ http hoặc https của nó; https://*.example.com là mọi tên miền con của example.com. Safari không cho trang https kết nối tới dịch vụ http trên máy Mac này, nên trang https chỉ hoạt động trên các trình duyệt như Chrome hoặc Brave.";
 "允許瀏覽器擴充功能使用 API" = "Cho phép tiện ích mở rộng trình duyệt dùng API";
 "Chrome、Brave、Edge、Firefox 與 Safari 的擴充功能只要有金鑰就能使用，不必在上面的清單裡。擴充功能看得到你瀏覽的網頁，只把金鑰給你信任的擴充功能。" = "Tiện ích mở rộng trong Chrome, Brave, Edge, Firefox và Safari dùng được nếu có khóa, dù không có trong danh sách trên. Tiện ích mở rộng xem được các trang bạn duyệt, nên chỉ đưa khóa cho tiện ích bạn tin tưởng.";
 "請輸入 http:// 或 https:// 開頭的網站，例如 https://example.com；*. 代表所有子網域，例如 https://*.example.com。不含路徑。" = "Hãy nhập một trang web bắt đầu bằng http:// hoặc https://, ví dụ https://example.com, không kèm đường dẫn. *. là mọi tên miền con, ví dụ https://*.example.com.";

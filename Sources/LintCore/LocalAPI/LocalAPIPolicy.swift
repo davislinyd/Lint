@@ -101,13 +101,10 @@ enum LocalAPIPolicy {
         return host == "127.0.0.1:\(port)" || host == "localhost:\(port)"
     }
 
-    /// With `anyWebsite`, any http or https page is let in, and with `browserExtensions` any browser
-    /// extension (both still need a key); `null` (a file or a sandboxed frame) and other schemes never are.
-    static func isAllowedOrigin(
-        _ header: String, allowed: [AllowedOrigin], anyWebsite: Bool = false, browserExtensions: Bool = false
-    ) -> Bool {
+    /// With `browserExtensions`, any browser extension is let in too (it still needs a key); `null`
+    /// (a file or a sandboxed frame) and other schemes never are.
+    static func isAllowedOrigin(_ header: String, allowed: [AllowedOrigin], browserExtensions: Bool = false) -> Bool {
         if browserExtensions, isBrowserExtension(header) { return true }
-        if anyWebsite, let origin = Origin(header.lowercased()), origin.path.isEmpty { return true }
         return allowed.contains { $0.matches(header) }
     }
 

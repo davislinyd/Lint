@@ -34,7 +34,7 @@ struct LocalAPISection: View {
         Section {
             SettingsToggle(
                 title: "讓其他 app 使用本機模型",
-                detail: "這台 Mac 上的其他 app 和網頁可以用 OpenAI 相容 API 呼叫本機模型，需要下面的金鑰，只接受這台 Mac 的連線。Lint 自己要用模型時永遠優先：其他請求會等候，或被中斷後自動重送。",
+                detail: "這台 Mac 上的腳本、其他 app、瀏覽器擴充功能和自製網頁，可以用 OpenAI 相容 API 呼叫本機模型，需要下面的金鑰，只接受這台 Mac 的連線。Lint 自己要用模型時永遠優先：其他請求會等候，或被中斷後自動重送。",
                 isOn: Bindable(settings).localAPIEnabled
             )
             if settings.localAPIEnabled {
@@ -199,41 +199,32 @@ struct LocalAPISection: View {
     private var originsEditor: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("允許的網站")
-            Group {
-                ForEach(settings.localAPIAllowedOrigins, id: \.self) { origin in
-                    HStack {
-                        Text(verbatim: origin).font(.callout.monospaced())
-                        Spacer()
-                        Button("移除") { settings.localAPIAllowedOrigins.removeAll { $0 == origin } }
-                            .controlSize(.small)
-                    }
-                }
+            ForEach(settings.localAPIAllowedOrigins, id: \.self) { origin in
                 HStack {
-                    TextField("https://example.com", text: $newOrigin, prompt: Text(verbatim: "https://example.com"))
-                        .labelsHidden()
-                        .textFieldStyle(.roundedBorder)
-                        .onSubmit(addOrigin)
-                    Button("加入", action: addOrigin).disabled(newOrigin.trimmingCharacters(in: .whitespaces).isEmpty)
-                }
-                if let originError {
-                    Text(originError).font(.caption).foregroundStyle(.red)
-                }
-                HStack {
-                    Text("網頁要用本機模型，網址必須在這份清單裡。預設只有這台 Mac 上的網頁（localhost）。可以加入 http 或 https 網站；https://*.example.com 代表 example.com 底下的所有子網域。Safari 不讓 https 網站連到這台 Mac 的 http 服務，所以 https 網站只能在 Chrome、Brave 等瀏覽器使用。")
-                        .sectionNote()
-                    if settings.localAPIAllowedOrigins != AllowedOrigin.defaults {
-                        Button("恢復預設") { settings.localAPIAllowedOrigins = AllowedOrigin.defaults }
-                            .controlSize(.small)
-                    }
+                    Text(verbatim: origin).font(.callout.monospaced())
+                    Spacer()
+                    Button("移除") { settings.localAPIAllowedOrigins.removeAll { $0 == origin } }
+                        .controlSize(.small)
                 }
             }
-            .disabled(settings.localAPIAllowAnyWebsite)
-            .opacity(settings.localAPIAllowAnyWebsite ? 0.5 : 1)
-            SettingsToggle(
-                title: "允許任何網站（不建議）",
-                detail: "任何 http 或 https 網站只要有金鑰就能使用，不必在上面的清單裡；本機檔案（file://）仍然不行。",
-                isOn: Bindable(settings).localAPIAllowAnyWebsite
-            )
+            HStack {
+                TextField("https://example.com", text: $newOrigin, prompt: Text(verbatim: "https://example.com"))
+                    .labelsHidden()
+                    .textFieldStyle(.roundedBorder)
+                    .onSubmit(addOrigin)
+                Button("加入", action: addOrigin).disabled(newOrigin.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+            if let originError {
+                Text(originError).font(.caption).foregroundStyle(.red)
+            }
+            HStack {
+                Text("自製網頁要用本機模型，網址必須在這份清單裡。預設只有這台 Mac 上的網頁（localhost）；架在區域網路或自己網域上的網頁，可以加入它的 http 或 https 網址，https://*.example.com 代表 example.com 底下的所有子網域。Safari 不讓 https 網頁連到這台 Mac 的 http 服務，所以 https 網頁只能在 Chrome、Brave 等瀏覽器使用。")
+                    .sectionNote()
+                if settings.localAPIAllowedOrigins != AllowedOrigin.defaults {
+                    Button("恢復預設") { settings.localAPIAllowedOrigins = AllowedOrigin.defaults }
+                        .controlSize(.small)
+                }
+            }
             SettingsToggle(
                 title: "允許瀏覽器擴充功能使用 API",
                 detail: "Chrome、Brave、Edge、Firefox 與 Safari 的擴充功能只要有金鑰就能使用，不必在上面的清單裡。擴充功能看得到你瀏覽的網頁，只把金鑰給你信任的擴充功能。",

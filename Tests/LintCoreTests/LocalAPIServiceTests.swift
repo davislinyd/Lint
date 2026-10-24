@@ -5,12 +5,10 @@ import XCTest
 @MainActor
 final class LocalAPIServiceTests: XCTestCase {
     private func config(
-        enabled: Bool = true, port: Int = 8001, upstream: Int = 8000, origins: [String] = AllowedOrigin.defaults, anyWebsite: Bool = false,
-        extensions: Bool = false
+        enabled: Bool = true, port: Int = 8001, upstream: Int = 8000, origins: [String] = AllowedOrigin.defaults, extensions: Bool = false
     ) -> LocalAPIService.Configuration {
         LocalAPIService.Configuration(
-            enabled: enabled, port: port, upstreamPort: upstream, allowedOrigins: origins, allowAnyWebsite: anyWebsite,
-            allowBrowserExtensions: extensions
+            enabled: enabled, port: port, upstreamPort: upstream, allowedOrigins: origins, allowBrowserExtensions: extensions
         )
     }
 
@@ -37,18 +35,14 @@ final class LocalAPIServiceTests: XCTestCase {
         XCTAssertEqual(listener.updates.first?.1, AllowedOrigin.defaults + ["https://tool.example.com"])
     }
 
-    func testAllowingAnyWebsiteOrExtensionsAppliesWithoutListeningAgain() async {
+    func testAllowingExtensionsAppliesWithoutListeningAgain() async {
         let listener = FakeListener()
         let service = LocalAPIService(proxy: listener)
         await service.apply(config())
-        await service.apply(config(anyWebsite: true))
-        XCTAssertEqual(listener.starts, [8001])
-        XCTAssertEqual(listener.updates.last?.2, true)
         await service.apply(config(extensions: true))
-        XCTAssertEqual(listener.updates.last?.2, false)
-        XCTAssertEqual(listener.updates.last?.3, true)
+        XCTAssertEqual(listener.updates.last?.2, true)
         await service.apply(config())
-        XCTAssertEqual(listener.updates.last?.3, false)
+        XCTAssertEqual(listener.updates.last?.2, false)
         XCTAssertEqual(listener.starts, [8001])
     }
 
@@ -90,17 +84,17 @@ private final class FakeListener: LocalAPIListening, @unchecked Sendable {
     private let lock = NSLock()
     var busy: Set<Int> = []
     private(set) var starts: [Int] = []
-    private(set) var updates: [(Int, [String], Bool, Bool)] = []
+    private(set) var updates: [(Int, [String], Bool)] = []
     private(set) var stops = 0
 
-    func start(port: Int, upstreamPort: Int, allowedOrigins: [String], allowAnyWebsite: Bool, allowBrowserExtensions: Bool) async throws -> Int {
+    func start(port: Int, upstreamPort: Int, allowedOrigins: [String], allowBrowserExtensions: Bool) async throws -> Int {
         lock.withLock { starts.append(port) }
         if busy.contains(port) { throw LocalAPIProxy.StartError.portUnavailable(port: port) }
         return port
     }
 
-    func update(upstreamPort: Int, allowedOrigins: [String], allowAnyWebsite: Bool, allowBrowserExtensions: Bool) {
-        lock.withLock { updates.append((upstreamPort, allowedOrigins, allowAnyWebsite, allowBrowserExtensions)) }
+    func update(upstreamPort: Int, allowedOrigins: [String], allowBrowserExtensions: Bool) {
+        lock.withLock { updates.append((upstreamPort, allowedOrigins, allowBrowserExtensions)) }
     }
 
     func stop() {

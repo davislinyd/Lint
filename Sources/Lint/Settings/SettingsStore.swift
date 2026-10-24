@@ -82,7 +82,6 @@ final class SettingsStore {
         static let localAPIEnabled = "app.lint.localAPI.enabled"
         static let localAPIPort = "app.lint.localAPI.port"
         static let localAPIAllowedOrigins = "app.lint.localAPI.allowedOrigins"
-        static let localAPIAllowAnyWebsite = "app.lint.localAPI.allowAnyWebsite"
         static let localAPIAllowBrowserExtensions = "app.lint.localAPI.allowBrowserExtensions"
         static let updateMode = "app.lint.update.mode"
         static let updateFrequency = "app.lint.update.frequency"
@@ -232,13 +231,6 @@ final class SettingsStore {
             onLocalAPIChanged?()
         }
     }
-    /// Any http or https page may use the API port (with a key), not only `localAPIAllowedOrigins`. Off by default.
-    var localAPIAllowAnyWebsite: Bool {
-        didSet {
-            defaults.set(localAPIAllowAnyWebsite, forKey: Keys.localAPIAllowAnyWebsite)
-            onLocalAPIChanged?()
-        }
-    }
     /// Browser extensions may use the API port (with a key). Off by default.
     var localAPIAllowBrowserExtensions: Bool {
         didSet {
@@ -384,7 +376,6 @@ final class SettingsStore {
         localAPIEnabled = defaults.bool(forKey: Keys.localAPIEnabled)
         localAPIPort = defaults.object(forKey: Keys.localAPIPort) == nil ? 8001 : defaults.integer(forKey: Keys.localAPIPort)
         localAPIAllowedOrigins = defaults.stringArray(forKey: Keys.localAPIAllowedOrigins) ?? AllowedOrigin.defaults
-        localAPIAllowAnyWebsite = defaults.bool(forKey: Keys.localAPIAllowAnyWebsite)
         localAPIAllowBrowserExtensions = defaults.bool(forKey: Keys.localAPIAllowBrowserExtensions)
         updateMode = UpdateMode(rawValue: defaults.string(forKey: Keys.updateMode) ?? "") ?? .manual
         updateFrequency = UpdateCheckFrequency(rawValue: defaults.string(forKey: Keys.updateFrequency) ?? "") ?? .weekly

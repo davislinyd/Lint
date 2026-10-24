@@ -509,7 +509,7 @@
 "API 埠不能和本機模型的埠（%@）相同。" = "A porta da API não pode ser a porta do modelo local (%@).";
 "埠 %@ 已被其他程式使用，請改用別的埠。" = "A porta %@ está sendo usada por outro app. Escolha outra porta.";
 "讓其他 app 使用本機模型" = "Permitir que outros apps usem o modelo local";
-"這台 Mac 上的其他 app 和網頁可以用 OpenAI 相容 API 呼叫本機模型，需要下面的金鑰，只接受這台 Mac 的連線。Lint 自己要用模型時永遠優先：其他請求會等候，或被中斷後自動重送。" = "Outros apps e páginas da web neste Mac podem chamar o modelo local por uma API compatível com a OpenAI. Eles precisam da chave abaixo, e só conexões deste Mac são aceitas. O Lint sempre vem primeiro: quando ele precisa do modelo, os outros pedidos esperam ou são interrompidos e enviados de novo automaticamente.";
+"這台 Mac 上的腳本、其他 app、瀏覽器擴充功能和自製網頁，可以用 OpenAI 相容 API 呼叫本機模型，需要下面的金鑰，只接受這台 Mac 的連線。Lint 自己要用模型時永遠優先：其他請求會等候，或被中斷後自動重送。" = "Scripts, outros apps, extensões de navegador e páginas da web feitas por você neste Mac podem chamar o modelo local por uma API compatível com a OpenAI. Eles precisam de uma das chaves abaixo, e só conexões deste Mac são aceitas. O Lint sempre vem primeiro: quando ele precisa do modelo, os outros pedidos esperam ou são interrompidos e enviados de novo automaticamente.";
 "狀態" = "Estado";
 "網址" = "Endereço";
 "API 埠" = "Porta da API";
@@ -542,9 +542,7 @@
 "最多 %@ 把金鑰；請先註銷用不到的。" = "Pode haver no máximo %@ chaves; revogue antes as que não usa mais.";
 "無法把金鑰存進鑰匙圈。" = "Não foi possível salvar a chave nas Chaves.";
 "預設" = "Padrão";
-"網頁要用本機模型，網址必須在這份清單裡。預設只有這台 Mac 上的網頁（localhost）。可以加入 http 或 https 網站；https://*.example.com 代表 example.com 底下的所有子網域。Safari 不讓 https 網站連到這台 Mac 的 http 服務，所以 https 網站只能在 Chrome、Brave 等瀏覽器使用。" = "Uma página da web só pode usar o modelo local se o site dela estiver nesta lista. Por padrão, só as páginas deste Mac (localhost) estão. Você pode adicionar sites http ou https; https://*.example.com vale para todos os subdomínios de example.com. O Safari não deixa sites https se conectarem a serviços http deste Mac, então os sites https só funcionam em navegadores como Chrome ou Brave.";
-"允許任何網站（不建議）" = "Permitir qualquer site (não recomendado)";
-"任何 http 或 https 網站只要有金鑰就能使用，不必在上面的清單裡；本機檔案（file://）仍然不行。" = "Qualquer site http ou https pode usar o modelo se tiver uma chave, mesmo fora da lista acima; arquivos locais (file://) continuam sem acesso.";
+"自製網頁要用本機模型，網址必須在這份清單裡。預設只有這台 Mac 上的網頁（localhost）；架在區域網路或自己網域上的網頁，可以加入它的 http 或 https 網址，https://*.example.com 代表 example.com 底下的所有子網域。Safari 不讓 https 網頁連到這台 Mac 的 http 服務，所以 https 網頁只能在 Chrome、Brave 等瀏覽器使用。" = "Páginas feitas por você só podem usar o modelo local se o endereço delas estiver nesta lista. Por padrão, só as páginas deste Mac (localhost) estão. Para uma página na rede local ou no seu próprio domínio, adicione o endereço http ou https dela; https://*.example.com vale para todos os subdomínios de example.com. O Safari não deixa páginas https se conectarem a serviços http deste Mac, então as páginas https só funcionam em navegadores como Chrome ou Brave.";
 "允許瀏覽器擴充功能使用 API" = "Permitir que extensões de navegador usem a API";
 "Chrome、Brave、Edge、Firefox 與 Safari 的擴充功能只要有金鑰就能使用，不必在上面的清單裡。擴充功能看得到你瀏覽的網頁，只把金鑰給你信任的擴充功能。" = "Extensões do Chrome, Brave, Edge, Firefox e Safari podem usar o modelo se tiverem uma chave, mesmo fora da lista acima. Extensões veem as páginas que você abre, então dê uma chave só às extensões em que você confia.";
 "請輸入 http:// 或 https:// 開頭的網站，例如 https://example.com；*. 代表所有子網域，例如 https://*.example.com。不含路徑。" = "Digite um site que comece com http:// ou https://, como https://example.com, sem caminho. *. vale para todos os subdomínios, como em https://*.example.com.";

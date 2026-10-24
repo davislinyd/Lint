@@ -150,10 +150,10 @@ error was; do not keep retrying in a loop.
 
 ### Web pages
 
-- A web page can call the API only if its site is in Lint's **Allowed websites** (by default pages served from this
-  Mac: `http://localhost`, `http://127.0.0.1` and `https://localhost`, any port). The user can add `http` or `https`
-  websites, and `https://*.example.com` for every subdomain, or turn on **Allow any website** (off by default). A local
-  file (`file://`) is always refused. A browser extension gets in only if the user turns on **Allow browser extensions
+- A web page can call the API only if its address is in Lint's **Allowed websites** (by default pages served from
+  this Mac: `http://localhost`, `http://127.0.0.1` and `https://localhost`, any port). The user can add the `http` or
+  `https` address of a page they run on their network or domain, and `https://*.example.com` for every subdomain. Other
+  websites and local files (`file://`) are always refused. A browser extension gets in only if the user turns on **Allow browser extensions
   to use the API** (off by default).
 - Safari does not let any `https` page reach this Mac's `http` address, so in Safari no `https` page works. Chrome and
   Brave let allowed `https` websites in.

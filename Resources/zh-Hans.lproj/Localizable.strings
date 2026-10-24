@@ -509,7 +509,7 @@
 "API 埠不能和本機模型的埠（%@）相同。" = "API 端口不能与本地模型的端口（%@）相同。";
 "埠 %@ 已被其他程式使用，請改用別的埠。" = "端口 %@ 已被其他程序占用，请改用其他端口。";
 "讓其他 app 使用本機模型" = "允许其他 App 使用本地模型";
-"這台 Mac 上的其他 app 和網頁可以用 OpenAI 相容 API 呼叫本機模型，需要下面的金鑰，只接受這台 Mac 的連線。Lint 自己要用模型時永遠優先：其他請求會等候，或被中斷後自動重送。" = "这台 Mac 上的其他 App 和网页可以通过 OpenAI 兼容 API 调用本地模型，需要下面的密钥，且只接受来自这台 Mac 的连接。Lint 自己要用模型时始终优先：其他请求会等待，或被中断后自动重新发送。";
+"這台 Mac 上的腳本、其他 app、瀏覽器擴充功能和自製網頁，可以用 OpenAI 相容 API 呼叫本機模型，需要下面的金鑰，只接受這台 Mac 的連線。Lint 自己要用模型時永遠優先：其他請求會等候，或被中斷後自動重送。" = "这台 Mac 上的脚本、其他 App、浏览器扩展和自制网页，可以通过 OpenAI 兼容 API 调用本地模型，需要下面的密钥，且只接受来自这台 Mac 的连接。Lint 自己要用模型时始终优先：其他请求会等待，或被中断后自动重新发送。";
 "狀態" = "状态";
 "網址" = "地址";
 "API 埠" = "API 端口";
@@ -542,9 +542,7 @@
 "最多 %@ 把金鑰；請先註銷用不到的。" = "最多 %@ 把密钥；请先注销用不到的。";
 "無法把金鑰存進鑰匙圈。" = "无法把密钥存入钥匙串。";
 "預設" = "默认";
-"網頁要用本機模型，網址必須在這份清單裡。預設只有這台 Mac 上的網頁（localhost）。可以加入 http 或 https 網站；https://*.example.com 代表 example.com 底下的所有子網域。Safari 不讓 https 網站連到這台 Mac 的 http 服務，所以 https 網站只能在 Chrome、Brave 等瀏覽器使用。" = "网页只有在其网站位于此列表中时才能使用本地模型。默认只包含这台 Mac 上的网页（localhost）。可以添加 http 或 https 网站；https://*.example.com 表示 example.com 下的所有子域名。Safari 不允许 https 网站连接这台 Mac 的 http 服务，所以 https 网站只能在 Chrome、Brave 等浏览器中使用。";
-"允許任何網站（不建議）" = "允许任何网站（不建议）";
-"任何 http 或 https 網站只要有金鑰就能使用，不必在上面的清單裡；本機檔案（file://）仍然不行。" = "任何 http 或 https 网站只要有密钥就能使用，不必在上面的列表中；本地文件（file://）仍然不行。";
+"自製網頁要用本機模型，網址必須在這份清單裡。預設只有這台 Mac 上的網頁（localhost）；架在區域網路或自己網域上的網頁，可以加入它的 http 或 https 網址，https://*.example.com 代表 example.com 底下的所有子網域。Safari 不讓 https 網頁連到這台 Mac 的 http 服務，所以 https 網頁只能在 Chrome、Brave 等瀏覽器使用。" = "自制网页只有在其网址位于此列表中时才能使用本地模型。默认只包含这台 Mac 上的网页（localhost）；放在局域网或你自己域名上的网页，可以添加它的 http 或 https 网址，https://*.example.com 表示 example.com 下的所有子域名。Safari 不允许 https 网页连接这台 Mac 的 http 服务，所以 https 网页只能在 Chrome、Brave 等浏览器中使用。";
 "允許瀏覽器擴充功能使用 API" = "允许浏览器扩展使用 API";
 "Chrome、Brave、Edge、Firefox 與 Safari 的擴充功能只要有金鑰就能使用，不必在上面的清單裡。擴充功能看得到你瀏覽的網頁，只把金鑰給你信任的擴充功能。" = "Chrome、Brave、Edge、Firefox 和 Safari 的扩展只要有密钥就能使用，不必在上面的列表中。扩展能看到你浏览的网页，只把密钥交给你信任的扩展。";
 "請輸入 http:// 或 https:// 開頭的網站，例如 https://example.com；*. 代表所有子網域，例如 https://*.example.com。不含路徑。" = "请输入以 http:// 或 https:// 开头的网站，例如 https://example.com；*. 表示所有子域名，例如 https://*.example.com。不含路径。";

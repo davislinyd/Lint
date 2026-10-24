@@ -73,23 +73,11 @@ final class LocalAPIPolicyTests: XCTestCase {
         XCTAssertFalse(withPort.matches("http://dev.example.com"))
     }
 
-    func testAnyWebsiteLetsEveryWebOriginInButNotNullOrOtherSchemes() {
-        for origin in ["https://evil.example", "http://example.com", "https://tool.example.com:8443", "http://192.168.1.5:3000",
-                       "http://localhost:3000"] {
-            XCTAssertTrue(LocalAPIPolicy.isAllowedOrigin(origin, allowed: [], anyWebsite: true), origin)
-            XCTAssertFalse(LocalAPIPolicy.isAllowedOrigin(origin, allowed: [], anyWebsite: false), origin)
-        }
-        for origin in ["null", "file://", "chrome-extension://abcdef", "moz-extension://abc", "", "https://a.example/path",
-                       "http://[::1]:3000"] {
-            XCTAssertFalse(LocalAPIPolicy.isAllowedOrigin(origin, allowed: [], anyWebsite: true), origin)
-        }
-    }
-
     func testBrowserExtensionsGetInOnlyWithTheirOwnSwitch() {
         let extensions = ["chrome-extension://abcdefghijklmnopabcdefghijklmnop", "moz-extension://0d3a6f0e-1111-4222-8333-444455556666",
                           "safari-web-extension://E3A1B2C4-0000-4000-8000-000000000000"]
         for origin in extensions {
-            XCTAssertFalse(LocalAPIPolicy.isAllowedOrigin(origin, allowed: [], anyWebsite: true), origin)
+            XCTAssertFalse(LocalAPIPolicy.isAllowedOrigin(origin, allowed: AllowedOrigin.defaults.compactMap(AllowedOrigin.parse)), origin)
             XCTAssertTrue(LocalAPIPolicy.isAllowedOrigin(origin, allowed: [], browserExtensions: true), origin)
         }
         for origin in ["null", "file://", "chrome-extension://", "chrome-extension://abc/page.html", "chrome-extension://abc:80",

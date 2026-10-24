@@ -34,6 +34,12 @@ Lint asks the GitHub API for the latest release, every week by default or when y
 
 Lint 會向 GitHub API 查詢最新的正式版，預設每週一次，或在你按「檢查更新…」時查詢，不會送出你的任何文字。只有在下載的 DMG 符合公布的 SHA-256，而且裡面的 App 是以 Lint 的 Developer ID（team `N964GDJY6A`）簽署、啟用 Hardened Runtime 的 Lint（`app.lint.assistant`）時，才會安裝更新。「設定 → 一般 → 更新」可以設成只檢查。
 
+## Local model
+
+Lint's own llama-server listens only on `127.0.0.1` and only answers Lint: it is started with a random key that Lint makes each time it starts, passes on standard input and never shows or logs, and it sends no CORS headers that would let a web page read its answers. Settings → Model → **Other Apps** (off by default) opens a second port, also on `127.0.0.1` only, for other apps and web pages on this Mac. It needs its own key (kept in the Keychain), accepts only `Host: 127.0.0.1` or `localhost`, lets a web page in only if its site is on the allowed list (pages on this Mac by default), and passes on only the OpenAI chat, completion and model-list requests. The diagnostic log records only counts, status codes and times for these requests, never their text, their keys or the sites that sent them.
+
+Lint 自己的 llama-server 只監聽 `127.0.0.1`，而且只回應 Lint：啟動時帶著 Lint 每次開啟時產生的隨機金鑰，經由標準輸入傳入，從不顯示或寫進記錄；它也不送出會讓網頁讀到回應的 CORS 標頭。「設定 → 模型 → **其他 app 使用**」（預設關閉）會為這台 Mac 上的其他 app 與網頁開第二個埠，同樣只監聽 `127.0.0.1`。它需要自己的金鑰（存在鑰匙圈）、只接受 `Host: 127.0.0.1` 或 `localhost`、只讓允許清單上的網站的網頁使用（預設是這台 Mac 上的網頁），而且只轉送 OpenAI 的對話、補全與模型清單請求。診斷記錄對這些請求只記次數、狀態碼與時間，不記內容、金鑰，也不記是哪個網站送來的。
+
 ## Diagnostic log
 
 Lint keeps a log of what it did and how it went in `~/Library/Logs/Lint/lint.log`: captures and replaces, requests to the model (engine, model, character counts, time taken, the output check's verdict), the local server and errors, with app names, error codes and counts. It never contains the text you check, the model's answers or your memories. The log stays on this Mac and Lint never sends it; you can read, copy or clear it in Settings → Diagnostics. When the file reaches 1 MB it becomes `lint.1.log` and a new one starts, so at most two files, about 2 MB, are kept.

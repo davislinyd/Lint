@@ -426,7 +426,7 @@
 "30 分鐘" = "30 minutos";
 "閒置一段時間沒有使用本機 AI 時，Lint 會請 llama-server 釋放模型佔用的記憶體；服務本身仍在執行。下一次的建議會多花幾秒重新載入模型。" = "Depois de um tempo sem sugestões, o Lint pede ao llama-server que libere a memória ocupada pelo modelo; o servidor continua em execução. A próxima sugestão leva alguns segundos a mais enquanto o modelo é carregado de novo.";
 "按「重新啟動」後新的閒置設定才會生效。" = "Clique em Reiniciar para aplicar o novo ajuste de ociosidade.";
-"留空即可：Lint 會依所選模型套用自己的參數（目前為 %@）。這裡填的參數會覆蓋同一個選項，例如長文可填 -c 16384。服務一律只綁定 127.0.0.1，額外參數裡的 --host 會被忽略。" = "Deixe em branco: o Lint passa os próprios argumentos para o modelo selecionado (no momento, %@). O que for definido aqui substitui a opção equivalente do Lint — para textos longos, tente -c 16384. O servidor sempre se vincula apenas a 127.0.0.1; um --host aqui é ignorado.";
+"留空即可：Lint 會依所選模型套用自己的參數（目前為 %@）。這裡填的參數會覆蓋同一個選項，例如長文可填 -c 16384。服務一律只綁定 127.0.0.1、只接受 Lint 的金鑰，額外參數裡的 --host、--api-key 與 --cors 開頭的選項會被忽略。" = "Deixe em branco: o Lint passa os próprios argumentos para o modelo selecionado (no momento, %@). O que for definido aqui substitui a opção equivalente do Lint — para textos longos, tente -c 16384. O servidor sempre se vincula apenas a 127.0.0.1 e só aceita a chave do Lint; --host, --api-key e opções que começam com --cors aqui são ignorados.";
 "這段文字對本機 AI 來說太長了。請分段處理，或在「設定 → 模型 → 進階」的額外參數加上較大的 -c（例如 -c 16384）後重新啟動。" = "Este texto é longo demais para a IA local. Processe-o em partes ou adicione um -c maior (por exemplo, -c 16384) aos argumentos extras em Ajustes → Modelo → Avançado e reinicie.";
 "本機 AI 在回覆完成前中斷了，請再試一次。" = "A IA local parou antes de terminar a resposta. Tente novamente.";
 "建議" = "Recomendado";
@@ -503,3 +503,35 @@
 "清除記錄…" = "Apagar Registro…";
 "清除所有記錄？" = "Apagar todo o registro?";
 "記錄 Lint 做了什麼、結果如何（擷取、取代、模型請求、本機伺服器、錯誤），不含你的文字。只存在這台 Mac，Lint 不會自動送出。每個檔案滿 1 MB 就換新檔，只保留最近兩個。「拷貝」會附上版本與系統資訊，以及最近 1000 行。" = "Registra o que o Lint fez e como terminou (captura, substituição, pedidos ao modelo, servidor local, erros), nunca o seu texto. Fica só neste Mac; o Lint nunca o envia. Um arquivo que chega a 1 MB é trocado por um novo, e só os dois últimos são mantidos. Copiar junta a versão e os dados do sistema às últimas 1000 linhas.";
+
+/* Other apps using the local model (Lint's API port). */
+"埠 %@ 上有另一個需要金鑰的 llama-server。請在設定按「停止」後再啟動，或改用別的埠。" = "Outro llama-server que exige uma chave está em execução na porta %@. Toque em Parar nos Ajustes e inicie de novo, ou use outra porta.";
+"API 埠不能和本機模型的埠（%@）相同。" = "A porta da API não pode ser a porta do modelo local (%@).";
+"埠 %@ 已被其他程式使用，請改用別的埠。" = "A porta %@ está sendo usada por outro app. Escolha outra porta.";
+"讓其他 app 使用本機模型" = "Permitir que outros apps usem o modelo local";
+"這台 Mac 上的其他 app 和網頁可以用 OpenAI 相容 API 呼叫本機模型，需要下面的金鑰，只接受這台 Mac 的連線。Lint 自己要用模型時永遠優先：其他請求會等候，或被中斷後自動重送。" = "Outros apps e páginas da web neste Mac podem chamar o modelo local por uma API compatível com a OpenAI. Eles precisam da chave abaixo, e só conexões deste Mac são aceitas. O Lint sempre vem primeiro: quando ele precisa do modelo, os outros pedidos esperam ou são interrompidos e enviados de novo automaticamente.";
+"狀態" = "Estado";
+"網址" = "Endereço";
+"API 埠" = "Porta da API";
+"金鑰" = "Chave";
+"隱藏" = "Ocultar";
+"顯示" = "Mostrar";
+"重新產生…" = "Gerar outra…";
+"範例" = "Exemplo";
+"拷貝範例" = "Copiar exemplo";
+"只在 Lint 執行、且使用本機模型時可用。模型一次只處理一個請求；Lint 正在用、或你正在打字時，其他請求會等候。範例裡的 $LINT_API_KEY 請換成上面的金鑰。" = "Disponível só enquanto o Lint estiver em execução e usando o modelo local. O modelo atende um pedido por vez; enquanto o Lint o estiver usando ou você estiver digitando, os outros pedidos esperam. Troque $LINT_API_KEY no exemplo pela chave acima.";
+"其他 app 使用" = "Outros apps";
+"重新產生金鑰？" = "Gerar outra chave?";
+"重新產生" = "Gerar outra";
+"舊的金鑰會立刻失效，使用它的 app 要改用新的金鑰。" = "A chave antiga deixa de funcionar na hora; os apps que a usam precisam da nova.";
+"允許的網站" = "Sites permitidos";
+"加入" = "Adicionar";
+"網頁要用本機模型，網址必須在這份清單裡。預設只有這台 Mac 上的網頁（localhost）；加入的網站必須是 https，而且只能在 Chrome、Brave 等瀏覽器使用：Safari 不讓 https 網站連到這台 Mac 的 http 服務。" = "Uma página da web só pode usar o modelo local se o site dela estiver nesta lista. Por padrão, só as páginas deste Mac (localhost) estão; os sites que você adicionar precisam usar https e só funcionam em navegadores como Chrome ou Brave: o Safari não deixa sites https se conectarem a serviços http deste Mac.";
+"恢復預設" = "Restaurar padrão";
+"請輸入 https:// 開頭的網站，例如 https://example.com，不含路徑。" = "Digite um site que comece com https://, como https://example.com, sem caminho.";
+"Lint 目前沒有使用本機模型，其他 app 暫時無法使用。" = "O Lint não está usando o modelo local agora, por isso outros apps não podem usá-lo.";
+"已開啟，只接受這台 Mac（127.0.0.1:%@）" = "Ativado, aceitando só este Mac (127.0.0.1:%@)";
+"未開啟" = "Desativado";
+"這個 llama-server 不是 Lint 啟動的，也不需要金鑰：這台 Mac 上的任何程式和網頁都能直接使用它，Lint 也無法優先。按「停止」再「啟動」，改用 Lint 自己的服務。" = "Este llama-server não foi iniciado pelo Lint e não exige chave: qualquer app ou página da web neste Mac pode usá-lo diretamente, e o Lint não consegue vir primeiro. Toque em Parar e depois em Iniciar para usar o servidor do próprio Lint.";
+"其他 app：開啟（%lld 個等候中）" = "Outros apps: ativado (%lld aguardando)";
+"其他 app：開啟" = "Outros apps: ativado";

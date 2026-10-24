@@ -24,6 +24,7 @@ struct LocalServerSection: View {
             modelSection
             serverSection
             memorySection
+            LocalAPISection(app: app)
             advancedSection
             maintenanceSection
         }
@@ -323,6 +324,11 @@ struct LocalServerSection: View {
                     .foregroundStyle(.secondary)
                     .textSelection(.enabled)
             }
+            if coordinator.serverIsUnprotected {
+                Label("這個 llama-server 不是 Lint 啟動的，也不需要金鑰：這台 Mac 上的任何程式和網頁都能直接使用它，Lint 也無法優先。按「停止」再「啟動」，改用 Lint 自己的服務。", systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+            }
             SettingsToggle(
                 title: "自動啟動本機模型服務",
                 detail: "Lint 會在需要時自動執行 llama-server（與在終端機手動跑的效果相同）。若埠上已有服務則不會重複啟動。",
@@ -396,7 +402,7 @@ struct LocalServerSection: View {
                 Text("額外參數")
                 CodeEditor(text: Bindable(app.settings).localServerExtraArgs)
                     .frame(minHeight: 56, maxHeight: 96)
-                Text("留空即可：Lint 會依所選模型套用自己的參數（目前為 \(tuningSummary)）。這裡填的參數會覆蓋同一個選項，例如長文可填 -c 16384。服務一律只綁定 127.0.0.1，額外參數裡的 --host 會被忽略。")
+                Text("留空即可：Lint 會依所選模型套用自己的參數（目前為 \(tuningSummary)）。這裡填的參數會覆蓋同一個選項，例如長文可填 -c 16384。服務一律只綁定 127.0.0.1、只接受 Lint 的金鑰，額外參數裡的 --host、--api-key 與 --cors 開頭的選項會被忽略。")
                     .sectionNote()
             }
         } header: {

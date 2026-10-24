@@ -15,8 +15,8 @@ public enum LocalModelReference: Equatable, Sendable {
 ///
 /// Arguments are composed in three layers, and that order is the precedence:
 ///
-///  1. **Lint's own** — the model, `--host`, `--port`. The settings cannot change these; the server
-///     only ever listens on loopback.
+///  1. **Lint's own** — the model, `--host`, `--port`, the key and the CORS lockdown. The settings
+///     cannot change these; the server only ever listens on loopback and only answers Lint.
 ///  2. **Tuning** — `ModelRuntimeProfile` plus the sizes every model shares, and the idle-sleep
 ///     setting. Lint picks these for its workload.
 ///  3. **The advanced "extra arguments" setting** — appended last. Anything it sets also *removes*
@@ -24,6 +24,14 @@ public enum LocalModelReference: Equatable, Sendable {
 public struct LlamaServerLaunchPlan: Equatable, Sendable {
     /// llama-server only ever listens on loopback; the settings cannot change that.
     public static let host = "127.0.0.1"
+
+    /// llama-server reads its key from standard input, where `LocalLlamaServerManager` writes it:
+    /// on the command line every user could read it and the diagnostic log would record it.
+    static let keyArguments = ["--api-key-file", "/dev/stdin"]
+    /// No browser may talk to llama-server: Lint uses URLSession, and other apps go through Lint's
+    /// own API port. Without these b11046 sends back any Origin it is given (measured 2026-10-24).
+    /// `lint.invalid` can never be a page's origin.
+    static let corsLockdownArguments = ["--no-cors-credentials", "--cors-origins", "http://lint.invalid"]
 
     public var executableURL: URL
     public var arguments: [String]
@@ -33,13 +41,20 @@ public struct LlamaServerLaunchPlan: Equatable, Sendable {
         self.arguments = arguments
     }
 
+    /// - Parameters:
+    ///   - alias: the name `/v1/models` gives the model; without it a file's absolute path, which holds
+    ///     the user's name, is shown to every client.
+    ///   - lockDownCORS: only the bundled runtime is known to have the CORS flags. A custom
+    ///     llama-server may predate them and would not start; the key is what keeps others out.
     public static func make(
         runtime: URL,
         model: LocalModelReference,
         port: Int,
         profile: ModelRuntimeProfile = .unknownModel,
         idleSleepSeconds: Int = 0,
-        extraArguments: String
+        extraArguments: String,
+        alias: String? = nil,
+        lockDownCORS: Bool = true
     ) -> LlamaServerLaunchPlan {
         var arguments: [String]
         switch model {
@@ -47,7 +62,12 @@ public struct LlamaServerLaunchPlan: Equatable, Sendable {
         case .huggingFace(let spec): arguments = ["-hf", spec]
         }
         arguments += ["--host", host, "--port", "\(port)"]
+        arguments += keyArguments
+        if lockDownCORS { arguments += corsLockdownArguments }
         let extras = splitArguments(extraArguments)
+        if let alias, !optionNames(in: extras).contains(.alias) {
+            arguments += ["--alias", alias]
+        }
         arguments += tuningArguments(profile: profile, idleSleepSeconds: idleSleepSeconds, overriddenBy: extras)
         arguments += extras
         return LlamaServerLaunchPlan(executableURL: runtime, arguments: arguments)
@@ -99,16 +119,25 @@ public struct LlamaServerLaunchPlan: Equatable, Sendable {
         return arguments
     }
 
-    /// Splits the "extra arguments" setting on whitespace and drops any `--host` the user typed
-    /// (both `--host x` and `--host=x`), because the server must stay bound to loopback.
+    /// Options the "extra arguments" setting may not set, because the server must stay bound to
+    /// loopback, ask for Lint's key and answer no browser. These take a value (`--x v` or `--x=v`).
+    static let protectedOptions: Set<String> = [
+        "--host", "--api-key", "--api-key-file", "--cors-origins", "--cors-headers", "--cors-methods",
+    ]
+    /// The same, for flags that take no value: they must not swallow the token after them.
+    static let protectedFlags: Set<String> = ["--cors-credentials", "--no-cors-credentials"]
+
+    /// Splits the "extra arguments" setting on whitespace and drops the protected options.
     static func splitArguments(_ line: String) -> [String] {
         let tokens = line.split(whereSeparator: \.isWhitespace).map(String.init)
         var result: [String] = []
         var skipNext = false
         for token in tokens {
             if skipNext { skipNext = false; continue }
-            if token == "--host" { skipNext = true; continue }
-            if token.hasPrefix("--host=") { continue }
+            if protectedFlags.contains(token) { continue }
+            if protectedOptions.contains(token) { skipNext = true; continue }
+            if let name = token.split(separator: "=", maxSplits: 1).first, token.contains("="),
+               protectedOptions.contains(String(name)) { continue }
             result.append(token)
         }
         return result
@@ -118,7 +147,7 @@ public struct LlamaServerLaunchPlan: Equatable, Sendable {
     /// are listed: the point is to notice that the user set the same one.
     enum OptionFamily: Hashable {
         case context, cacheTypeK, cacheTypeV, batch, ubatch, gpuLayers, flashAttention
-        case parallel, threads, jinja, chatParsing, reasoning, idleSleep, lazyMode, cacheRAM
+        case parallel, threads, jinja, chatParsing, reasoning, idleSleep, lazyMode, cacheRAM, alias
 
         static func of(_ token: String) -> OptionFamily? {
             let flag = token.split(separator: "=", maxSplits: 1).first.map(String.init) ?? token
@@ -138,6 +167,7 @@ public struct LlamaServerLaunchPlan: Equatable, Sendable {
             case "--sleep-idle-seconds": return .idleSleep
             case "-lzm", "--lazy-mode": return .lazyMode
             case "-cram", "--cache-ram": return .cacheRAM
+            case "-a", "--alias": return .alias
             default: return nil
             }
         }

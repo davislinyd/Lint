@@ -79,6 +79,9 @@ final class SettingsStore {
         static let localServerPort = "app.lint.localServer.port"
         static let localServerExtraArgs = "app.lint.localServer.extraArgs"
         static let localServerIdleSleep = "app.lint.localServer.idleSleepSeconds"
+        static let localAPIEnabled = "app.lint.localAPI.enabled"
+        static let localAPIPort = "app.lint.localAPI.port"
+        static let localAPIAllowedOrigins = "app.lint.localAPI.allowedOrigins"
         static let updateMode = "app.lint.update.mode"
         static let updateFrequency = "app.lint.update.frequency"
         static let migratedManagedTuning = "app.lint.localServer.migratedManagedTuning"
@@ -207,6 +210,26 @@ final class SettingsStore {
     var localServerIdleSleep: IdleSleepOption {
         didSet { defaults.set(localServerIdleSleep.seconds, forKey: Keys.localServerIdleSleep) }
     }
+    /// Other apps may use the local model through Lint's API port. Off by default.
+    var localAPIEnabled: Bool {
+        didSet {
+            defaults.set(localAPIEnabled, forKey: Keys.localAPIEnabled)
+            onLocalAPIChanged?()
+        }
+    }
+    var localAPIPort: Int {
+        didSet {
+            defaults.set(localAPIPort, forKey: Keys.localAPIPort)
+            onLocalAPIChanged?()
+        }
+    }
+    /// Web pages that may use the API port from a browser (`AllowedOrigin` text).
+    var localAPIAllowedOrigins: [String] {
+        didSet {
+            defaults.set(localAPIAllowedOrigins, forKey: Keys.localAPIAllowedOrigins)
+            onLocalAPIChanged?()
+        }
+    }
     /// What to do when GitHub has a newer release, and how often to look.
     var updateMode: UpdateMode {
         didSet {
@@ -224,6 +247,8 @@ final class SettingsStore {
     var onUpdatePreferenceChanged: (() -> Void)?
     /// Start or stop background Accessibility polling when a watch toggle changes.
     var onCaptureWatchChanged: (() -> Void)?
+    /// Start, change or stop the API port.
+    var onLocalAPIChanged: (() -> Void)?
 
     static let defaultLocalHFModel = ModelCatalog.recommended.huggingFaceSpec
     var apiKeyDraft: String = ""
@@ -340,6 +365,9 @@ final class SettingsStore {
             defaults.object(forKey: Keys.localServerIdleSleep) == nil
                 ? nil : defaults.integer(forKey: Keys.localServerIdleSleep)
         )
+        localAPIEnabled = defaults.bool(forKey: Keys.localAPIEnabled)
+        localAPIPort = defaults.object(forKey: Keys.localAPIPort) == nil ? 8001 : defaults.integer(forKey: Keys.localAPIPort)
+        localAPIAllowedOrigins = defaults.stringArray(forKey: Keys.localAPIAllowedOrigins) ?? AllowedOrigin.defaults
         updateMode = UpdateMode(rawValue: defaults.string(forKey: Keys.updateMode) ?? "") ?? .manual
         updateFrequency = UpdateCheckFrequency(rawValue: defaults.string(forKey: Keys.updateFrequency) ?? "") ?? .weekly
         baseURLString = defaults.string(forKey: Keys.url(kind)) ?? kind.defaultBaseURL.absoluteString
@@ -592,7 +620,8 @@ final class SettingsStore {
         else {
             throw LLMError.invalidURL
         }
-        let key = (try keychain.get(account: providerKind.keychainAccount)) ?? ""
+        // Lint's own llama-server takes the key `LLMService` holds for it, never a stored one.
+        let key = providerKind == .localLlama ? "" : (try keychain.get(account: providerKind.keychainAccount)) ?? ""
         if providerKind.requiresAPIKey && key.isEmpty {
             throw LLMError.emptyAPIKey
         }

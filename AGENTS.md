@@ -37,6 +37,19 @@ be taken back without rewriting history and deleting releases.
 asked: `package-app.sh` wipes `dist/Lint.app` and `release.sh` without `LINT_RELEASE_OUTPUT_DIR` wipes
 `dist/release/`. For a check, build into a scratch directory (`LINT_DIST_DIR=…`, `LINT_RELEASE_OUTPUT_DIR=…`).
 
+## Local model access (do not weaken)
+
+- llama-server and Lint's API port (`Sources/LintCore/LocalAPI`) bind to `127.0.0.1` only, never another address.
+- llama-server always takes a key: `--api-key-file /dev/stdin`, fed a random key made once per Lint process
+  (`LocalLlamaServerManager.serverKey`). Keys never go into arguments, the diagnostic log, Settings text, release
+  state or tests' fixtures; `LocalAPIKey` prints as redacted. `splitArguments` drops `--host`, `--api-key*` and
+  `--cors-*` from the extra arguments, and `LlamaServerEnvironment` drops `LLAMA_API_KEY` and `LLAMA_ARG_*`.
+- The API port never shares llama-server's port: `stop(port:)` kills every listener there, Lint included.
+- Every Lint request to its local model goes through `ModelPriorityGate` (`OpenAICompatibleProvider` for
+  `.localLlama`); Lint's side never waits. External requests are interrupted when Lint starts one.
+- The proxy forwards only `/v1/chat/completions`, `/v1/completions` and `/v1/models`, checks Host, Origin (allow
+  list) and the key before reading the body, and logs no body, key or origin.
+
 ## Two separate concepts: development and formal release
 
 - **Development** happens in the primary checkout. Previews and dry runs

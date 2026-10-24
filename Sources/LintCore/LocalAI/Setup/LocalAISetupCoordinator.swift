@@ -58,6 +58,8 @@ public final class LocalAISetupCoordinator {
     /// Whether the running server holds its model; kept up to date by `refreshServerActivity()`.
     public private(set) var modelSleep: LocalModelSleepState = .unknown
     public private(set) var isRestarting = false
+    /// The server in use answers without a key: someone else started it without `--api-key`.
+    public private(set) var serverIsUnprotected = false
     public private(set) var serverLogTail = ""
     public private(set) var accessibilityTrusted: Bool
 
@@ -154,6 +156,7 @@ public final class LocalAISetupCoordinator {
         }.map(\.id))
         await server.refreshStatus(port: configuration.port)
         serverStatus = server.status
+        serverIsUnprotected = server.isUnprotected
         serverLogTail = server.logTail
         hasChecked = true
     }
@@ -164,6 +167,7 @@ public final class LocalAISetupCoordinator {
         let port = configuration.port
         await server.refreshStatus(port: port)
         serverStatus = server.status
+        serverIsUnprotected = server.isUnprotected
         if case .running = serverStatus {
             modelSleep = modelSleep.updated(isSleeping: await server.isSleeping(port: port))
         } else {
@@ -284,6 +288,7 @@ public final class LocalAISetupCoordinator {
             if case .running = serverStatus {} else {
                 await server.refreshStatus(port: configuration.port)
                 serverStatus = server.status
+                serverIsUnprotected = server.isUnprotected
             }
             return
         }
@@ -302,9 +307,10 @@ public final class LocalAISetupCoordinator {
         defer { isRestarting = false }
         let configuration = self.configuration
         server.stop(port: configuration.port)
-        // Wait for the port to free up before starting again.
+        // Wait for the port to free up before starting again. A server that is quitting may still
+        // answer with a 401 or a 503, and then the port is not free yet.
         for _ in 0..<30 {
-            if !(await server.isHealthy(port: configuration.port)) { break }
+            if await server.probe(port: configuration.port) == .unreachable { break }
             try? await Task.sleep(for: settleDelay / 2)
         }
         try await launch(configuration)
@@ -353,6 +359,7 @@ public final class LocalAISetupCoordinator {
             throw error
         }
         serverStatus = server.status
+        serverIsUnprotected = server.isUnprotected
         serverLogTail = server.logTail
         if configuration.modelSource == .managed { rewriteManagedModelInBackground(configuration.managedModel) }
     }

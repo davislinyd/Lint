@@ -21,12 +21,14 @@ public enum LocalAIError: Error, Equatable, LocalizedError, Sendable {
     case serverNotRunning(port: Int)
     case launchFailed(String)
     case startTimeout(seconds: Int)
+    /// Another llama-server holds the port and wants a key Lint does not have.
+    case portInUse(port: Int)
 
     /// Setup (rather than a retry) is what fixes it: the panel offers a "Set Up Local AI" button.
     public var needsSetup: Bool {
         switch self {
         case .notSetUp, .runtimeUnavailable, .modelInvalid: true
-        case .serverNotRunning, .launchFailed, .startTimeout: false
+        case .serverNotRunning, .launchFailed, .startTimeout, .portInUse: false
         }
     }
 
@@ -44,6 +46,8 @@ public enum LocalAIError: Error, Equatable, LocalizedError, Sendable {
             return message
         case .startTimeout(let seconds):
             return String(localized: "等待 llama-server 就緒逾時（\(seconds)s）。首次載入模型會較久，它仍在載入，請稍後再試。")
+        case .portInUse(let port):
+            return String(localized: "埠 \(String(port)) 上有另一個需要金鑰的 llama-server。請在設定按「停止」後再啟動，或改用別的埠。")
         }
     }
 }
@@ -113,7 +117,9 @@ public struct LocalAIConfiguration: Equatable, Sendable {
     public func launchPlan(runtime: LlamaRuntimeLocation, model: LocalModelReference) -> LlamaServerLaunchPlan {
         LlamaServerLaunchPlan.make(
             runtime: runtime.binaryURL, model: model, port: port,
-            profile: runtimeProfile, idleSleepSeconds: idleSleepSeconds, extraArguments: extraArguments
+            profile: runtimeProfile, idleSleepSeconds: idleSleepSeconds, extraArguments: extraArguments,
+            alias: modelSource == .managed ? managedModel.id : effectiveHuggingFaceSpec,
+            lockDownCORS: runtime.origin == .bundled
         )
     }
 }

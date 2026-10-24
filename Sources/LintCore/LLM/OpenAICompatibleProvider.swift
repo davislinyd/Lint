@@ -5,17 +5,21 @@ public struct OpenAICompatibleProvider: LLMProvider {
     public let baseURL: URL
     public let apiKey: String
     public let session: URLSession
+    /// Gives Lint's local requests the model ahead of other apps'; only used for `.localLlama`.
+    public let gate: ModelPriorityGate?
 
     public init(
         id: ProviderKind = .openaiCompatible,
         baseURL: URL,
         apiKey: String,
-        session: URLSession = .shared
+        session: URLSession = .shared,
+        gate: ModelPriorityGate? = nil
     ) {
         self.id = id
         self.baseURL = baseURL
         self.apiKey = apiKey
         self.session = session
+        self.gate = gate
     }
 
     /// A local llama-server may have released the model's memory while idle, and loads it again
@@ -61,7 +65,12 @@ public struct OpenAICompatibleProvider: LLMProvider {
 
     public func stream(_ request: ChatRequest) -> AsyncThrowingStream<StreamEvent, Error> {
         AsyncThrowingStream { continuation in
+            let gate = id == .localLlama ? self.gate : nil
             let task = Task {
+                // Taken before the request is sent, so an external request is already being
+                // interrupted when this one reaches llama-server.
+                let ticket = gate?.beginLint()
+                defer { ticket?.end() }
                 do {
                     let urlRequest = try Self.makeURLRequest(
                         baseURL: baseURL,

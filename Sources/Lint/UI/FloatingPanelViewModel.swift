@@ -231,8 +231,11 @@ final class FloatingPanelViewModel {
     /// Only for Lint's local server. Apple Intelligence is not warmed up: `LanguageModelSession.prewarm`
     /// made no measurable difference on the development Mac (docs/APPLE-INTELLIGENCE.md), so the model
     /// is touched only by a real request.
+    /// Also right after another app used the model (Lint's API port): its prompt replaced Lint's in
+    /// the model's cache, and putting Lint's back now overlaps that with typing instead of the check.
     func warmUpIfIdle() {
-        guard Date().timeIntervalSince(lastModelActivity) > 60 else { return }
+        let othersUsedTheModel = llm.localModel?.gate?.externalRanSinceLastLint == true
+        guard Date().timeIntervalSince(lastModelActivity) > 60 || othersUsedTheModel else { return }
         lastModelActivity = Date()
         Task { [weak self] in
             guard let self else { return }

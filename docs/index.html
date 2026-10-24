@@ -251,15 +251,17 @@
         <h2><span class="en">Your text stays on your Mac</span><span class="zh">文字留在你的 Mac 上</span></h2>
         <p class="en">llama.cpp ships inside Lint, no Homebrew needed, and Lint downloads the model (Gemma 4 E4B, about 5.2 GB) only after you agree. On macOS 26 you can use Apple Intelligence instead, with nothing to download.</p>
         <p class="zh">llama.cpp 已經包在 Lint 裡，不需要 Homebrew；模型（Gemma 4 E4B，約 5.2 GB）要等你同意才下載。在 macOS 26 也可以改用 Apple Intelligence，不必下載任何東西。</p>
+        <p class="en">Turn on <strong>Other Apps</strong> and your own scripts, apps and local web pages can use the same model through an OpenAI-compatible API on this Mac, with a key. Lint's own suggestions always come first: another app's request waits, or is interrupted and sent again. It is off by default. <a href="guide.html#local-api">How it works</a></p>
+        <p class="zh">開啟<strong>「其他 app 使用」</strong>後，你自己的腳本、App 和本機網頁也能用金鑰，透過這台 Mac 上的 OpenAI 相容 API 使用同一個模型。Lint 自己的建議永遠優先：其他 app 的請求會等候，或被中斷後重送。預設關閉。<a href="guide.html#local-api">怎麼運作</a></p>
         <ul class="ticks en">
           <li>Or point Lint at an OpenAI-compatible endpoint such as Ollama or LM Studio.</li>
-          <li>The local server only listens on 127.0.0.1, and API keys are kept in the Keychain.</li>
+          <li>The local model only listens on 127.0.0.1 and only answers Lint, or apps with the key you choose to share. API keys are kept in the Keychain.</li>
           <li>Switch models and start or stop the server right from the menu bar; its icon shows whether the model is loaded.</li>
           <li>The menu also shows the CPU and memory Lint and its model use, counted as Activity Monitor does.</li>
         </ul>
         <ul class="ticks zh">
           <li>也可以改接 Ollama、LM Studio 等 OpenAI 相容端點。</li>
-          <li>本機服務只監聽 127.0.0.1，API Key 存在鑰匙圈。</li>
+          <li>本機模型只監聽 127.0.0.1，只回應 Lint，以及拿到你分享的金鑰的 App。API Key 存在鑰匙圈。</li>
           <li>在選單列就能切換模型、啟動或停止服務；圖示會顯示模型是否已載入。</li>
           <li>選單也會顯示 Lint 與模型用了多少 CPU 和記憶體，算法與活動監視器相同。</li>
         </ul>

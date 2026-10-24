@@ -81,6 +81,9 @@
   :is(.trouble, .info-grid, .feature-grid) p { margin-top: 6px; color: var(--text-dim); font-size: 15px; }
   .info-grid ul { margin: 6px 0 0; padding-left: 20px; color: var(--text-dim); font-size: 15px; }
   .info-grid li { margin-top: 5px; }
+  .info-grid > article { min-width: 0; }
+  .info-grid code { overflow-wrap: anywhere; }
+  .code-block { margin: 10px 0 0; padding: 12px 14px; border-radius: 10px; background: var(--surface-key); border: 1px solid var(--border); font: 13px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--text); white-space: pre; overflow-x: auto; }
 
   .site-footer { margin-top: 72px; }
 
@@ -153,6 +156,7 @@
         <li><a href="#use"><span class="en">Use Lint</span><span class="zh">開始使用</span></a></li>
         <li><a href="#settings"><span class="en">Settings</span><span class="zh">設定</span></a></li>
         <li><a href="#learning"><span class="en">Memory and dreaming</span><span class="zh">記憶與作夢</span></a></li>
+        <li><a href="#local-api"><span class="en">Other apps</span><span class="zh">其他 app 使用</span></a></li>
         <li><a href="#trouble"><span class="en">Troubleshooting</span><span class="zh">疑難排解</span></a></li>
       </ol>
     </nav>
@@ -187,6 +191,11 @@
           <h3><span class="en">Memory and dreaming (optional)</span><span class="zh">記憶與作夢（選用）</span></h3>
           <p class="en">Turn on Memory and Lint writes down the mistakes you correct as short rules, stored only on your Mac, reminds the model of them from the next suggestion on, and forgets the ones that don’t come back while it dreams. Observation Mode also learns from the text you actually send. You can read and delete every memory. <a href="#learning">How memory and dreaming work</a></p>
           <p class="zh">開啟記憶後，Lint 會把你修正過的錯誤記成簡短規則，只存在你的 Mac，下一次建議就開始提醒模型，沒有再出現的會在作夢時忘記。「觀察模式」還會從你實際送出的文字學習。每一條記憶都能查看與刪除。<a href="#learning">記憶與作夢怎麼運作</a></p>
+        </article>
+        <article>
+          <h3><span class="en">Other apps can use the model (optional)</span><span class="zh">讓其他 app 使用模型（選用）</span></h3>
+          <p class="en">Turn on Other Apps and your own scripts, apps and local web pages can call Lint's local model through an OpenAI-compatible API on this Mac, with a key. Lint's own suggestions always come first. <a href="#local-api">How it works</a></p>
+          <p class="zh">開啟「其他 app 使用」後，你自己的腳本、App 和本機網頁就能用金鑰，透過這台 Mac 上的 OpenAI 相容 API 呼叫 Lint 的本機模型。Lint 自己的建議永遠優先。<a href="#local-api">怎麼運作</a></p>
         </article>
         <article>
           <h3><span class="en">Made to fit you</span><span class="zh">依你的習慣調整</span></h3>
@@ -447,8 +456,8 @@
         </figure>
         <div class="note en"><p><strong>Memory:</strong> Gemma 4 12B needs much more memory. On a 16 GB Mac it can make the system very slow.</p></div>
         <div class="note zh"><p><strong>記憶體：</strong>Gemma 4 12B 需要多很多記憶體，在 16 GB 的 Mac 上可能讓系統變得非常慢。</p></div>
-        <p class="en"><strong>Other Apps</strong> (off by default) lets apps and web pages on this Mac use the local model through an OpenAI-compatible API at <code>http://127.0.0.1:8001/v1</code>, with the key shown there. Lint always comes first: while it needs the model, other requests wait, or are interrupted and sent again. Web pages also need their site in <strong>Allowed websites</strong> (pages on this Mac by default).</p>
-        <p class="zh"><strong>「其他 app 使用」</strong>（預設關閉）讓這台 Mac 上的其他 app 和網頁，透過 <code>http://127.0.0.1:8001/v1</code> 的 OpenAI 相容 API 使用本機模型，金鑰就顯示在同一處。Lint 永遠優先：它需要模型時，其他請求會等候，或被中斷後重送。網頁還需要它的網站在<strong>「允許的網站」</strong>裡（預設只有這台 Mac 上的網頁）。</p>
+        <p class="en"><strong>Other Apps</strong> (off by default) lets apps and web pages on this Mac use the local model through an OpenAI-compatible API at <code>http://127.0.0.1:8001/v1</code>, with the key shown there. Lint always comes first: while it needs the model, other requests wait, or are interrupted and sent again. Web pages also need their site in <strong>Allowed websites</strong> (pages on this Mac by default). See <a href="#local-api">Other apps</a>.</p>
+        <p class="zh"><strong>「其他 app 使用」</strong>（預設關閉）讓這台 Mac 上的其他 app 和網頁，透過 <code>http://127.0.0.1:8001/v1</code> 的 OpenAI 相容 API 使用本機模型，金鑰就顯示在同一處。Lint 永遠優先：它需要模型時，其他請求會等候，或被中斷後重送。網頁還需要它的網站在<strong>「允許的網站」</strong>裡（預設只有這台 Mac 上的網頁）。見<a href="#local-api">「其他 app 使用」</a>。</p>
       </article>
 
       <article class="step">
@@ -554,6 +563,87 @@
           <h3><span class="en">Manage your memories</span><span class="zh">管理記憶</span></h3>
           <p class="en"><strong>Manage Memories…</strong> lists every memory. You can edit, pin, disable, enable or delete each one, and see whether it is short-term, long-term or forgotten (forgotten ones are listed when you turn on <strong>Show forgotten memories</strong>), whether it is specific, general or core, and which memories a rule came from. <strong>Clear All Memories…</strong> deletes every memory but keeps the feedback log; <strong>Reset Memory Database…</strong> deletes the memories and the log, and cannot be undone.</p>
           <p class="zh"><strong>「管理記憶…」</strong>會列出每一條記憶。每一條都可以編輯、釘選、停用、啟用或刪除，也能看到它是短期、長期還是已忘記（打開<strong>「顯示已忘記的記憶」</strong>才會列出已忘記的）、是具體、一般還是核心記憶，以及一般規則由哪些記憶歸納而來。<strong>「清除所有記憶…」</strong>會刪除所有記憶但保留回饋紀錄；<strong>「重設記憶資料庫…」</strong>會刪除記憶與回饋紀錄，無法復原。</p>
+        </article>
+      </div>
+    </section>
+
+    <!-- ============================================================ -->
+    <section class="part" id="local-api">
+      <h2><span class="en">Other apps</span><span class="zh">其他 app 使用</span></h2>
+      <p class="part-lead en">Optional, and off by default. With it on, apps, scripts and web pages on this Mac can use Lint's local model through an OpenAI-compatible API, with a key. Lint's own suggestions always come first. It works only while Lint runs and uses its local model, not Apple Intelligence.</p>
+      <p class="part-lead zh">選用功能，預設關閉。開啟後，這台 Mac 上的 App、腳本和網頁可以用金鑰，透過 OpenAI 相容 API 使用 Lint 的本機模型。Lint 自己的建議永遠優先。只在 Lint 執行、而且使用本機模型（不是 Apple Intelligence）時可用。</p>
+
+      <article class="step">
+        <div class="step-head"><span class="step-num">15</span><h3><span class="en">Turn on Other Apps</span><span class="zh">開啟「其他 app 使用」</span></h3></div>
+        <p class="en">Open <strong>Settings… → Model</strong> with <strong>Local llama.cpp</strong> as the source, and under <strong>Other Apps</strong> turn on <strong>Let other apps use the local model</strong>. Copy the <strong>URL</strong> (<code>http://127.0.0.1:8001/v1</code>; the API port can be changed) and the <strong>Key</strong> (<strong>Show</strong>, <strong>Copy</strong>). The section also has a ready-made example to copy.</p>
+        <p class="zh">在模型來源是<strong>「本機 llama.cpp」</strong>的<strong>「設定… → 模型」</strong>，到<strong>「其他 app 使用」</strong>打開<strong>「讓其他 app 使用本機模型」</strong>。拷貝<strong>「網址」</strong>（<code>http://127.0.0.1:8001/v1</code>，API 埠可以改）和<strong>「金鑰」</strong>（<strong>「顯示」</strong>、<strong>「拷貝」</strong>）。同一區也有可以直接拷貝的範例。</p>
+        <p class="check en">The status says <strong>On, accepting only this Mac (127.0.0.1:8001)</strong>.</p>
+        <p class="check zh">狀態顯示<strong>「已開啟，只接受這台 Mac（127.0.0.1:8001）」</strong>。</p>
+        <div class="note en"><p><strong>The key:</strong> treat it like a password. <strong>Regenerate…</strong> replaces it at once, and apps that use the old key stop working until they get the new one. Turning the setting off closes the port at once; nothing restarts.</p></div>
+        <div class="note zh"><p><strong>金鑰：</strong>請當作密碼保管。<strong>「重新產生…」</strong>會立刻換掉它，使用舊金鑰的 App 要換成新的才能再用。關掉這個設定會立刻關閉埠，不必重新啟動任何東西。</p></div>
+      </article>
+
+      <div class="info-grid">
+        <article>
+          <h3><span class="en">Call it from an app or a script</span><span class="zh">從 App 或腳本呼叫</span></h3>
+          <p class="en">Send the key as <code>Authorization: Bearer &lt;key&gt;</code> or <code>X-Api-Key: &lt;key&gt;</code>. The routes are <code>POST /v1/chat/completions</code>, <code>POST /v1/completions</code>, <code>GET /v1/models</code> and <code>GET /health</code>; streaming works. Any OpenAI client library works with the URL as its base URL. In these examples, put your key in <code>LINT_API_KEY</code> first.</p>
+          <p class="zh">金鑰以 <code>Authorization: Bearer &lt;金鑰&gt;</code> 或 <code>X-Api-Key: &lt;金鑰&gt;</code> 送出。可用的路徑是 <code>POST /v1/chat/completions</code>、<code>POST /v1/completions</code>、<code>GET /v1/models</code> 與 <code>GET /health</code>，也支援串流。任何 OpenAI 用戶端程式庫，把上面的網址設成 base URL 就能用。下面的範例請先把金鑰放進 <code>LINT_API_KEY</code>。</p>
+<pre class="code-block">curl http://127.0.0.1:8001/v1/chat/completions \
+  -H "Authorization: Bearer $LINT_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"messages":[{"role":"user","content":"Hello"}]}'</pre>
+<pre class="code-block">import os
+from openai import OpenAI
+
+client = OpenAI(base_url="http://127.0.0.1:8001/v1", api_key=os.environ["LINT_API_KEY"])
+reply = client.chat.completions.create(
+    model="gemma",  # any name: Lint runs one model
+    messages=[{"role": "user", "content": "Hello"}],
+)
+print(reply.choices[0].message.content)</pre>
+        </article>
+        <article>
+          <h3><span class="en">Use it from a web page</span><span class="zh">從網頁使用</span></h3>
+          <ul class="en">
+            <li>A page can use the API only if its site is in <strong>Allowed websites</strong>, and it needs the key too. By default the list holds pages served from this Mac: <code>http://localhost</code>, <code>http://127.0.0.1</code> and <code>https://localhost</code>, at any port.</li>
+            <li>You can add websites that use <code>https</code>, such as <code>https://tool.example.com</code>. <strong>Restore Defaults</strong> takes them out again.</li>
+            <li><strong>Browsers differ</strong> (checked with Lint 0.16.0): Chrome and Brave let an allowed <code>https</code> website in. Safari does not let any <code>https</code> page connect to an <code>http</code> address on this Mac, so in Safari only pages served from this Mac can use it.</li>
+          </ul>
+          <ul class="zh">
+            <li>網頁的網站必須在<strong>「允許的網站」</strong>裡才能使用 API，而且一樣需要金鑰。清單預設只有這台 Mac 上的網頁：<code>http://localhost</code>、<code>http://127.0.0.1</code> 與 <code>https://localhost</code>，任何埠都可以。</li>
+            <li>可以加入使用 <code>https</code> 的網站，例如 <code>https://tool.example.com</code>。<strong>「恢復預設」</strong>會再把它們移除。</li>
+            <li><strong>瀏覽器之間有差異</strong>（以 Lint 0.16.0 實測）：Chrome 與 Brave 會讓加入清單的 <code>https</code> 網站使用；Safari 不讓任何 <code>https</code> 網頁連到這台 Mac 的 <code>http</code> 位址，所以在 Safari 只有這台 Mac 上的網頁能用。</li>
+          </ul>
+        </article>
+        <article>
+          <h3><span class="en">Lint comes first</span><span class="zh">Lint 永遠優先</span></h3>
+          <ul class="en">
+            <li>The model answers one request at a time. When Lint needs it for a suggestion, a translation or to warm up while you type, the other app's request is interrupted at once.</li>
+            <li>If that request had not received anything yet, Lint sends it again when it is done, so the app only waits longer. A streamed answer that was already under way ends with an error (<code>preempted_by_lint</code>).</li>
+            <li>While Lint uses the model, for 3 seconds after, and while you type, other requests wait: at most 8 of them, each for up to 2 minutes. Beyond that they get <code>503</code> with <code>Retry-After</code>.</li>
+            <li>On a test Mac, with another app generating a long answer, a suggestion still came in 0.4–1.3 seconds.</li>
+          </ul>
+          <ul class="zh">
+            <li>模型一次只處理一個請求。Lint 需要它來給建議、翻譯，或在你打字時暖機，其他 app 的請求會立刻被中斷。</li>
+            <li>如果那個請求還沒收到任何回應，Lint 用完後會自動重送，那個 App 只會覺得比較慢。已經開始串流的回答則以錯誤（<code>preempted_by_lint</code>）結束。</li>
+            <li>Lint 使用模型時、之後 3 秒內，以及你打字時，其他請求會等候：最多 8 個、每個最多 2 分鐘，超過就回 <code>503</code> 並附 <code>Retry-After</code>。</li>
+            <li>實測在其他 app 正在產生長回答時，建議仍在 0.4–1.3 秒內出來。</li>
+          </ul>
+        </article>
+        <article>
+          <h3><span class="en">What stays protected</span><span class="zh">哪些仍受保護</span></h3>
+          <ul class="en">
+            <li>The port listens on <code>127.0.0.1</code> only, so other computers cannot reach it, and a request must name <code>127.0.0.1</code> or <code>localhost</code>.</li>
+            <li>Lint's own model server (port 8000) answers only Lint: it takes a key Lint makes each time it starts, and web pages cannot read its answers. Only the routes above are passed on.</li>
+            <li>The diagnostic log records counts, status codes and times for these requests, never their text, the key or the site that sent them.</li>
+            <li>Scripts that called <code>http://127.0.0.1:8000</code> directly before Lint 0.16.0 now get <code>401</code>: use the API port and its key instead.</li>
+          </ul>
+          <ul class="zh">
+            <li>這個埠只監聽 <code>127.0.0.1</code>，其他電腦連不到；請求也必須指名 <code>127.0.0.1</code> 或 <code>localhost</code>。</li>
+            <li>Lint 自己的模型服務（8000 埠）只回應 Lint：它帶著 Lint 每次開啟時產生的金鑰，網頁也讀不到它的回應。只有上面那幾個路徑會被轉送。</li>
+            <li>診斷記錄對這些請求只記次數、狀態碼與時間，不記內容、金鑰，也不記是哪個網站送來的。</li>
+            <li>Lint 0.16.0 之前直接呼叫 <code>http://127.0.0.1:8000</code> 的腳本，現在會收到 <code>401</code>：請改用 API 埠與它的金鑰。</li>
+          </ul>
         </article>
       </div>
     </section>

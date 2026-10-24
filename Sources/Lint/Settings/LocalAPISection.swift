@@ -23,7 +23,7 @@ struct LocalAPISection: View {
     }
 
     private enum KeyCreation: Sendable {
-        case created(id: String)
+        case created
         case invalidName, tooMany, failed
     }
 
@@ -148,7 +148,8 @@ struct LocalAPISection: View {
         Task {
             let outcome = await Task.detached { () -> KeyCreation in
                 do {
-                    return .created(id: try keyring.create(name: name).0.id)
+                    try keyring.create(name: name)
+                    return .created
                 } catch LocalAPIKeyring.KeyringError.invalidName {
                     return .invalidName
                 } catch LocalAPIKeyring.KeyringError.tooManyKeys {
@@ -158,10 +159,9 @@ struct LocalAPISection: View {
                 }
             }.value
             switch outcome {
-            case .created(let id):
+            case .created:
                 keyError = nil
                 newKeyName = ""
-                shownKeys.insert(id)
                 await loadKeys()
             case .invalidName:
                 keyError = String(localized: "名稱最多 \(String(LocalAPIKeyring.maxNameLength)) 個字。")

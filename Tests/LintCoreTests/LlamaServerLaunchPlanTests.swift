@@ -10,13 +10,18 @@ final class LlamaServerLaunchPlanTests: XCTestCase {
         port: Int = 8000,
         profile: ModelRuntimeProfile = ModelRuntimeProfile(),
         idleSleepSeconds: Int = 0,
-        extra: String = ""
+        extra: String = "",
+        alias: String? = nil,
+        lockDownCORS: Bool = true
     ) -> LlamaServerLaunchPlan {
         LlamaServerLaunchPlan.make(
             runtime: runtime, model: model, port: port, profile: profile,
-            idleSleepSeconds: idleSleepSeconds, extraArguments: extra
+            idleSleepSeconds: idleSleepSeconds, extraArguments: extra, alias: alias, lockDownCORS: lockDownCORS
         )
     }
+
+    /// The model, `--host`, `--port`, then the key file and the CORS lockdown: what comes before the tuning.
+    private let lintsOwnCount = 11
 
     private func value(after flag: String, in arguments: [String]) -> String? {
         guard let index = arguments.firstIndex(of: flag), index + 1 < arguments.count else { return nil }
@@ -47,7 +52,7 @@ final class LlamaServerLaunchPlanTests: XCTestCase {
 
     func testTheTuningDefaultsAreWhatLintDecidedForItsOwnWorkload() {
         let arguments = plan().arguments
-        XCTAssertEqual(Array(arguments.dropFirst(6)), sharedTuning, "no reasoning switch unless a model needs one")
+        XCTAssertEqual(Array(arguments.dropFirst(lintsOwnCount)), sharedTuning, "no reasoning switch unless a model needs one")
         XCTAssertFalse(arguments.contains("--mlock"), "Lint wants the OS free to page the model out")
         XCTAssertFalse(arguments.contains("--no-mmap"))
     }
@@ -55,7 +60,7 @@ final class LlamaServerLaunchPlanTests: XCTestCase {
     func testEachModelsOwnProfileIsWhatGetsApplied() {
         let gemma = plan(profile: ModelCatalog.gemma4_12bQATQ4_0.runtimeProfile, idleSleepSeconds: 300).arguments
         XCTAssertEqual(
-            Array(gemma.dropFirst(6)), sharedTuning + ["--reasoning", "off", "--sleep-idle-seconds", "300"], "Gemma 4 12B"
+            Array(gemma.dropFirst(lintsOwnCount)), sharedTuning + ["--reasoning", "off", "--sleep-idle-seconds", "300"], "Gemma 4 12B"
         )
 
         let unknown = plan(profile: .unknownModel).arguments
@@ -75,7 +80,7 @@ final class LlamaServerLaunchPlanTests: XCTestCase {
     func testEverySizedOptionAppearsExactlyOnce() {
         for extra in ["", "-c 4096", "--ctx-size=4096 -ctk f16", "--verbose", "-ngl 40 -t 2 --reasoning auto"] {
             let arguments = plan(profile: ModelCatalog.gemma4_12bQATQ4_0.runtimeProfile, idleSleepSeconds: 300, extra: extra).arguments
-            for flag in ["-c", "-ctk", "-ctv", "-b", "-ub", "-ngl", "-fa", "-np", "-t", "--reasoning", "--sleep-idle-seconds", "--lazy-mode", "--cache-ram", "--jinja", "--host", "--port"] {
+            for flag in ["-c", "-ctk", "-ctv", "-b", "-ub", "-ngl", "-fa", "-np", "-t", "--reasoning", "--sleep-idle-seconds", "--lazy-mode", "--cache-ram", "--jinja", "--host", "--port", "--api-key-file", "--cors-origins", "--no-cors-credentials"] {
                 XCTAssertLessThanOrEqual(
                     arguments.filter { $0 == flag }.count, 1,
                     "\(flag) appears more than once for extra: '\(extra)'"
@@ -150,6 +155,48 @@ final class LlamaServerLaunchPlanTests: XCTestCase {
             XCTAssertFalse(plan.arguments.contains { $0.hasPrefix("--host=") || $0 == "0.0.0.0" || $0 == "::" }, "extra: \(extra)")
         }
         XCTAssertEqual(LlamaServerLaunchPlan.host, "127.0.0.1")
+    }
+
+    // MARK: - Access
+
+    func testTheServerWantsLintsKeyFromStandardInputAndAnswersNoBrowser() {
+        let arguments = plan().arguments
+        XCTAssertEqual(value(after: "--api-key-file", in: arguments), "/dev/stdin")
+        XCTAssertFalse(arguments.contains("--api-key"), "a key on the command line is visible to every user and lands in the log")
+        XCTAssertEqual(value(after: "--cors-origins", in: arguments), "http://lint.invalid")
+        XCTAssertTrue(arguments.contains("--no-cors-credentials"))
+    }
+
+    func testACustomRuntimeGetsTheKeyButNoFlagsItMayNotKnow() {
+        let arguments = plan(lockDownCORS: false).arguments
+        XCTAssertEqual(value(after: "--api-key-file", in: arguments), "/dev/stdin")
+        XCTAssertFalse(arguments.contains { $0.hasPrefix("--cors") || $0 == "--no-cors-credentials" })
+    }
+
+    func testUsersCannotTurnOffTheKeyOrOpenTheServerToBrowsers() {
+        let extras = [
+            "--api-key secret", "--api-key=secret", "--api-key-file /tmp/k", "--api-key-file=/tmp/k",
+            "--cors-origins *", "--cors-origins=*", "--cors-headers *", "--cors-methods=GET",
+            "--cors-credentials", "--no-cors-credentials",
+        ]
+        for extra in extras {
+            let arguments = plan(extra: extra + " --verbose").arguments
+            XCTAssertEqual(arguments.filter { $0.hasPrefix("--api-key") }, ["--api-key-file"], "extra: \(extra)")
+            XCTAssertEqual(value(after: "--api-key-file", in: arguments), "/dev/stdin", "extra: \(extra)")
+            XCTAssertEqual(arguments.filter { $0.hasPrefix("--cors") }, ["--cors-origins"], "extra: \(extra)")
+            XCTAssertEqual(value(after: "--cors-origins", in: arguments), "http://lint.invalid", "extra: \(extra)")
+            XCTAssertEqual(arguments.filter { $0 == "--no-cors-credentials" }.count, 1, "extra: \(extra)")
+            XCTAssertFalse(arguments.contains { ["secret", "/tmp/k", "*", "GET"].contains($0) }, "extra: \(extra)")
+            XCTAssertEqual(arguments.last, "--verbose", "a flag without a value must not swallow the next one; extra: \(extra)")
+        }
+    }
+
+    func testTheModelIsListedUnderItsNameNotItsPath() {
+        XCTAssertEqual(value(after: "--alias", in: plan(alias: "gemma-4-e4b-it-qat-q4_0").arguments), "gemma-4-e4b-it-qat-q4_0")
+        XCTAssertFalse(plan().arguments.contains("--alias"))
+        let own = plan(extra: "--alias mine", alias: "gemma").arguments
+        XCTAssertEqual(own.filter { $0 == "--alias" }.count, 1)
+        XCTAssertEqual(value(after: "--alias", in: own), "mine", "the advanced field still wins")
     }
 
     func testOrdinaryExtraArgumentsAreKeptInOrderAtTheEnd() {

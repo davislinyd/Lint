@@ -98,7 +98,7 @@ Lint's icon (a pen nib with a check mark) appears in the menu bar. Packaging fet
 - API keys are stored in Keychain (service `app.lint.assistant`)
 - Default endpoint: `http://127.0.0.1:8000/v1`
 - Ollama: `http://127.0.0.1:11434/v1`; LM Studio: `http://127.0.0.1:1234/v1`
-- Local llama.cpp: pick it as the source in Settings → Model. The same page shows the bundled runtime, the model (download / remove / show in Finder) and the server (start / stop / restart, port); Advanced holds the runtime source (automatic or a custom `llama-server`), the model source and extra arguments. The server only listens on `127.0.0.1`.
+- Local llama.cpp: pick it as the source in Settings → Model. The same page shows the bundled runtime, the model (download / remove / show in Finder) and the server (start / stop / restart, port); Advanced holds the runtime source (automatic or a custom `llama-server`), the model source and extra arguments. The server only listens on `127.0.0.1` and only answers Lint: it is started with a key that Lint makes each time it starts and never shows. Other apps use the model through Lint's API port instead (see below).
 - Menu bar: the first row of Lint's menu shows the local model's state (not loaded, loading, running, idle, restarting or failed; the dot on the icon shows it too). It opens a list to switch models: one that Lint manages, or Apple Intelligence when this Mac has it. A model that is not downloaded yet shows its size and asks first; it then downloads with its progress in that row, and starts when it is in. The same list starts, stops, restarts or rechecks the local server. Further down, the menu shows the CPU and memory Lint and its local model use, counted as Activity Monitor does and updated every second while the menu is open; the model's weights are a mapped file outside that memory, so the size of its model file is listed while it is loaded.
 - Interface language (Settings → General): Follow System, English, Traditional Chinese, Simplified Chinese, Japanese, Korean, Vietnamese, Indonesian, Thai or Portuguese (Brazil). It applies after Lint restarts.
 - Translation language (Settings → General): the language the **Translate** mode and the reference translation under a suggestion use, Traditional Chinese by default, from the same list (English excepted). Lint only translates from English into it; the change applies at once.
@@ -124,6 +124,23 @@ A check only asks the GitHub API for the latest release; none of your text is se
 - **Models:** Gemma 4 E4B (default, about 5.2 GB), Qwen3 4B (optional, 2.5 GB) and Gemma 4 12B (optional, 7 GB) can be picked in Settings → Model. Gemma 4 12B is marked as a memory risk: on a 16 GB Mac it can make the system very slow or unresponsive. Switching never deletes a model; one you already have is never downloaded again. An upgrade keeps the model you have installed; an install that only had 12B stored as the old default and never downloaded it moves to E4B.
 - **Tuning and idle release:** Lint passes each managed model its own llama-server arguments (context 8192, q8_0 KV cache, `--reasoning off` for Gemma 4). Every model also gets `--lazy-mode on`: Gemma 4 E4B's per-layer embeddings (2.15 GiB of its 4.8) are read a row per token instead of loaded, so about 2 GB less stays in memory, which also makes a load faster on a Mac short of memory; models without such tensors are unaffected. llama-server's prompt cache in memory is capped at 128 MiB: its default could grow to 8 GiB, was kept while the model slept, and grew by about 80 MB with every proofread of a longer text, none of it used again. The advanced *extra arguments* field starts empty and only overrides the options it names. After 5 minutes without a suggestion (Settings → Model → Memory) llama-server releases the model's memory and reloads it on the next request, which takes a few seconds. A stored copy of an old built-in default argument string is cleared on upgrade; anything you typed is kept.
 - **Upgrading:** a model that is already in the Hugging Face cache (from `llama-server -hf`) keeps being used, so nothing is downloaded twice. The old Homebrew `llama-server` paths in Settings switch to the built-in runtime; a path you chose yourself stays as a custom runtime.
+
+### Use the local model from other apps (optional, off by default)
+
+Settings → Model → **Other Apps** lets apps and web pages on this Mac call Lint's local model through an OpenAI-compatible API, while Lint keeps priority.
+
+- **Address and key:** `http://127.0.0.1:8001/v1` (the API port can be changed), with the key shown there, sent as `Authorization: Bearer <key>` or `X-Api-Key: <key>`. **Regenerate…** replaces the key at once. Only connections from this Mac are accepted; `Host` must be `127.0.0.1` or `localhost`.
+- **Routes:** `POST /v1/chat/completions`, `POST /v1/completions`, `GET /v1/models` and `GET /health`. Nothing else of llama-server's (such as `/props` or `/slots`) is reachable.
+- **Lint comes first:** the model answers one request at a time. When Lint needs it (a suggestion, a translation, warming up while you type), the request from another app is interrupted at once; if it had not sent anything back yet, Lint sends it again when it is done, so the app only waits longer. A streamed answer that was already under way ends with an error (`preempted_by_lint`). While Lint is using the model, and for 3 seconds after, or while you type, other requests wait (at most 8 waiting, up to 2 minutes each); beyond that they get `503` with `Retry-After`.
+- **Web pages:** a page can use the API only if its site is in **Allowed websites**: by default pages on this Mac (`http://localhost`, `http://127.0.0.1`, `https://localhost`, any port). Websites you add must use `https`. A page needs the key too.
+- **Only while Lint runs and uses its local model:** with Apple Intelligence or another source, the API answers `503`. Turning it on or off, a new key or a new website applies at once; the model is not restarted.
+- **Upgrading from an earlier Lint:** scripts that called `http://127.0.0.1:8000` directly no longer work, since Lint's own llama-server now takes only Lint's key. Use the API port and its key.
+
+```bash
+curl http://127.0.0.1:8001/v1/chat/completions \
+  -H "Authorization: Bearer $LINT_API_KEY" -H "Content-Type: application/json" \
+  -d '{"messages":[{"role":"user","content":"Hello"}]}'
+```
 
 ### Writing modes
 
@@ -249,7 +266,7 @@ chmod +x Scripts/*.sh
 - API Key 存在 Keychain（service `app.lint.assistant`）
 - 預設 Endpoint：`http://127.0.0.1:8000/v1`
 - Ollama：`http://127.0.0.1:11434/v1`；LM Studio：`http://127.0.0.1:1234/v1`
-- 本機 llama.cpp：在「設定 → 模型」選擇該來源。同一頁會顯示內建的執行環境、模型（下載／移除／在 Finder 顯示）與服務（啟動／停止／重啟、埠）；「進階」有執行環境來源（自動或自訂 `llama-server`）、模型來源與額外參數。服務只監聽 `127.0.0.1`。
+- 本機 llama.cpp：在「設定 → 模型」選擇該來源。同一頁會顯示內建的執行環境、模型（下載／移除／在 Finder 顯示）與服務（啟動／停止／重啟、埠）；「進階」有執行環境來源（自動或自訂 `llama-server`）、模型來源與額外參數。服務只監聽 `127.0.0.1`，而且只回應 Lint：啟動時帶著 Lint 每次開啟時產生、從不顯示的金鑰。其他 app 改用 Lint 的 API 埠（見下文）。
 - 選單列：Lint 選單的第一行顯示本機模型的狀態（未載入、載入中、運作中、閒置中、重啟中或失敗，圖示上的小圓點也會顯示）。展開它可以切換模型：由 Lint 管理的本機模型，或這台 Mac 可以用的 Apple Intelligence。還沒下載的模型會先列出大小並詢問，同意後才下載，進度就顯示在這一行，下載完成後自動啟動。同一個清單也能啟動、停止、重新啟動或重新檢查本機服務。選單下方會顯示 Lint 與本機模型使用的 CPU 和記憶體，算法與活動監視器相同，選單開著時每秒更新；模型權重是對映的檔案，不在這個記憶體數字裡，所以模型載入時會另外列出模型檔的大小。
 - 介面語言（「設定 → 一般」）：跟隨系統、English、繁體中文、简体中文、日本語、한국어、Tiếng Việt、Bahasa Indonesia、ไทย 或 Português (Brasil)。重新啟動 Lint 後套用。
 - 翻譯語言（「設定 → 一般」）：「翻譯」模式與建議下方的參考譯文使用的語言，預設繁體中文，可選的語言同上（英文除外）。Lint 只把英文翻成這個語言，變更立即生效。
@@ -275,6 +292,23 @@ Lint 會到 GitHub Releases 檢查有沒有較新的正式版：預設每週一�
 - **模型：**可在「設定 → 模型」選擇 Gemma 4 E4B（預設，約 5.2 GB）、Qwen3 4B（選用，2.5 GB）或 Gemma 4 12B（選用，7 GB）。Gemma 4 12B 標示為有記憶體風險：在 16 GB 的 Mac 上可能讓系統變得非常慢或沒有回應。切換模型不會刪除任何模型，已經有的模型也不會重新下載。升級會保留你已安裝的模型；只把 12B 存成舊預設、卻從未下載過的安裝會改用 E4B。
 - **調校與閒置釋放：**Lint 給每個由它管理的模型各自的 llama-server 參數（context 8192、q8_0 KV cache，Gemma 4 另加 `--reasoning off`）。每個模型也都加上 `--lazy-mode on`：Gemma 4 E4B 的逐層嵌入（4.8 GiB 中的 2.15 GiB）改成每個 token 才讀需要的那一列、不整塊載入，常駐記憶體少約 2 GB，記憶體吃緊時載入也比較快；沒有這類張量的模型不受影響。llama-server 放在記憶體裡的 prompt cache 上限設為 128 MiB：預設最多可以長到 8 GiB，模型閒置釋放時也不會清掉，而且每校對一段較長的文字就多佔約 80 MB，之後都用不到。進階的「額外參數」欄位預設是空的，只會覆蓋它寫到的選項。5 分鐘沒有要求建議時（「設定 → 模型 → 記憶體」），llama-server 會釋放模型佔用的記憶體，下一次要求時再重新載入，約需幾秒。升級時會清掉舊版內建預設參數字串的存檔；你自己輸入的內容會保留。
 - **升級：**已在 Hugging Face 快取（`llama-server -hf` 下載的）裡的模型會繼續使用，不會重複下載。設定裡舊的 Homebrew `llama-server` 路徑會改為使用內建執行環境；你自己選的路徑則保留為自訂執行環境。
+
+### 讓其他 app 使用本機模型（選用，預設關閉）
+
+「設定 → 模型 → **其他 app 使用**」可以讓這台 Mac 上的其他 app 和網頁透過 OpenAI 相容 API 呼叫 Lint 的本機模型，而 Lint 自己永遠優先。
+
+- **網址與金鑰：**`http://127.0.0.1:8001/v1`（API 埠可以改），金鑰顯示在同一處，以 `Authorization: Bearer <金鑰>` 或 `X-Api-Key: <金鑰>` 送出。**「重新產生…」**會立刻換掉金鑰。只接受這台 Mac 的連線；`Host` 必須是 `127.0.0.1` 或 `localhost`。
+- **路徑：**`POST /v1/chat/completions`、`POST /v1/completions`、`GET /v1/models` 與 `GET /health`。llama-server 的其他路徑（例如 `/props`、`/slots`）都碰不到。
+- **Lint 優先：**模型一次只處理一個請求。Lint 需要時（建議、翻譯、打字時的暖機），其他 app 的請求會立刻被中斷；如果它還沒收到任何回應，Lint 用完後會自動重送，那個 app 只會覺得比較慢。已經開始串流的回答則以錯誤（`preempted_by_lint`）結束。Lint 使用模型時與之後 3 秒內、或你正在打字時，其他請求會等候（最多 8 個、每個最多 2 分鐘），超過時回 `503` 並附 `Retry-After`。
+- **網頁：**網站必須在**「允許的網站」**裡才能使用：預設是這台 Mac 上的網頁（`http://localhost`、`http://127.0.0.1`、`https://localhost`，任何埠）。自己加入的網站必須是 `https`。網頁一樣需要金鑰。
+- **只在 Lint 執行且使用本機模型時可用：**使用 Apple Intelligence 或其他來源時回 `503`。開關、新金鑰、新網站都立即生效，不會重新啟動模型。
+- **從舊版 Lint 升級：**直接呼叫 `http://127.0.0.1:8000` 的腳本不再能用，因為 Lint 自己的 llama-server 現在只接受 Lint 的金鑰。請改用 API 埠與它的金鑰。
+
+```bash
+curl http://127.0.0.1:8001/v1/chat/completions \
+  -H "Authorization: Bearer $LINT_API_KEY" -H "Content-Type: application/json" \
+  -d '{"messages":[{"role":"user","content":"Hello"}]}'
+```
 
 ### 寫作模式
 

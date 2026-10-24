@@ -426,7 +426,7 @@
 "30 分鐘" = "30 phút";
 "閒置一段時間沒有使用本機 AI 時，Lint 會請 llama-server 釋放模型佔用的記憶體；服務本身仍在執行。下一次的建議會多花幾秒重新載入模型。" = "Sau một thời gian không có gợi ý nào, Lint yêu cầu llama-server giải phóng bộ nhớ mà mô hình đang chiếm; bản thân máy chủ vẫn chạy. Gợi ý tiếp theo sẽ mất thêm vài giây để tải lại mô hình.";
 "按「重新啟動」後新的閒置設定才會生效。" = "Bấm Khởi động lại để áp dụng cài đặt rảnh mới.";
-"留空即可：Lint 會依所選模型套用自己的參數（目前為 %@）。這裡填的參數會覆蓋同一個選項，例如長文可填 -c 16384。服務一律只綁定 127.0.0.1，額外參數裡的 --host 會被忽略。" = "Hãy để trống: Lint tự truyền tham số phù hợp với mô hình đã chọn (hiện tại là %@). Tham số điền ở đây sẽ thay cho tùy chọn tương ứng của Lint — với văn bản dài, hãy thử -c 16384. Máy chủ luôn chỉ gắn với 127.0.0.1; --host điền ở đây sẽ bị bỏ qua.";
+"留空即可：Lint 會依所選模型套用自己的參數（目前為 %@）。這裡填的參數會覆蓋同一個選項，例如長文可填 -c 16384。服務一律只綁定 127.0.0.1、只接受 Lint 的金鑰，額外參數裡的 --host、--api-key 與 --cors 開頭的選項會被忽略。" = "Hãy để trống: Lint tự truyền tham số phù hợp với mô hình đã chọn (hiện tại là %@). Tham số điền ở đây sẽ thay cho tùy chọn tương ứng của Lint — với văn bản dài, hãy thử -c 16384. Máy chủ luôn chỉ gắn với 127.0.0.1 và chỉ chấp nhận khóa của Lint; --host, --api-key và các tùy chọn bắt đầu bằng --cors điền ở đây sẽ bị bỏ qua.";
 "這段文字對本機 AI 來說太長了。請分段處理，或在「設定 → 模型 → 進階」的額外參數加上較大的 -c（例如 -c 16384）後重新啟動。" = "Văn bản này quá dài đối với AI cục bộ. Hãy xử lý từng phần, hoặc thêm -c lớn hơn (ví dụ -c 16384) vào tham số bổ sung trong Cài đặt → Mô hình → Nâng cao rồi khởi động lại.";
 "本機 AI 在回覆完成前中斷了，請再試一次。" = "AI cục bộ đã dừng trước khi trả lời xong. Hãy thử lại.";
 "建議" = "Khuyên dùng";
@@ -503,3 +503,35 @@
 "清除記錄…" = "Xóa nhật ký…";
 "清除所有記錄？" = "Xóa toàn bộ nhật ký?";
 "記錄 Lint 做了什麼、結果如何（擷取、取代、模型請求、本機伺服器、錯誤），不含你的文字。只存在這台 Mac，Lint 不會自動送出。每個檔案滿 1 MB 就換新檔，只保留最近兩個。「拷貝」會附上版本與系統資訊，以及最近 1000 行。" = "Ghi lại những gì Lint đã làm và kết quả (lấy văn bản, thay thế, yêu cầu gửi mô hình, máy chủ cục bộ, lỗi), không bao giờ ghi văn bản của bạn. Nhật ký chỉ nằm trên máy Mac này; Lint không bao giờ tự gửi đi. Khi một tệp đạt 1 MB, một tệp mới sẽ thay thế và chỉ giữ lại hai tệp gần nhất. Sao chép sẽ kèm phiên bản và thông tin hệ thống với 1000 dòng gần nhất.";
+
+/* Other apps using the local model (Lint's API port). */
+"埠 %@ 上有另一個需要金鑰的 llama-server。請在設定按「停止」後再啟動，或改用別的埠。" = "Một llama-server khác cần khóa đang chạy trên cổng %@. Hãy nhấn Dừng trong Cài đặt rồi khởi động lại, hoặc dùng cổng khác.";
+"API 埠不能和本機模型的埠（%@）相同。" = "Cổng API không được trùng với cổng của mô hình cục bộ (%@).";
+"埠 %@ 已被其他程式使用，請改用別的埠。" = "Cổng %@ đang được ứng dụng khác sử dụng. Hãy chọn cổng khác.";
+"讓其他 app 使用本機模型" = "Cho phép ứng dụng khác dùng mô hình cục bộ";
+"這台 Mac 上的其他 app 和網頁可以用 OpenAI 相容 API 呼叫本機模型，需要下面的金鑰，只接受這台 Mac 的連線。Lint 自己要用模型時永遠優先：其他請求會等候，或被中斷後自動重送。" = "Ứng dụng và trang web khác trên máy Mac này có thể gọi mô hình cục bộ qua API tương thích OpenAI. Chúng cần khóa bên dưới, và chỉ kết nối từ máy Mac này được chấp nhận. Lint luôn được ưu tiên: khi Lint cần mô hình, các yêu cầu khác sẽ chờ, hoặc bị ngắt rồi tự động gửi lại.";
+"狀態" = "Trạng thái";
+"網址" = "Địa chỉ";
+"API 埠" = "Cổng API";
+"金鑰" = "Khóa";
+"隱藏" = "Ẩn";
+"顯示" = "Hiện";
+"重新產生…" = "Tạo lại…";
+"範例" = "Ví dụ";
+"拷貝範例" = "Sao chép ví dụ";
+"只在 Lint 執行、且使用本機模型時可用。模型一次只處理一個請求；Lint 正在用、或你正在打字時，其他請求會等候。範例裡的 $LINT_API_KEY 請換成上面的金鑰。" = "Chỉ dùng được khi Lint đang chạy và dùng mô hình cục bộ. Mô hình chỉ xử lý một yêu cầu mỗi lúc; khi Lint đang dùng hoặc bạn đang gõ, các yêu cầu khác sẽ chờ. Hãy thay $LINT_API_KEY trong ví dụ bằng khóa ở trên.";
+"其他 app 使用" = "Ứng dụng khác";
+"重新產生金鑰？" = "Tạo lại khóa?";
+"重新產生" = "Tạo lại";
+"舊的金鑰會立刻失效，使用它的 app 要改用新的金鑰。" = "Khóa cũ sẽ hết hiệu lực ngay; ứng dụng dùng nó cần khóa mới.";
+"允許的網站" = "Trang web được phép";
+"加入" = "Thêm";
+"網頁要用本機模型，網址必須在這份清單裡。預設只有這台 Mac 上的網頁（localhost）；加入的網站必須是 https。" = "Trang web chỉ dùng được mô hình cục bộ nếu trang đó có trong danh sách này. Mặc định chỉ có các trang trên máy Mac này (localhost); trang web bạn thêm phải dùng https.";
+"恢復預設" = "Khôi phục mặc định";
+"請輸入 https:// 開頭的網站，例如 https://example.com，不含路徑。" = "Hãy nhập một trang web bắt đầu bằng https://, ví dụ https://example.com, không kèm đường dẫn.";
+"Lint 目前沒有使用本機模型，其他 app 暫時無法使用。" = "Lint hiện không dùng mô hình cục bộ nên ứng dụng khác tạm thời không dùng được.";
+"已開啟，只接受這台 Mac（127.0.0.1:%@）" = "Đang bật, chỉ chấp nhận máy Mac này (127.0.0.1:%@)";
+"未開啟" = "Đang tắt";
+"這個 llama-server 不是 Lint 啟動的，也不需要金鑰：這台 Mac 上的任何程式和網頁都能直接使用它，Lint 也無法優先。按「停止」再「啟動」，改用 Lint 自己的服務。" = "llama-server này không do Lint khởi động và không cần khóa: mọi ứng dụng và trang web trên máy Mac này đều có thể dùng trực tiếp, và Lint không thể được ưu tiên. Hãy nhấn Dừng rồi Khởi động để dùng máy chủ của chính Lint.";
+"其他 app：開啟（%lld 個等候中）" = "Ứng dụng khác: bật (%lld đang chờ)";
+"其他 app：開啟" = "Ứng dụng khác: bật";

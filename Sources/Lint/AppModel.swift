@@ -10,7 +10,13 @@ final class AppModel: NSObject, NSWindowDelegate {
     let settings: SettingsStore
     let updates: UpdateCoordinator
     let capture = TextCaptureService()
-    let llm = LLMService()
+    /// Puts Lint's requests to its local model ahead of other apps' (Settings → Model → Other Apps).
+    let modelGate = ModelPriorityGate()
+    let llm: LLMService
+    /// The key other apps give Lint's API port.
+    let localAPIKeys: LocalAPIKeyStore
+    /// Lint's API port for other apps; off unless switched on in Settings.
+    let localAPI: LocalAPIService
     let memory = MemoryCoordinator()
     let localAI: LocalAISetupCoordinator
     let appleIntelligence = SystemAppleIntelligence()
@@ -31,6 +37,15 @@ final class AppModel: NSObject, NSWindowDelegate {
         let keychain = KeychainStore()
         let settings = SettingsStore(keychain: keychain)
         self.settings = settings
+        llm = LLMService(localModel: LocalModelAccess(key: LocalLlamaServerManager.shared.serverKey, gate: modelGate))
+        let keys = LocalAPIKeyStore(keychain: keychain)
+        localAPIKeys = keys
+        let starter = LocalModelStarter()
+        localAPI = LocalAPIService(proxy: LocalAPIProxy(
+            gate: modelGate, serverKey: LocalLlamaServerManager.shared.serverKey,
+            userKey: { try? keys.current() },
+            ensureBackend: { try await starter.ensure() }
+        ))
         updates = UpdateCoordinator(settings: settings)
         let localAI = LocalAISetupCoordinator(
             configuration: { settings.localAIConfiguration },
@@ -44,6 +59,8 @@ final class AppModel: NSObject, NSWindowDelegate {
         )
         self.panel = FloatingPanelController(viewModel: viewModel)
         super.init()
+        starter.model = self
+        settings.onLocalAPIChanged = { [weak self] in self?.reconcileLocalAPI() }
         viewModel.onOpenLocalAISetup = { [weak self] in self?.presentLocalAISetup() }
         viewModel.onOpenModelSettings = { [weak self] in self?.openSettings() }
         viewModel.learnedTone = { [weak self] bundle in bundle.flatMap { self?.appAdjustments[$0] }?.tone }
@@ -60,6 +77,8 @@ final class AppModel: NSObject, NSWindowDelegate {
                 self?.panel.dismissChip()
             },
             onTyping: { [weak self] in
+                // A suggestion is coming: no other app's request starts now, only to be interrupted.
+                self?.modelGate.noteLintActivity()
                 self?.panel.viewModel.warmUpIfIdle()
             },
             isQuietApp: { [weak self] bundle in
@@ -211,6 +230,32 @@ final class AppModel: NSObject, NSWindowDelegate {
         localAI.stopManagedServer()
     }
 
+    /// Listens on the API port while it is switched on and Lint's requests go to its local model.
+    func reconcileLocalAPI() {
+        // The key is not touched here: Settings and the first request read it, off the main thread.
+        let enabled = settings.localAPIEnabled && writingRoute == .provider(.localLlama)
+        let configuration = LocalAPIService.Configuration(
+            enabled: enabled, port: settings.localAPIPort, upstreamPort: settings.localServerPort,
+            allowedOrigins: settings.localAPIAllowedOrigins
+        )
+        Task { await localAPI.apply(configuration) }
+    }
+
+    /// What an API request needs before it goes to the model: the same as Lint's own requests (the
+    /// local engine, a running server, started if auto-start allows), waiting out a restart.
+    func ensureLocalModelForAPI() async throws {
+        guard writingRoute == .provider(.localLlama) else { throw LocalAPIBackendUnavailable.notLocalEngine }
+        for _ in 0..<50 where localAI.isRestarting {
+            try await Task.sleep(for: .milliseconds(200))
+        }
+        if localAI.isRestarting { throw LocalAPIBackendUnavailable.restarting }
+        do {
+            try await localAI.ensureServerRunning()
+        } catch {
+            throw LocalAPIBackendUnavailable.notRunning
+        }
+    }
+
     /// First launch: the Local AI setup screen if the local model still has to be installed (unless
     /// the user said "Later"), otherwise the old behaviour of opening Settings when Accessibility is off.
     func presentInitialOnboarding() async {
@@ -290,6 +335,8 @@ final class AppModel: NSObject, NSWindowDelegate {
                 self.accessibilityTrusted = AccessibilityPermission.isTrusted
                 self.localAI.setAccessibilityTrusted(self.accessibilityTrusted)
                 self.updates.installIfWaiting(panelVisible: self.panel.isVisible)
+                // The engine can change without a setting changing (Automatic, a model download).
+                self.reconcileLocalAPI()
                 seconds += 1
                 if seconds % 60 == 0 { await self.refreshAppAdjustments() }
                 try? await Task.sleep(for: .seconds(1))
@@ -333,5 +380,16 @@ final class AppModel: NSObject, NSWindowDelegate {
 
     func windowWillClose(_ notification: Notification) {
         restoreAccessoryIfNeeded()
+    }
+}
+
+/// Lets the API port, made before `AppModel` exists, start the model through it later.
+@MainActor
+private final class LocalModelStarter {
+    weak var model: AppModel?
+
+    func ensure() async throws {
+        guard let model else { throw LocalAPIBackendUnavailable.notRunning }
+        try await model.ensureLocalModelForAPI()
     }
 }

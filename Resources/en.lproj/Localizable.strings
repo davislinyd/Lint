@@ -426,7 +426,7 @@
 "30 分鐘" = "30 minutes";
 "閒置一段時間沒有使用本機 AI 時，Lint 會請 llama-server 釋放模型佔用的記憶體；服務本身仍在執行。下一次的建議會多花幾秒重新載入模型。" = "After a spell without a suggestion, Lint has llama-server release the memory the model is holding; the server itself keeps running. The next suggestion takes a few seconds longer while the model loads again.";
 "按「重新啟動」後新的閒置設定才會生效。" = "Click Restart to apply the new idle setting.";
-"留空即可：Lint 會依所選模型套用自己的參數（目前為 %@）。這裡填的參數會覆蓋同一個選項，例如長文可填 -c 16384。服務一律只綁定 127.0.0.1，額外參數裡的 --host 會被忽略。" = "Leave this empty: Lint passes its own arguments for the selected model (right now %@). Anything set here replaces Lint's copy of the same option — for long text, try -c 16384. The server always binds to 127.0.0.1 only; a --host in here is ignored.";
+"留空即可：Lint 會依所選模型套用自己的參數（目前為 %@）。這裡填的參數會覆蓋同一個選項，例如長文可填 -c 16384。服務一律只綁定 127.0.0.1、只接受 Lint 的金鑰，額外參數裡的 --host、--api-key 與 --cors 開頭的選項會被忽略。" = "Leave this empty: Lint passes its own arguments for the selected model (right now %@). Anything set here replaces Lint's copy of the same option — for long text, try -c 16384. The server always binds to 127.0.0.1 only and accepts only Lint's key; --host, --api-key and options starting with --cors are ignored here.";
 "這段文字對本機 AI 來說太長了。請分段處理，或在「設定 → 模型 → 進階」的額外參數加上較大的 -c（例如 -c 16384）後重新啟動。" = "This text is too long for local AI. Work through it in parts, or add a larger -c (for example -c 16384) to the extra arguments in Settings → Model → Advanced and restart.";
 "本機 AI 在回覆完成前中斷了，請再試一次。" = "Local AI stopped before it finished its reply. Try again.";
 "建議" = "Recommended";
@@ -503,3 +503,35 @@
 "清除記錄…" = "Clear Log…";
 "清除所有記錄？" = "Clear the whole log?";
 "記錄 Lint 做了什麼、結果如何（擷取、取代、模型請求、本機伺服器、錯誤），不含你的文字。只存在這台 Mac，Lint 不會自動送出。每個檔案滿 1 MB 就換新檔，只保留最近兩個。「拷貝」會附上版本與系統資訊，以及最近 1000 行。" = "Records what Lint did and how it went (capture, replace, model requests, the local server, errors), never your text. It stays on this Mac; Lint never sends it. A file that reaches 1 MB is replaced by a new one, and only the last two are kept. Copy adds the version and system details to the last 1000 lines.";
+
+/* Other apps using the local model (Lint's API port). */
+"埠 %@ 上有另一個需要金鑰的 llama-server。請在設定按「停止」後再啟動，或改用別的埠。" = "Another llama-server that needs a key is running on port %@. Press Stop in Settings and start it again, or use another port.";
+"API 埠不能和本機模型的埠（%@）相同。" = "The API port cannot be the local model's port (%@).";
+"埠 %@ 已被其他程式使用，請改用別的埠。" = "Port %@ is used by another app. Choose another port.";
+"讓其他 app 使用本機模型" = "Let other apps use the local model";
+"這台 Mac 上的其他 app 和網頁可以用 OpenAI 相容 API 呼叫本機模型，需要下面的金鑰，只接受這台 Mac 的連線。Lint 自己要用模型時永遠優先：其他請求會等候，或被中斷後自動重送。" = "Other apps and web pages on this Mac can call the local model through an OpenAI-compatible API. They need the key below, and only connections from this Mac are accepted. Lint always comes first: when it needs the model, other requests wait, or are interrupted and sent again automatically.";
+"狀態" = "Status";
+"網址" = "URL";
+"API 埠" = "API port";
+"金鑰" = "Key";
+"隱藏" = "Hide";
+"顯示" = "Show";
+"重新產生…" = "Regenerate…";
+"範例" = "Example";
+"拷貝範例" = "Copy Example";
+"只在 Lint 執行、且使用本機模型時可用。模型一次只處理一個請求；Lint 正在用、或你正在打字時，其他請求會等候。範例裡的 $LINT_API_KEY 請換成上面的金鑰。" = "Available only while Lint is running and using its local model. The model handles one request at a time; while Lint is using it or you are typing, other requests wait. Replace $LINT_API_KEY in the example with the key above.";
+"其他 app 使用" = "Other Apps";
+"重新產生金鑰？" = "Regenerate the key?";
+"重新產生" = "Regenerate";
+"舊的金鑰會立刻失效，使用它的 app 要改用新的金鑰。" = "The old key stops working at once; apps that use it need the new one.";
+"允許的網站" = "Allowed websites";
+"加入" = "Add";
+"網頁要用本機模型，網址必須在這份清單裡。預設只有這台 Mac 上的網頁（localhost）；加入的網站必須是 https。" = "A web page can use the local model only if its site is on this list. By default only pages on this Mac (localhost) are; websites you add must use https.";
+"恢復預設" = "Restore Defaults";
+"請輸入 https:// 開頭的網站，例如 https://example.com，不含路徑。" = "Enter a website that starts with https://, such as https://example.com, without a path.";
+"Lint 目前沒有使用本機模型，其他 app 暫時無法使用。" = "Lint is not using its local model right now, so other apps cannot use it.";
+"已開啟，只接受這台 Mac（127.0.0.1:%@）" = "On, accepting only this Mac (127.0.0.1:%@)";
+"未開啟" = "Off";
+"這個 llama-server 不是 Lint 啟動的，也不需要金鑰：這台 Mac 上的任何程式和網頁都能直接使用它，Lint 也無法優先。按「停止」再「啟動」，改用 Lint 自己的服務。" = "This llama-server was not started by Lint and needs no key: any app or web page on this Mac can use it directly, and Lint cannot come first. Press Stop, then Start, to use Lint's own server.";
+"其他 app：開啟（%lld 個等候中）" = "Other apps: on (%lld waiting)";
+"其他 app：開啟" = "Other apps: on";

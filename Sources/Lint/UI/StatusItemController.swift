@@ -390,6 +390,14 @@ final class StatusItemController: NSObject, NSMenuDelegate {
                 menu.addItem(file)
                 modelFileRow = file
             }
+            if case .listening = app.localAPI.state {
+                let waiting = app.modelGate.waitingCount
+                let title = waiting > 0
+                    ? String(localized: "其他 app：開啟（\(waiting) 個等候中）") : String(localized: "其他 app：開啟")
+                let row = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+                row.isEnabled = false
+                menu.addItem(row)
+            }
         }
         refreshUsage()
 

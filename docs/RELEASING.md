@@ -64,7 +64,7 @@ Release 說明要寫明未簽章、怎麼開啟、以及每個預覽版都要重
 1. 在 <https://github.com/ggml-org/llama.cpp/releases> 選一個 tag，記下 commit。用 `gh api repos/ggml-org/llama.cpp/releases/tags/<tag> --jq '.assets[] | select(.name|test("macos")) | "\(.name) \(.size) \(.digest)"'` 取得資產。
 2. 自己下載 `llama-<tag>-bin-macos-arm64.tar.gz`（與 `x64`），用 `shasum -a 256` 算雜湊，**確認與 GitHub 回報的 digest 相同**，再寫進 manifest（`tag`、`build`、`commit`、`reportedVersion`、每個架構的 `assetName`／`url`／`sha256`／`size`、`licenses` 的 commit 與雜湊）。
 3. `swift test`（`RuntimeScriptTests` 會檢查 manifest 的形狀），再跑 `./Scripts/package-app.sh debug`。
-4. 冒煙測試：用實際的 `dist/Lint.app/Contents/Resources/LlamaRuntime/arm64/llama-server` 載入一個模型（`-m`），確認 `/v1/models` 與一次 chat completion 正常，預設的額外參數（`--jinja --no-skip-chat-parsing -ngl 99 -fa on …`）仍被接受。
+4. 冒煙測試：用實際的 `dist/Lint.app/Contents/Resources/LlamaRuntime/arm64/llama-server` 載入一個模型（`-m`），確認 `/v1/models` 與一次 chat completion 正常，預設的額外參數（`--jinja --no-skip-chat-parsing -ngl 99 -fa on …`）仍被接受。Lint 一律加的存取參數也要試：把金鑰從標準輸入餵給 `--api-key-file /dev/stdin`，加上 `--no-cors-credentials --cors-origins http://lint.invalid --alias <模型 id>`；不帶金鑰的 `/v1/models` 回 401、帶金鑰回 200 且 id 是別名，`Origin: https://example.com` 的回應沒有放行那個網站。
 5. `LINT_PREVIEW_BUILD=1 ./Scripts/release.sh` 確認巢狀簽章檢查通過。
 
 ## 手動驗收（每次發版前，在另一台乾淨的 Mac）
@@ -75,14 +75,15 @@ Release 說明要寫明未簽章、怎麼開啟、以及每個預覽版都要重
 2. 「設定本機 AI」視窗自動出現；執行環境顯示「Lint 內建 · llama.cpp <tag>」，模型顯示未安裝。
 3. 同意頁列出大小與所需空間；按「下載並安裝」**之前**不能有任何下載。
 4. 下載中按「取消下載」，再按「繼續下載」：從原進度接續。中途直接結束 Lint 再開，partial 仍在、可以接續。
-5. 完成後依序是驗證、安裝、啟動：`curl http://127.0.0.1:8000/v1/models` 回 200，`lsof -nP -iTCP:8000 -sTCP:LISTEN` 只監聽 `127.0.0.1`；輔助功能步驟能引導、授權後自動更新；校對成功。
+5. 完成後依序是驗證、安裝、啟動：`curl http://127.0.0.1:8000/health` 回 200，`curl http://127.0.0.1:8000/v1/models` 回 401（服務只接受 Lint 的金鑰），`lsof -nP -iTCP:8000 -sTCP:LISTEN` 只監聽 `127.0.0.1`；輔助功能步驟能引導、授權後自動更新；校對成功。
 6. 對安裝後的 App 跑 `codesign --verify --deep --strict` 與 `spctl --assess --type execute`；`codesign -dvv .../LlamaRuntime/arm64/llama-server` 應是 Developer ID、Hardened Runtime、有時間戳、與 App 同一個 Team ID。
 7. 在設定移除模型後按 `⌥⌘K`：應打開「設定本機 AI」導引（開設定、按 `⌥⌘L` 也一樣，導引的「使用其他模型來源…」才會進設定），不出現 Connection refused。
 8. 全程沒有安裝或提到 Homebrew。
+9. 「設定 → 模型 → 其他 app 使用」預設關閉、`lsof -nP -iTCP:8001 -sTCP:LISTEN` 沒有東西；打開後只監聽 `127.0.0.1:8001`，`curl http://127.0.0.1:8001/v1/models` 不帶金鑰回 401、帶設定頁的金鑰回 200；關掉後埠立即關閉。
 
 ### 在自己的 Mac 上試新版而不動到真實資料
 
-`UserDefaults` 與 Application Support 都不受 `HOME` 影響（Foundation 用 `getpwuid`），所以要這樣隔離：複製 `dist/Lint.app`，用 `plutil -replace CFBundleIdentifier -string app.lint.assistant.e2e` 改 bundle id 並重新簽章（設定就是獨立的網域），設 `LINT_APP_SUPPORT_DIR=<資料夾>` 讓模型與下載落在別處，並用 `defaults write app.lint.assistant.e2e app.lint.localServer.port -int 8127` 換一個埠，避免碰到正在跑的 Lint 與它的 llama-server。若要看未授權輔助功能的畫面，用 `open -n -g --env LINT_APP_SUPPORT_DIR=<資料夾> <App>` 啟動（直接執行二進位檔會繼承終端機的授權）；隔離的副本一旦有授權，會在你打字時監看輸入，先 `defaults write <bundle id> app.lint.liveWatchWhileTyping -bool false`。這些只是本機試用的手段，發版驗收仍以上面的清單為準。
+`UserDefaults` 與 Application Support 都不受 `HOME` 影響（Foundation 用 `getpwuid`），所以要這樣隔離：複製 `dist/Lint.app`，用 `plutil -replace CFBundleIdentifier -string app.lint.assistant.e2e` 改 bundle id 並重新簽章（設定就是獨立的網域），設 `LINT_APP_SUPPORT_DIR=<資料夾>` 讓模型與下載落在別處，並用 `defaults write app.lint.assistant.e2e app.lint.localServer.port -int 8127` 換一個埠，避免碰到正在跑的 Lint 與它的 llama-server（要試「其他 app 使用」時，API 埠也換一個：`app.lint.localAPI.port -int 8128`）。若要看未授權輔助功能的畫面，用 `open -n -g --env LINT_APP_SUPPORT_DIR=<資料夾> <App>` 啟動（直接執行二進位檔會繼承終端機的授權）；隔離的副本一旦有授權，會在你打字時監看輸入，先 `defaults write <bundle id> app.lint.liveWatchWhileTyping -bool false`。這些只是本機試用的手段，發版驗收仍以上面的清單為準。
 
 ## 一次性設定
 

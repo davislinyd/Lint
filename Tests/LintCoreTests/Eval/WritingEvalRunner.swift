@@ -79,6 +79,10 @@ struct WritingEvalRun: Codable {
 ///     # Gemma through a llama-server you started yourself
 ///     LINT_EVAL=1 LINT_EVAL_ENGINE=llama LINT_EVAL_LABEL=gemma LINT_EVAL_URL=http://127.0.0.1:8099/v1 \
 ///         swift test --filter WritingEvalRunTests
+///     # or through Lint's API port (Settings → Model → Other Apps), which needs its key; Lint's own
+///     # llama-server on :8000 only takes the key Lint started it with
+///     LINT_EVAL=1 LINT_EVAL_ENGINE=llama LINT_EVAL_LABEL=gemma LINT_EVAL_URL=http://127.0.0.1:8001/v1 \
+///         LINT_EVAL_API_KEY=<key> swift test --filter WritingEvalRunTests
 ///     # A GEC model: llama-completion from the pinned runtime and a T5 GGUF (proofread/preserve cases only)
 ///     LINT_EVAL=1 LINT_EVAL_ENGINE=gec LINT_EVAL_LABEL=gec-t5 LINT_EVAL_GEC_BIN=<dir>/llama-completion \
 ///         LINT_EVAL_GEC_MODEL=<dir>/gec-t5_small-q8_0.gguf swift test --filter WritingEvalRunTests
@@ -146,7 +150,7 @@ final class WritingEvalRunTests: XCTestCase {
             session.timeoutIntervalForRequest = 300
             session.timeoutIntervalForResource = 600
             provider = OpenAICompatibleProvider(
-                id: .localLlama, baseURL: try XCTUnwrap(URL(string: endpoint)), apiKey: "",
+                id: .localLlama, baseURL: try XCTUnwrap(URL(string: endpoint)), apiKey: environment["LINT_EVAL_API_KEY"] ?? "",
                 session: URLSession(configuration: session)
             )
             model = environment["LINT_EVAL_MODEL"] ?? ProviderKind.localLlama.defaultModel

@@ -14,8 +14,24 @@ public struct LLMRuntimeConfig: Sendable {
     }
 }
 
+/// Lint's own way into its local model: the key its llama-server was started with, and the gate
+/// that puts Lint's requests ahead of other apps'. Only the `.localLlama` provider gets them.
+public struct LocalModelAccess: Sendable {
+    public var key: LocalAPIKey
+    public var gate: ModelPriorityGate?
+
+    public init(key: LocalAPIKey, gate: ModelPriorityGate?) {
+        self.key = key
+        self.gate = gate
+    }
+}
+
 public struct LLMService: Sendable {
-    public init() {}
+    public let localModel: LocalModelAccess?
+
+    public init(localModel: LocalModelAccess? = nil) {
+        self.localModel = localModel
+    }
 
     public func provider(for config: LLMRuntimeConfig) throws -> any LLMProvider {
         if config.kind.requiresAPIKey && config.apiKey.isEmpty {
@@ -27,11 +43,18 @@ public struct LLMService: Sendable {
             throw LLMError.unresolvedProvider
         case .appleIntelligence:
             return AppleFoundationModelProvider()
-        case .openai, .openaiCompatible, .localLlama:
+        case .openai, .openaiCompatible:
             return OpenAICompatibleProvider(
                 id: config.kind,
                 baseURL: config.baseURL,
                 apiKey: config.apiKey
+            )
+        case .localLlama:
+            return OpenAICompatibleProvider(
+                id: config.kind,
+                baseURL: config.baseURL,
+                apiKey: localModel?.key.value ?? config.apiKey,
+                gate: localModel?.gate
             )
         case .anthropic:
             return AnthropicProvider(baseURL: config.baseURL, apiKey: config.apiKey)

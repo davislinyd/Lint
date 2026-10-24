@@ -148,6 +148,64 @@ final class OpenAICompatibleProviderTests: XCTestCase {
         XCTAssertEqual(cut, "Section 1. Alice has")
     }
 
+    // MARK: - Lint's own key and priority
+
+    func testOnlyLintsLocalModelGetsLintsKeyAndGate() throws {
+        let key = LocalAPIKey.generate()
+        let gate = ModelPriorityGate()
+        let service = LLMService(localModel: LocalModelAccess(key: key, gate: gate))
+        let local = try XCTUnwrap(service.provider(for: LLMRuntimeConfig(
+            kind: .localLlama, baseURL: URL(string: "http://127.0.0.1:8000/v1")!, model: "m", apiKey: ""
+        )) as? OpenAICompatibleProvider)
+        XCTAssertEqual(local.apiKey, key.value)
+        XCTAssertTrue(local.gate === gate)
+
+        let other = try XCTUnwrap(service.provider(for: LLMRuntimeConfig(
+            kind: .openaiCompatible, baseURL: URL(string: "http://127.0.0.1:8000/v1")!, model: "m", apiKey: "theirs"
+        )) as? OpenAICompatibleProvider)
+        XCTAssertEqual(other.apiKey, "theirs", "Lint's key never goes to another server, even one on the same port")
+        XCTAssertNil(other.gate)
+    }
+
+    private func provider(_ kind: ProviderKind, gate: ModelPriorityGate) -> OpenAICompatibleProvider {
+        SSEStubProtocol.body = Data((ending("stop", completionTokens: 5).map { "data: \($0)\n\n" }.joined() + "data: [DONE]\n\n").utf8)
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [SSEStubProtocol.self]
+        return OpenAICompatibleProvider(
+            id: kind, baseURL: URL(string: "http://127.0.0.1:8000/v1")!, apiKey: "k",
+            session: URLSession(configuration: configuration), gate: gate
+        )
+    }
+
+    func testALocalRequestInterruptsAnExternalOneAndLetsGoWhenItEnds() async throws {
+        let gate = ModelPriorityGate(quietPeriod: .milliseconds(10))
+        let interrupted = expectation(description: "the external request is interrupted")
+        let lease = try await gate.acquireExternal(budget: .seconds(5), onPreempt: { interrupted.fulfill() })
+        for try await _ in provider(.localLlama, gate: gate).stream(ChatRequest(model: "m", systemPrompt: "s", userText: "u", maxTokens: 10)) {}
+        await fulfillment(of: [interrupted], timeout: 2)
+        lease.release()
+        let next = try await gate.acquireExternal(budget: .seconds(5), onPreempt: {})
+        next.release()
+    }
+
+    func testACancelledLocalRequestStillLetsGo() async throws {
+        let gate = ModelPriorityGate(quietPeriod: .milliseconds(10))
+        let stream = provider(.localLlama, gate: gate).stream(ChatRequest(model: "m", systemPrompt: "s", userText: "u", maxTokens: 10))
+        let task = Task { for try await _ in stream {} }
+        task.cancel()
+        _ = await task.result
+        let lease = try await gate.acquireExternal(budget: .seconds(5), onPreempt: {})
+        lease.release()
+    }
+
+    func testOtherServersDoNotTakeTheLocalModelFromAnyone() async throws {
+        let gate = ModelPriorityGate(quietPeriod: .seconds(60))
+        let lease = try await gate.acquireExternal(budget: .seconds(5), onPreempt: { XCTFail("not Lint's local model") })
+        for try await _ in provider(.openaiCompatible, gate: gate).stream(ChatRequest(model: "m", systemPrompt: "s", userText: "u", maxTokens: 10)) {}
+        XCTAssertFalse(lease.wasPreempted)
+        lease.release()
+    }
+
     func testALocalReplyWhoseConnectionEndsBeforeItFinishesIsAnError() async {
         // llama-server killed mid-answer: the connection just ends, with no finish_reason and no [DONE].
         do {

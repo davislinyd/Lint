@@ -28,6 +28,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         DiagnosticLog.shared.log("app", "quit")
+        model.localAPI.stop()
         model.stopManagedLocalServerIfNeeded()
     }
 }

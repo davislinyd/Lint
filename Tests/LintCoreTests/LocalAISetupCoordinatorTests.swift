@@ -10,10 +10,16 @@ final class FakeServer: LocalServerControlling {
     var sleeping: Bool?
     var startError: Error?
     var onStart: (() -> Void)?
+    var isUnprotected = false
+    /// Answers to give before falling back to `healthy`, one per probe.
+    var probeQueue: [LocalServerProbe] = []
     private(set) var startedPlans: [LlamaServerLaunchPlan] = []
     private(set) var stopCalls = 0
 
-    func isHealthy(port: Int) async -> Bool { healthy }
+    func probe(port: Int) async -> LocalServerProbe {
+        if !probeQueue.isEmpty { return probeQueue.removeFirst() }
+        return healthy ? .ready : .unreachable
+    }
 
     func isSleeping(port: Int) async -> Bool? { sleeping }
 
@@ -367,6 +373,59 @@ final class LocalAISetupCoordinatorTests: XCTestCase {
 
         await env.coordinator.stopServer()
         XCTAssertEqual(env.coordinator.state, .serverStopped)
+    }
+
+    func testRestartWaitsUntilNothingAnswersOnThePort() async throws {
+        let env = try makeEnv()
+        env.coordinator.installModel()
+        try await waitUntil("the server") { env.coordinator.state == .serverReady }
+        let starts = env.server.startedPlans.count
+        // Still holding the port while it quits: a 401 is not a free port.
+        env.server.probeQueue = [.rejectedKey, .rejectedKey, .unexpected(503), .unreachable]
+        try await env.coordinator.restartServer()
+        XCTAssertTrue(env.server.probeQueue.isEmpty, "every answer was waited out: \(env.server.probeQueue)")
+        XCTAssertEqual(env.server.startedPlans.count, starts + 1)
+    }
+
+    func testAServerThatTakesNoKeyIsShownAsUnprotected() async throws {
+        let env = try makeEnv()
+        await env.coordinator.refresh()
+        XCTAssertFalse(env.coordinator.serverIsUnprotected)
+        env.server.healthy = true
+        env.server.isUnprotected = true
+        await env.coordinator.refresh()
+        XCTAssertTrue(env.coordinator.serverIsUnprotected)
+    }
+
+    func testAServerWithoutAKeyFoundByARequestIsShownAsUnprotected() async throws {
+        let env = try makeEnv()
+        env.coordinator.installModel()
+        try await waitUntil("the model") { env.coordinator.modelReady }
+        await env.coordinator.stopServer()
+        // Started in Terminal without --api-key: it answers Lint's key too, so no launch happens.
+        env.server.healthy = true
+        env.server.isUnprotected = true
+        try await env.coordinator.ensureServerRunning()
+        XCTAssertTrue(env.coordinator.serverIsUnprotected)
+        env.server.isUnprotected = false
+        await env.coordinator.refreshServerActivity()
+        XCTAssertFalse(env.coordinator.serverIsUnprotected)
+    }
+
+    func testAPortHeldByAnotherKeyedServerSaysSo() async throws {
+        let env = try makeEnv()
+        env.coordinator.installModel()
+        try await waitUntil("the model") { env.coordinator.modelReady }
+        await env.coordinator.stopServer()
+        env.server.startError = LocalAIError.portInUse(port: 8000)
+        do {
+            try await env.coordinator.ensureServerRunning()
+            XCTFail("expected portInUse")
+        } catch LocalAIError.portInUse(let port) {
+            XCTAssertEqual(port, 8000)
+        }
+        guard case .failed(let message) = env.coordinator.state else { return XCTFail("\(env.coordinator.state)") }
+        XCTAssertTrue(message.contains("8000"), message)
     }
 
     func testRemovingTheModelStopsTheServerAndReturnsToModelMissing() async throws {

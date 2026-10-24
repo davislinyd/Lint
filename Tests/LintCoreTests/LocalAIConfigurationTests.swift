@@ -29,6 +29,23 @@ final class LocalAIConfigurationTests: XCTestCase {
         XCTAssertFalse(plan.arguments.contains("0.0.0.0"), "the server stays on loopback")
     }
 
+    func testTheModelIsNamedAfterTheCatalogAndOnlyTheBundledRuntimeGetsTheCORSFlags() {
+        let model = LocalModelReference.file(URL(fileURLWithPath: "/m.gguf"))
+        let managed = LocalAIConfiguration(modelSource: .managed).launchPlan(runtime: runtime, model: model).arguments
+        let alias = managed.firstIndex(of: "--alias").map { managed[$0 + 1] }
+        XCTAssertEqual(alias, ModelCatalog.recommended.id)
+        XCTAssertTrue(managed.contains("--cors-origins"))
+
+        let custom = LocalAIConfiguration(modelSource: .custom, huggingFaceSpec: "user/model:q4")
+        let hf = custom.launchPlan(runtime: runtime, model: .huggingFace("user/model:q4")).arguments
+        XCTAssertEqual(hf.firstIndex(of: "--alias").map { hf[$0 + 1] }, "user/model:q4")
+
+        let own = LlamaRuntimeLocation(binaryURL: URL(fileURLWithPath: "/opt/llama/llama-server"), origin: .custom)
+        let ownArguments = LocalAIConfiguration().launchPlan(runtime: own, model: model).arguments
+        XCTAssertTrue(ownArguments.contains("--api-key-file"), "every runtime asks for the key")
+        XCTAssertFalse(ownArguments.contains("--cors-origins"), "an older llama-server would refuse the flag")
+    }
+
     func testAMissingManagedModelIsNotSetUpAndAnInvalidOneIsReported() throws {
         let paths = LocalAIPaths(root: try TestSupport.makeTempDirectory())
         let manager = LocalModelManager(paths: paths)

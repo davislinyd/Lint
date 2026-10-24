@@ -22,6 +22,15 @@ final class BoundedLogBufferTests: XCTestCase {
         XCTAssertLessThanOrEqual(long.tail(maxCharacters: 100).count, 101)
     }
 
+    func testTheLineAboutAPIKeysNeverLeavesTheBuffer() {
+        let buffer = BoundedLogBuffer()
+        buffer.append(Data("srv    load_model: loading\nsrv  api_keys: ****AbCd\nmain: server is listening\n".utf8))
+        let tail = buffer.tail()
+        XCTAssertFalse(tail.contains("AbCd"), tail)
+        XCTAssertFalse(tail.contains("api_keys"), tail)
+        XCTAssertTrue(tail.hasSuffix("main: server is listening"))
+    }
+
     func testAnEmptyBufferHasNoTailAndInvalidUTF8DoesNotCrash() {
         let buffer = BoundedLogBuffer()
         XCTAssertEqual(buffer.tail(), "")

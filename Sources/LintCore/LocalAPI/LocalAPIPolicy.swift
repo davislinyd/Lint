@@ -101,11 +101,25 @@ enum LocalAPIPolicy {
         return host == "127.0.0.1:\(port)" || host == "localhost:\(port)"
     }
 
-    /// With `anyWebsite`, any http or https page is let in (it still needs a key); `null` (a file or a
-    /// sandboxed frame) and other schemes (browser extensions) never are.
-    static func isAllowedOrigin(_ header: String, allowed: [AllowedOrigin], anyWebsite: Bool = false) -> Bool {
+    /// With `anyWebsite`, any http or https page is let in, and with `browserExtensions` any browser
+    /// extension (both still need a key); `null` (a file or a sandboxed frame) and other schemes never are.
+    static func isAllowedOrigin(
+        _ header: String, allowed: [AllowedOrigin], anyWebsite: Bool = false, browserExtensions: Bool = false
+    ) -> Bool {
+        if browserExtensions, isBrowserExtension(header) { return true }
         if anyWebsite, let origin = Origin(header.lowercased()), origin.path.isEmpty { return true }
         return allowed.contains { $0.matches(header) }
+    }
+
+    /// The origin a browser extension's own pages and background send: Chrome, Brave and Edge, Firefox, Safari.
+    static func isBrowserExtension(_ header: String) -> Bool {
+        guard let components = URLComponents(string: header.lowercased()),
+              let scheme = components.scheme, ["chrome-extension", "moz-extension", "safari-web-extension"].contains(scheme),
+              let id = components.host, !id.isEmpty, id.allSatisfy({ $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "-") }),
+              components.port == nil, components.path.isEmpty, components.query == nil, components.fragment == nil,
+              components.user == nil
+        else { return false }
+        return true
     }
 
     /// The key a request presents: `Authorization: Bearer <key>` (any case for the scheme) or `X-Api-Key`.

@@ -47,7 +47,8 @@ asked: `package-app.sh` wipes `dist/Lint.app` and `release.sh` without `LINT_REL
 - The API port never shares llama-server's port: `stop(port:)` kills every listener there, Lint included.
 - Other apps' keys (`LocalAPIKeyring`) are values in the Keychain only. The list in UserDefaults holds IDs, names,
   dates and Keychain accounts, never a key, and the diagnostic log names a key only by `shortID`. Origin `null` and
-  non-http(s) schemes are refused even with **Allow any website** on.
+  other schemes are refused even with **Allow any website** on; browser-extension origins (`chrome-extension`,
+  `moz-extension`, `safari-web-extension`) only with **Allow browser extensions**, which is off by default.
 - Every Lint request to its local model goes through `ModelPriorityGate` (`OpenAICompatibleProvider` for
   `.localLlama`); Lint's side never waits. External requests are interrupted when Lint starts one.
 - The proxy forwards only `/v1/chat/completions`, `/v1/completions` and `/v1/models`, checks Host, Origin (allow

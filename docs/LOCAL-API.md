@@ -19,7 +19,7 @@ Lint（LLMService → OpenAICompatibleProvider）──────────�
 
 - **llama-server 永遠帶內部金鑰**（與開關無關）：每個 Lint 行程產生一次（`LocalLlamaServerManager.serverKey`），經 `--api-key-file /dev/stdin` 傳入，不在 argv、環境變數、磁碟或日誌。只有 Lint 與代理打得進去。
 - **代理只在開關開啟、且 Lint 的請求走本機 llama.cpp 時監聽**，預設埠 8001。絕不能與 llama-server 同埠：`stop(port:)` 會殺掉該埠所有監聽者。
-- 開關、新增或註銷金鑰、改允許清單、「允許任何網站」、改 API 埠都即時生效，不重啟 llama-server。
+- 開關、新增或註銷金鑰、改允許清單、「允許任何網站」、「允許瀏覽器擴充功能」、改 API 埠都即時生效，不重啟 llama-server。
 
 ## 元件（`Sources/LintCore/LocalAPI/`）
 
@@ -41,7 +41,7 @@ Lint（LLMService → OpenAICompatibleProvider）──────────�
 - **路由**：`GET /health`（代理自己回）、`GET /v1/models`（不經 gate）、`POST /v1/chat/completions`、`POST /v1/completions`。其他一律 404。
 - **轉送**：上游只帶內部金鑰與 `Content-Type`；客戶端的金鑰、Origin、cookie 不轉送。第一個 body 位元組送出前都算「尚未回應」，被搶占就重送；之後被搶占則送出 `preempted_by_lint` 錯誤事件、不送結尾 chunk。
 - **限制**：排隊上限 8、累計等候 120 秒、同一請求最多被搶占 5 次、32 條連線、標頭 16 KiB、body 4 MiB。
-- **允許清單**：預設 `http://localhost:*`、`http://127.0.0.1:*`、`https://localhost:*`。使用者可以加 `http://` 或 `https://` 網站（存成小寫、不含路徑、省略預設埠），以及 `*.網域`（只放在最左邊、後面至少兩段且含字母；符合子網域，不含網域本身）；任何埠 `:*` 只給 localhost。「允許任何網站」（預設關閉）放行任何能解析成 http/https 的 Origin；`null` 與其他 scheme（擴充功能、file://）一律擋。
+- **允許清單**：預設 `http://localhost:*`、`http://127.0.0.1:*`、`https://localhost:*`。使用者可以加 `http://` 或 `https://` 網站（存成小寫、不含路徑、省略預設埠），以及 `*.網域`（只放在最左邊、後面至少兩段且含字母；符合子網域，不含網域本身）；任何埠 `:*` 只給 localhost。「允許任何網站」（預設關閉）放行任何能解析成 http/https 的 Origin；「允許瀏覽器擴充功能使用 API」（預設關閉，兩個開關互不涵蓋）放行 `chrome-extension://`、`moz-extension://`、`safari-web-extension://` 加上只含英數字與 `-` 的 id，不含埠與路徑；`null` 與其他 scheme（file:// 等）一律擋。
 - **日誌**：只記方法、路徑、狀態、耗時、搶占與重送次數，以及用了哪把金鑰（`key=` 後接 id 前 6 碼）；被拒絕的請求與 `/v1/models` 每 60 秒彙總一次；不記 body、金鑰值、金鑰名稱、Origin。
 
 ## 實測數據（2026-10-24）

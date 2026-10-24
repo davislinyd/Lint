@@ -236,7 +236,8 @@ final class AppModel: NSObject, NSWindowDelegate {
         let enabled = settings.localAPIEnabled && writingRoute == .provider(.localLlama)
         let configuration = LocalAPIService.Configuration(
             enabled: enabled, port: settings.localAPIPort, upstreamPort: settings.localServerPort,
-            allowedOrigins: settings.localAPIAllowedOrigins, allowAnyWebsite: settings.localAPIAllowAnyWebsite
+            allowedOrigins: settings.localAPIAllowedOrigins, allowAnyWebsite: settings.localAPIAllowAnyWebsite,
+            allowBrowserExtensions: settings.localAPIAllowBrowserExtensions
         )
         Task { await localAPI.apply(configuration) }
     }

@@ -50,6 +50,7 @@ public final class LocalAPIProxy: @unchecked Sendable {
     private var upstreamPort = 8000
     private var allowedOrigins: [AllowedOrigin] = []
     private var allowAnyWebsite = false
+    private var allowBrowserExtensions = false
     private var openConnections = 0
     private var rejections: [String: Int] = [:]
     private var lastSummary = ContinuousClock.now
@@ -79,9 +80,14 @@ public final class LocalAPIProxy: @unchecked Sendable {
 
     /// Starts listening on 127.0.0.1:`port` (0 picks a free port) and returns the port.
     @discardableResult
-    public func start(port: Int, upstreamPort: Int, allowedOrigins: [String], allowAnyWebsite: Bool = false) async throws -> Int {
+    public func start(
+        port: Int, upstreamPort: Int, allowedOrigins: [String], allowAnyWebsite: Bool = false, allowBrowserExtensions: Bool = false
+    ) async throws -> Int {
         stop()
-        update(upstreamPort: upstreamPort, allowedOrigins: allowedOrigins, allowAnyWebsite: allowAnyWebsite)
+        update(
+            upstreamPort: upstreamPort, allowedOrigins: allowedOrigins, allowAnyWebsite: allowAnyWebsite,
+            allowBrowserExtensions: allowBrowserExtensions
+        )
         let parameters = NWParameters.tcp
         parameters.requiredInterfaceType = .loopback
         guard let wanted = NWEndpoint.Port(rawValue: UInt16(clamping: port)) else { throw StartError.portUnavailable(port: port) }
@@ -121,12 +127,13 @@ public final class LocalAPIProxy: @unchecked Sendable {
     }
 
     /// New settings that apply to the next request; the port keeps listening.
-    public func update(upstreamPort: Int, allowedOrigins: [String], allowAnyWebsite: Bool = false) {
+    public func update(upstreamPort: Int, allowedOrigins: [String], allowAnyWebsite: Bool = false, allowBrowserExtensions: Bool = false) {
         let parsed = allowedOrigins.compactMap(AllowedOrigin.parse)
         lock.withLock {
             self.upstreamPort = upstreamPort
             self.allowedOrigins = parsed
             self.allowAnyWebsite = allowAnyWebsite
+            self.allowBrowserExtensions = allowBrowserExtensions
         }
     }
 
@@ -170,11 +177,15 @@ public final class LocalAPIProxy: @unchecked Sendable {
         var upstreamPort: Int
         var allowedOrigins: [AllowedOrigin]
         var allowAnyWebsite: Bool
+        var allowBrowserExtensions: Bool
     }
 
     private var settings: Settings {
         lock.withLock {
-            Settings(port: port, upstreamPort: upstreamPort, allowedOrigins: allowedOrigins, allowAnyWebsite: allowAnyWebsite)
+            Settings(
+                port: port, upstreamPort: upstreamPort, allowedOrigins: allowedOrigins, allowAnyWebsite: allowAnyWebsite,
+                allowBrowserExtensions: allowBrowserExtensions
+            )
         }
     }
 
@@ -219,7 +230,10 @@ public final class LocalAPIProxy: @unchecked Sendable {
         }
         var cors: [(String, String)] = []
         if let origin = head.header("Origin") {
-            guard LocalAPIPolicy.isAllowedOrigin(origin, allowed: settings.allowedOrigins, anyWebsite: settings.allowAnyWebsite) else {
+            guard LocalAPIPolicy.isAllowedOrigin(
+                origin, allowed: settings.allowedOrigins, anyWebsite: settings.allowAnyWebsite,
+                browserExtensions: settings.allowBrowserExtensions
+            ) else {
                 reject("origin_not_allowed")
                 try? await client.send(Self.error(403, "This website is not allowed to use Lint's model. Add it in Lint's settings.", code: "origin_not_allowed"))
                 return

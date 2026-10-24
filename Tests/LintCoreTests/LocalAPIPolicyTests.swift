@@ -85,6 +85,19 @@ final class LocalAPIPolicyTests: XCTestCase {
         }
     }
 
+    func testBrowserExtensionsGetInOnlyWithTheirOwnSwitch() {
+        let extensions = ["chrome-extension://abcdefghijklmnopabcdefghijklmnop", "moz-extension://0d3a6f0e-1111-4222-8333-444455556666",
+                          "safari-web-extension://E3A1B2C4-0000-4000-8000-000000000000"]
+        for origin in extensions {
+            XCTAssertFalse(LocalAPIPolicy.isAllowedOrigin(origin, allowed: [], anyWebsite: true), origin)
+            XCTAssertTrue(LocalAPIPolicy.isAllowedOrigin(origin, allowed: [], browserExtensions: true), origin)
+        }
+        for origin in ["null", "file://", "chrome-extension://", "chrome-extension://abc/page.html", "chrome-extension://abc:80",
+                       "ms-browser-extension://abc", "https://evil.example"] {
+            XCTAssertFalse(LocalAPIPolicy.isAllowedOrigin(origin, allowed: [], browserExtensions: true), origin)
+        }
+    }
+
     func testTheKeyComesFromABearerTokenOrXAPIKey() {
         XCTAssertEqual(LocalAPIPolicy.presentedKey(authorization: "Bearer abc", apiKeyHeader: nil), "abc")
         XCTAssertEqual(LocalAPIPolicy.presentedKey(authorization: "bearer abc", apiKeyHeader: nil), "abc")

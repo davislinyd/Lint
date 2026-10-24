@@ -536,7 +536,7 @@
 "無法讀取" = "Não pode ser lida";
 "註銷…" = "Revogar…";
 "名稱，例如 Claude Code" = "Nome, como Claude Code";
-"新增金鑰" = "Adicionar Chave";
+"新增 API Key" = "Adicionar API Key";
 "可以給每個 app 或網頁各自一把金鑰；註銷一把，只有用它的 app 會立刻無法使用。" = "Você pode dar a cada app ou página a própria chave; revogar uma interrompe na hora só os apps que a usam.";
 "名稱最多 %@ 個字。" = "O nome pode ter no máximo %@ caracteres.";
 "最多 %@ 把金鑰；請先註銷用不到的。" = "Pode haver no máximo %@ chaves; revogue antes as que não usa mais.";
@@ -544,6 +544,8 @@
 "預設" = "Padrão";
 "網頁要用本機模型，網址必須在這份清單裡。預設只有這台 Mac 上的網頁（localhost）。可以加入 http 或 https 網站；https://*.example.com 代表 example.com 底下的所有子網域。Safari 不讓 https 網站連到這台 Mac 的 http 服務，所以 https 網站只能在 Chrome、Brave 等瀏覽器使用。" = "Uma página da web só pode usar o modelo local se o site dela estiver nesta lista. Por padrão, só as páginas deste Mac (localhost) estão. Você pode adicionar sites http ou https; https://*.example.com vale para todos os subdomínios de example.com. O Safari não deixa sites https se conectarem a serviços http deste Mac, então os sites https só funcionam em navegadores como Chrome ou Brave.";
 "允許任何網站（不建議）" = "Permitir qualquer site (não recomendado)";
-"任何 http 或 https 網站只要有金鑰就能使用，不必在上面的清單裡；本機檔案（file://）與瀏覽器擴充功能仍然不行。" = "Qualquer site http ou https pode usar o modelo se tiver uma chave, mesmo fora da lista acima; arquivos locais (file://) e extensões de navegador continuam sem acesso.";
+"任何 http 或 https 網站只要有金鑰就能使用，不必在上面的清單裡；本機檔案（file://）仍然不行。" = "Qualquer site http ou https pode usar o modelo se tiver uma chave, mesmo fora da lista acima; arquivos locais (file://) continuam sem acesso.";
+"允許瀏覽器擴充功能使用 API" = "Permitir que extensões de navegador usem a API";
+"Chrome、Brave、Edge、Firefox 與 Safari 的擴充功能只要有金鑰就能使用，不必在上面的清單裡。擴充功能看得到你瀏覽的網頁，只把金鑰給你信任的擴充功能。" = "Extensões do Chrome, Brave, Edge, Firefox e Safari podem usar o modelo se tiverem uma chave, mesmo fora da lista acima. Extensões veem as páginas que você abre, então dê uma chave só às extensões em que você confia.";
 "請輸入 http:// 或 https:// 開頭的網站，例如 https://example.com；*. 代表所有子網域，例如 https://*.example.com。不含路徑。" = "Digite um site que comece com http:// ou https://, como https://example.com, sem caminho. *. vale para todos os subdomínios, como em https://*.example.com.";
 "只在 Lint 執行、且使用本機模型時可用。模型一次只處理一個請求；Lint 正在用、或你正在打字時，其他請求會等候。範例裡的 $LINT_API_KEY 請換成上面其中一把金鑰。" = "Disponível só enquanto o Lint estiver em execução e usando o modelo local. O modelo atende um pedido por vez; enquanto o Lint o estiver usando ou você estiver digitando, os outros pedidos esperam. Troque $LINT_API_KEY no exemplo por uma das chaves acima.";

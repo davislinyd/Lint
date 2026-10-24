@@ -50,7 +50,13 @@ struct LocalAPISection: View {
                         Button("拷貝") { copy(baseURL) }
                     }
                 }
-                TextField("API 埠", value: Bindable(settings).localAPIPort, format: .number.grouping(.never))
+                LabeledContent("API 埠") {
+                    TextField("API 埠", value: Bindable(settings).localAPIPort, format: .number.grouping(.never))
+                        .labelsHidden()
+                        .textFieldStyle(.roundedBorder)
+                        .multilineTextAlignment(.trailing)
+                        .frame(width: 80)
+                }
                 keysEditor
                 originsEditor
                 VStack(alignment: .leading, spacing: 6) {
@@ -121,9 +127,11 @@ struct LocalAPISection: View {
                 }
             }
             HStack {
-                TextField("名稱，例如 Claude Code", text: $newKeyName)
+                TextField("名稱，例如 Claude Code", text: $newKeyName, prompt: Text("名稱，例如 Claude Code"))
+                    .labelsHidden()
+                    .textFieldStyle(.roundedBorder)
                     .onSubmit(addKey)
-                Button("新增金鑰", action: addKey).disabled(newKeyName.trimmingCharacters(in: .whitespaces).isEmpty)
+                Button("新增 API Key", action: addKey).disabled(newKeyName.trimmingCharacters(in: .whitespaces).isEmpty)
             }
             if let keyError {
                 Text(keyError).font(.caption).foregroundStyle(.red)
@@ -201,7 +209,9 @@ struct LocalAPISection: View {
                     }
                 }
                 HStack {
-                    TextField("https://example.com", text: $newOrigin)
+                    TextField("https://example.com", text: $newOrigin, prompt: Text(verbatim: "https://example.com"))
+                        .labelsHidden()
+                        .textFieldStyle(.roundedBorder)
                         .onSubmit(addOrigin)
                     Button("加入", action: addOrigin).disabled(newOrigin.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
@@ -221,8 +231,13 @@ struct LocalAPISection: View {
             .opacity(settings.localAPIAllowAnyWebsite ? 0.5 : 1)
             SettingsToggle(
                 title: "允許任何網站（不建議）",
-                detail: "任何 http 或 https 網站只要有金鑰就能使用，不必在上面的清單裡；本機檔案（file://）與瀏覽器擴充功能仍然不行。",
+                detail: "任何 http 或 https 網站只要有金鑰就能使用，不必在上面的清單裡；本機檔案（file://）仍然不行。",
                 isOn: Bindable(settings).localAPIAllowAnyWebsite
+            )
+            SettingsToggle(
+                title: "允許瀏覽器擴充功能使用 API",
+                detail: "Chrome、Brave、Edge、Firefox 與 Safari 的擴充功能只要有金鑰就能使用，不必在上面的清單裡。擴充功能看得到你瀏覽的網頁，只把金鑰給你信任的擴充功能。",
+                isOn: Bindable(settings).localAPIAllowBrowserExtensions
             )
         }
     }

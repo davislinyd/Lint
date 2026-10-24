@@ -4,8 +4,8 @@ import Observation
 /// What `LocalAPIService` needs from the proxy, so its start/stop logic is tested without sockets.
 public protocol LocalAPIListening: AnyObject, Sendable {
     @discardableResult
-    func start(port: Int, upstreamPort: Int, allowedOrigins: [String], allowAnyWebsite: Bool) async throws -> Int
-    func update(upstreamPort: Int, allowedOrigins: [String], allowAnyWebsite: Bool)
+    func start(port: Int, upstreamPort: Int, allowedOrigins: [String], allowAnyWebsite: Bool, allowBrowserExtensions: Bool) async throws -> Int
+    func update(upstreamPort: Int, allowedOrigins: [String], allowAnyWebsite: Bool, allowBrowserExtensions: Bool)
     func stop()
 }
 
@@ -32,13 +32,19 @@ public final class LocalAPIService {
         public var allowedOrigins: [String]
         /// Any http or https page may call (with a key), not only the allowed websites.
         public var allowAnyWebsite: Bool
+        /// Browser extensions may call (with a key).
+        public var allowBrowserExtensions: Bool
 
-        public init(enabled: Bool, port: Int, upstreamPort: Int, allowedOrigins: [String], allowAnyWebsite: Bool = false) {
+        public init(
+            enabled: Bool, port: Int, upstreamPort: Int, allowedOrigins: [String], allowAnyWebsite: Bool = false,
+            allowBrowserExtensions: Bool = false
+        ) {
             self.enabled = enabled
             self.port = port
             self.upstreamPort = upstreamPort
             self.allowedOrigins = allowedOrigins
             self.allowAnyWebsite = allowAnyWebsite
+            self.allowBrowserExtensions = allowBrowserExtensions
         }
     }
 
@@ -88,13 +94,16 @@ public final class LocalAPIService {
             return
         }
         if case .listening(let port) = state, port == target.port {
-            proxy.update(upstreamPort: target.upstreamPort, allowedOrigins: target.allowedOrigins, allowAnyWebsite: target.allowAnyWebsite)
+            proxy.update(
+                upstreamPort: target.upstreamPort, allowedOrigins: target.allowedOrigins, allowAnyWebsite: target.allowAnyWebsite,
+                allowBrowserExtensions: target.allowBrowserExtensions
+            )
             return
         }
         do {
             let port = try await proxy.start(
                 port: target.port, upstreamPort: target.upstreamPort, allowedOrigins: target.allowedOrigins,
-                allowAnyWebsite: target.allowAnyWebsite
+                allowAnyWebsite: target.allowAnyWebsite, allowBrowserExtensions: target.allowBrowserExtensions
             )
             state = .listening(port: port)
         } catch {

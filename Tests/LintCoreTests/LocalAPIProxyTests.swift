@@ -291,6 +291,23 @@ final class LocalAPIProxyTests: XCTestCase {
         XCTAssertTrue(withoutKey.hasPrefix("HTTP/1.1 401 "), "a page still needs a key: \(withoutKey)")
     }
 
+    func testBrowserExtensionsNeedTheirOwnSwitch() async throws {
+        upstream.script([.json(200, "{}")])
+        let origin = "chrome-extension://abcdefghijklmnopabcdefghijklmnop"
+        proxy.update(upstreamPort: upstream.port, allowedOrigins: AllowedOrigin.defaults, allowAnyWebsite: true)
+        let blocked = try await send(request("GET", "/v1/models", headers: ["Origin": origin]))
+        XCTAssertTrue(blocked.hasPrefix("HTTP/1.1 403 "), "any website does not cover extensions: \(blocked)")
+
+        proxy.update(upstreamPort: upstream.port, allowedOrigins: AllowedOrigin.defaults, allowBrowserExtensions: true)
+        let allowed = try await send(request("GET", "/v1/models", headers: ["Origin": origin]))
+        XCTAssertTrue(allowed.hasPrefix("HTTP/1.1 200 "), allowed)
+        XCTAssertTrue(allowed.contains("Access-Control-Allow-Origin: \(origin)"), allowed)
+        let withoutKey = try await send(request("GET", "/v1/models", headers: ["Origin": origin], key: false))
+        XCTAssertTrue(withoutKey.hasPrefix("HTTP/1.1 401 "), "an extension still needs a key: \(withoutKey)")
+        let website = try await send(request("GET", "/v1/models", headers: ["Origin": "https://evil.example"]))
+        XCTAssertTrue(website.hasPrefix("HTTP/1.1 403 "), "extensions do not open the door to websites: \(website)")
+    }
+
     func testABusyPortIsReported() async throws {
         let other = LocalAPIProxy(
             gate: ModelPriorityGate(), serverKey: serverKey, keys: { LocalAPIKeyring.Lookup(keys: [], unreadable: false) },

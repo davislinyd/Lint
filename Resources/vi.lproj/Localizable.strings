@@ -536,7 +536,7 @@
 "無法讀取" = "Không đọc được";
 "註銷…" = "Thu hồi…";
 "名稱，例如 Claude Code" = "Tên, ví dụ Claude Code";
-"新增金鑰" = "Thêm khóa";
+"新增 API Key" = "Thêm API Key";
 "可以給每個 app 或網頁各自一把金鑰；註銷一把，只有用它的 app 會立刻無法使用。" = "Bạn có thể cấp cho mỗi ứng dụng hoặc trang web một khóa riêng; thu hồi một khóa thì chỉ các ứng dụng dùng khóa đó ngừng dùng được ngay.";
 "名稱最多 %@ 個字。" = "Tên dài tối đa %@ ký tự.";
 "最多 %@ 把金鑰；請先註銷用不到的。" = "Tối đa %@ khóa; hãy thu hồi các khóa không dùng nữa trước.";
@@ -544,6 +544,8 @@
 "預設" = "Mặc định";
 "網頁要用本機模型，網址必須在這份清單裡。預設只有這台 Mac 上的網頁（localhost）。可以加入 http 或 https 網站；https://*.example.com 代表 example.com 底下的所有子網域。Safari 不讓 https 網站連到這台 Mac 的 http 服務，所以 https 網站只能在 Chrome、Brave 等瀏覽器使用。" = "Trang web chỉ dùng được mô hình cục bộ nếu trang đó có trong danh sách này. Mặc định chỉ có các trang trên máy Mac này (localhost). Bạn có thể thêm trang web http hoặc https; https://*.example.com là mọi tên miền con của example.com. Safari không cho trang web https kết nối tới dịch vụ http trên máy Mac này, nên trang web https chỉ hoạt động trên các trình duyệt như Chrome hoặc Brave.";
 "允許任何網站（不建議）" = "Cho phép mọi trang web (không khuyến nghị)";
-"任何 http 或 https 網站只要有金鑰就能使用，不必在上面的清單裡；本機檔案（file://）與瀏覽器擴充功能仍然不行。" = "Mọi trang web http hoặc https đều dùng được nếu có khóa, dù không có trong danh sách trên; tệp cục bộ (file://) và tiện ích mở rộng trình duyệt vẫn không dùng được.";
+"任何 http 或 https 網站只要有金鑰就能使用，不必在上面的清單裡；本機檔案（file://）仍然不行。" = "Mọi trang web http hoặc https đều dùng được nếu có khóa, dù không có trong danh sách trên; tệp cục bộ (file://) vẫn không dùng được.";
+"允許瀏覽器擴充功能使用 API" = "Cho phép tiện ích mở rộng trình duyệt dùng API";
+"Chrome、Brave、Edge、Firefox 與 Safari 的擴充功能只要有金鑰就能使用，不必在上面的清單裡。擴充功能看得到你瀏覽的網頁，只把金鑰給你信任的擴充功能。" = "Tiện ích mở rộng trong Chrome, Brave, Edge, Firefox và Safari dùng được nếu có khóa, dù không có trong danh sách trên. Tiện ích mở rộng xem được các trang bạn duyệt, nên chỉ đưa khóa cho tiện ích bạn tin tưởng.";
 "請輸入 http:// 或 https:// 開頭的網站，例如 https://example.com；*. 代表所有子網域，例如 https://*.example.com。不含路徑。" = "Hãy nhập một trang web bắt đầu bằng http:// hoặc https://, ví dụ https://example.com, không kèm đường dẫn. *. là mọi tên miền con, ví dụ https://*.example.com.";
 "只在 Lint 執行、且使用本機模型時可用。模型一次只處理一個請求；Lint 正在用、或你正在打字時，其他請求會等候。範例裡的 $LINT_API_KEY 請換成上面其中一把金鑰。" = "Chỉ dùng được khi Lint đang chạy và dùng mô hình cục bộ. Mô hình chỉ xử lý một yêu cầu mỗi lúc; khi Lint đang dùng hoặc bạn đang gõ, các yêu cầu khác sẽ chờ. Hãy thay $LINT_API_KEY trong ví dụ bằng một trong các khóa ở trên.";

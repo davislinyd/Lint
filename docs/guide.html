@@ -575,8 +575,8 @@
 
       <article class="step">
         <div class="step-head"><span class="step-num">15</span><h3><span class="en">Turn on Other Apps</span><span class="zh">開啟「其他 app 使用」</span></h3></div>
-        <p class="en">Open <strong>Settings… → Model</strong> with <strong>Local llama.cpp</strong> as the source, and under <strong>Other Apps</strong> turn on <strong>Let other apps use the local model</strong>. Copy the <strong>URL</strong> (<code>http://127.0.0.1:8001/v1</code>; the API port can be changed) and a key: give each app or page its own with <strong>Add Key</strong> and a name, or use <strong>Default</strong> (<strong>Show</strong>, <strong>Copy</strong>). The section also has a ready-made example to copy.</p>
-        <p class="zh">在模型來源是<strong>「本機 llama.cpp」</strong>的<strong>「設定… → 模型」</strong>，到<strong>「其他 app 使用」</strong>打開<strong>「讓其他 app 使用本機模型」</strong>。拷貝<strong>「網址」</strong>（<code>http://127.0.0.1:8001/v1</code>，API 埠可以改）和一把金鑰：可以用<strong>「新增金鑰」</strong>取個名稱，給每個 App 或網頁各自一把，或使用<strong>「預設」</strong>那把（<strong>「顯示」</strong>、<strong>「拷貝」</strong>）。同一區也有可以直接拷貝的範例。</p>
+        <p class="en">Open <strong>Settings… → Model</strong> with <strong>Local llama.cpp</strong> as the source, and under <strong>Other Apps</strong> turn on <strong>Let other apps use the local model</strong>. Copy the <strong>URL</strong> (<code>http://127.0.0.1:8001/v1</code>; the API port can be changed) and a key: give each app or page its own with <strong>Add API Key</strong> and a name, or use <strong>Default</strong> (<strong>Show</strong>, <strong>Copy</strong>). The section also has a ready-made example to copy.</p>
+        <p class="zh">在模型來源是<strong>「本機 llama.cpp」</strong>的<strong>「設定… → 模型」</strong>，到<strong>「其他 app 使用」</strong>打開<strong>「讓其他 app 使用本機模型」</strong>。拷貝<strong>「網址」</strong>（<code>http://127.0.0.1:8001/v1</code>，API 埠可以改）和一把金鑰：可以用<strong>「新增 API Key」</strong>取個名稱，給每個 App 或網頁各自一把，或使用<strong>「預設」</strong>那把（<strong>「顯示」</strong>、<strong>「拷貝」</strong>）。同一區也有可以直接拷貝的範例。</p>
         <figure>
           <a class="shot en" href="assets/guide/en/settings-other-apps.png" target="_blank" rel="noopener"><img src="assets/guide/en/settings-other-apps.png" alt="The Other Apps section in Settings, Model: the switch, status, URL, API port, key, allowed websites and an example" width="984" height="869" loading="lazy"></a>
           <a class="shot zh" href="assets/guide/zh/settings-other-apps.png" target="_blank" rel="noopener"><img src="assets/guide/zh/settings-other-apps.png" alt="設定「模型」頁的「其他 app 使用」：開關、狀態、網址、API 埠、金鑰、允許的網站與範例" width="984" height="847" loading="lazy"></a>
@@ -614,13 +614,15 @@ print(reply.choices[0].message.content)</pre>
           <ul class="en">
             <li>A page can use the API only if its site is in <strong>Allowed websites</strong>, and it needs a key too. By default the list holds pages served from this Mac: <code>http://localhost</code>, <code>http://127.0.0.1</code> and <code>https://localhost</code>, at any port.</li>
             <li>You can add <code>http</code> or <code>https</code> websites, such as <code>https://tool.example.com</code> or <code>http://192.168.1.5:3000</code>; <code>https://*.example.com</code> covers every subdomain of <code>example.com</code>. <strong>Restore Defaults</strong> takes them out again.</li>
-            <li><strong>Allow any website</strong> (off, not recommended) lets every <code>http</code> and <code>https</code> page in, with a key. A local file (<code>file://</code>) and browser extensions are still refused.</li>
+            <li><strong>Allow any website</strong> (off, not recommended) lets every <code>http</code> and <code>https</code> page in, with a key. A local file (<code>file://</code>) is still refused.</li>
+            <li><strong>Allow browser extensions to use the API</strong> (off) lets extensions in Chrome, Brave, Edge, Firefox and Safari in, with a key. Extensions can see the pages you browse, so give a key only to ones you trust.</li>
             <li><strong>Browsers differ</strong>: Chrome and Brave let an allowed <code>https</code> website in, and Chrome an <code>http</code> page on the local network. Safari does not let any <code>https</code> page connect to an <code>http</code> address on this Mac, so in Safari no <code>https</code> page can use it.</li>
           </ul>
           <ul class="zh">
             <li>網頁的網站必須在<strong>「允許的網站」</strong>裡才能使用 API，而且一樣需要金鑰。清單預設只有這台 Mac 上的網頁：<code>http://localhost</code>、<code>http://127.0.0.1</code> 與 <code>https://localhost</code>，任何埠都可以。</li>
             <li>可以加入 <code>http</code> 或 <code>https</code> 網站，例如 <code>https://tool.example.com</code> 或 <code>http://192.168.1.5:3000</code>；<code>https://*.example.com</code> 代表 <code>example.com</code> 底下的所有子網域。<strong>「恢復預設」</strong>會再把它們移除。</li>
-            <li><strong>「允許任何網站」</strong>（預設關閉，不建議）會放行所有帶金鑰的 <code>http</code> 與 <code>https</code> 網頁；本機檔案（<code>file://</code>）與瀏覽器擴充功能仍然不行。</li>
+            <li><strong>「允許任何網站」</strong>（預設關閉，不建議）會放行所有帶金鑰的 <code>http</code> 與 <code>https</code> 網頁；本機檔案（<code>file://</code>）仍然不行。</li>
+            <li><strong>「允許瀏覽器擴充功能使用 API」</strong>（預設關閉）會放行 Chrome、Brave、Edge、Firefox 與 Safari 的擴充功能，一樣需要金鑰。擴充功能看得到你瀏覽的網頁，只把金鑰給你信任的擴充功能。</li>
             <li><strong>瀏覽器之間有差異</strong>：Chrome 與 Brave 會讓允許的 <code>https</code> 網站使用，Chrome 也讓區域網路上的 <code>http</code> 網頁使用；Safari 不讓任何 <code>https</code> 網頁連到這台 Mac 的 <code>http</code> 位址，所以在 Safari 上 <code>https</code> 網頁都無法使用。</li>
           </ul>
         </article>

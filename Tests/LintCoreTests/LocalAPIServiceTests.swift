@@ -4,8 +4,12 @@ import XCTest
 
 @MainActor
 final class LocalAPIServiceTests: XCTestCase {
-    private func config(enabled: Bool = true, port: Int = 8001, upstream: Int = 8000, origins: [String] = AllowedOrigin.defaults) -> LocalAPIService.Configuration {
-        LocalAPIService.Configuration(enabled: enabled, port: port, upstreamPort: upstream, allowedOrigins: origins)
+    private func config(
+        enabled: Bool = true, port: Int = 8001, upstream: Int = 8000, origins: [String] = AllowedOrigin.defaults, extensions: Bool = false
+    ) -> LocalAPIService.Configuration {
+        LocalAPIService.Configuration(
+            enabled: enabled, port: port, upstreamPort: upstream, allowedOrigins: origins, allowBrowserExtensions: extensions
+        )
     }
 
     func testItIsOffUntilSwitchedOn() async {
@@ -29,6 +33,17 @@ final class LocalAPIServiceTests: XCTestCase {
         XCTAssertEqual(listener.starts, [8001])
         XCTAssertEqual(listener.updates.last?.0, 8123)
         XCTAssertEqual(listener.updates.first?.1, AllowedOrigin.defaults + ["https://tool.example.com"])
+    }
+
+    func testAllowingExtensionsAppliesWithoutListeningAgain() async {
+        let listener = FakeListener()
+        let service = LocalAPIService(proxy: listener)
+        await service.apply(config())
+        await service.apply(config(extensions: true))
+        XCTAssertEqual(listener.updates.last?.2, true)
+        await service.apply(config())
+        XCTAssertEqual(listener.updates.last?.2, false)
+        XCTAssertEqual(listener.starts, [8001])
     }
 
     func testANewPortListensAgainAndSwitchingOffStops() async {
@@ -69,17 +84,17 @@ private final class FakeListener: LocalAPIListening, @unchecked Sendable {
     private let lock = NSLock()
     var busy: Set<Int> = []
     private(set) var starts: [Int] = []
-    private(set) var updates: [(Int, [String])] = []
+    private(set) var updates: [(Int, [String], Bool)] = []
     private(set) var stops = 0
 
-    func start(port: Int, upstreamPort: Int, allowedOrigins: [String]) async throws -> Int {
+    func start(port: Int, upstreamPort: Int, allowedOrigins: [String], allowBrowserExtensions: Bool) async throws -> Int {
         lock.withLock { starts.append(port) }
         if busy.contains(port) { throw LocalAPIProxy.StartError.portUnavailable(port: port) }
         return port
     }
 
-    func update(upstreamPort: Int, allowedOrigins: [String]) {
-        lock.withLock { updates.append((upstreamPort, allowedOrigins)) }
+    func update(upstreamPort: Int, allowedOrigins: [String], allowBrowserExtensions: Bool) {
+        lock.withLock { updates.append((upstreamPort, allowedOrigins, allowBrowserExtensions)) }
     }
 
     func stop() {

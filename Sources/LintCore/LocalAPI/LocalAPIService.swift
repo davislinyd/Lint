@@ -4,15 +4,15 @@ import Observation
 /// What `LocalAPIService` needs from the proxy, so its start/stop logic is tested without sockets.
 public protocol LocalAPIListening: AnyObject, Sendable {
     @discardableResult
-    func start(port: Int, upstreamPort: Int, allowedOrigins: [String]) async throws -> Int
-    func update(upstreamPort: Int, allowedOrigins: [String])
+    func start(port: Int, upstreamPort: Int, allowedOrigins: [String], allowBrowserExtensions: Bool) async throws -> Int
+    func update(upstreamPort: Int, allowedOrigins: [String], allowBrowserExtensions: Bool)
     func stop()
 }
 
 extension LocalAPIProxy: LocalAPIListening {}
 
 /// Keeps Lint's API port as the settings say: listening only while it is switched on and Lint's
-/// requests go to its local model. A new key or a new list of websites applies to the next request;
+/// requests go to its local model. A new key or new website rules apply to the next request;
 /// only a new port means listening again. llama-server is never restarted for any of this.
 @MainActor
 @Observable
@@ -30,12 +30,17 @@ public final class LocalAPIService {
         /// llama-server's port.
         public var upstreamPort: Int
         public var allowedOrigins: [String]
+        /// Browser extensions may call (with a key).
+        public var allowBrowserExtensions: Bool
 
-        public init(enabled: Bool, port: Int, upstreamPort: Int, allowedOrigins: [String]) {
+        public init(
+            enabled: Bool, port: Int, upstreamPort: Int, allowedOrigins: [String], allowBrowserExtensions: Bool = false
+        ) {
             self.enabled = enabled
             self.port = port
             self.upstreamPort = upstreamPort
             self.allowedOrigins = allowedOrigins
+            self.allowBrowserExtensions = allowBrowserExtensions
         }
     }
 
@@ -85,11 +90,17 @@ public final class LocalAPIService {
             return
         }
         if case .listening(let port) = state, port == target.port {
-            proxy.update(upstreamPort: target.upstreamPort, allowedOrigins: target.allowedOrigins)
+            proxy.update(
+                upstreamPort: target.upstreamPort, allowedOrigins: target.allowedOrigins,
+                allowBrowserExtensions: target.allowBrowserExtensions
+            )
             return
         }
         do {
-            let port = try await proxy.start(port: target.port, upstreamPort: target.upstreamPort, allowedOrigins: target.allowedOrigins)
+            let port = try await proxy.start(
+                port: target.port, upstreamPort: target.upstreamPort, allowedOrigins: target.allowedOrigins,
+                allowBrowserExtensions: target.allowBrowserExtensions
+            )
             state = .listening(port: port)
         } catch {
             state = .failed(String(localized: "埠 \(String(target.port)) 已被其他程式使用，請改用別的埠。"))

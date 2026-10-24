@@ -39,7 +39,7 @@ public final class LocalAPIProxy: @unchecked Sendable {
 
     private let gate: ModelPriorityGate
     private let serverKey: LocalAPIKey
-    private let userKey: @Sendable () -> LocalAPIKey?
+    private let keys: @Sendable () -> LocalAPIKeyring.Lookup
     private let ensureBackend: @Sendable () async throws -> Void
     private let limits: Limits
     private let log: @Sendable (String) -> Void
@@ -49,26 +49,27 @@ public final class LocalAPIProxy: @unchecked Sendable {
     private var port = 0
     private var upstreamPort = 8000
     private var allowedOrigins: [AllowedOrigin] = []
+    private var allowBrowserExtensions = false
     private var openConnections = 0
     private var rejections: [String: Int] = [:]
     private var lastSummary = ContinuousClock.now
 
     /// - Parameters:
     ///   - serverKey: the key Lint started llama-server with.
-    ///   - userKey: the key clients must present; nil when it cannot be read (every request is refused).
+    ///   - keys: the keys a client may present, and whether one of them could not be read.
     ///   - ensureBackend: makes sure llama-server runs, as for Lint's own requests, or throws
     ///     `LocalAPIBackendUnavailable`.
     public init(
         gate: ModelPriorityGate,
         serverKey: LocalAPIKey,
-        userKey: @escaping @Sendable () -> LocalAPIKey?,
+        keys: @escaping @Sendable () -> LocalAPIKeyring.Lookup,
         ensureBackend: @escaping @Sendable () async throws -> Void,
         limits: Limits = Limits(),
         log: @escaping @Sendable (String) -> Void = { DiagnosticLog.shared.log("api", $0) }
     ) {
         self.gate = gate
         self.serverKey = serverKey
-        self.userKey = userKey
+        self.keys = keys
         self.ensureBackend = ensureBackend
         self.limits = limits
         self.log = log
@@ -78,9 +79,9 @@ public final class LocalAPIProxy: @unchecked Sendable {
 
     /// Starts listening on 127.0.0.1:`port` (0 picks a free port) and returns the port.
     @discardableResult
-    public func start(port: Int, upstreamPort: Int, allowedOrigins: [String]) async throws -> Int {
+    public func start(port: Int, upstreamPort: Int, allowedOrigins: [String], allowBrowserExtensions: Bool = false) async throws -> Int {
         stop()
-        update(upstreamPort: upstreamPort, allowedOrigins: allowedOrigins)
+        update(upstreamPort: upstreamPort, allowedOrigins: allowedOrigins, allowBrowserExtensions: allowBrowserExtensions)
         let parameters = NWParameters.tcp
         parameters.requiredInterfaceType = .loopback
         guard let wanted = NWEndpoint.Port(rawValue: UInt16(clamping: port)) else { throw StartError.portUnavailable(port: port) }
@@ -120,11 +121,12 @@ public final class LocalAPIProxy: @unchecked Sendable {
     }
 
     /// New settings that apply to the next request; the port keeps listening.
-    public func update(upstreamPort: Int, allowedOrigins: [String]) {
+    public func update(upstreamPort: Int, allowedOrigins: [String], allowBrowserExtensions: Bool = false) {
         let parsed = allowedOrigins.compactMap(AllowedOrigin.parse)
         lock.withLock {
             self.upstreamPort = upstreamPort
             self.allowedOrigins = parsed
+            self.allowBrowserExtensions = allowBrowserExtensions
         }
     }
 
@@ -167,10 +169,13 @@ public final class LocalAPIProxy: @unchecked Sendable {
         var port: Int
         var upstreamPort: Int
         var allowedOrigins: [AllowedOrigin]
+        var allowBrowserExtensions: Bool
     }
 
     private var settings: Settings {
-        lock.withLock { Settings(port: port, upstreamPort: upstreamPort, allowedOrigins: allowedOrigins) }
+        lock.withLock {
+            Settings(port: port, upstreamPort: upstreamPort, allowedOrigins: allowedOrigins, allowBrowserExtensions: allowBrowserExtensions)
+        }
     }
 
     private static let routes: [String: String] = [
@@ -214,7 +219,7 @@ public final class LocalAPIProxy: @unchecked Sendable {
         }
         var cors: [(String, String)] = []
         if let origin = head.header("Origin") {
-            guard LocalAPIPolicy.isAllowedOrigin(origin, allowed: settings.allowedOrigins) else {
+            guard LocalAPIPolicy.isAllowedOrigin(origin, allowed: settings.allowedOrigins, browserExtensions: settings.allowBrowserExtensions) else {
                 reject("origin_not_allowed")
                 try? await client.send(Self.error(403, "This website is not allowed to use Lint's model. Add it in Lint's settings.", code: "origin_not_allowed"))
                 return
@@ -248,13 +253,15 @@ public final class LocalAPIProxy: @unchecked Sendable {
             ))
             return
         }
-        guard let key = userKey() else {
-            try? await client.send(Self.error(503, "Lint's API key could not be read.", code: "key_unavailable", extra: cors, retryAfter: 30))
-            return
-        }
-        guard let presented = LocalAPIPolicy.presentedKey(authorization: head.header("Authorization"), apiKeyHeader: head.header("X-Api-Key")),
-              key.matches(presented)
-        else {
+        let presented = LocalAPIPolicy.presentedKey(authorization: head.header("Authorization"), apiKeyHeader: head.header("X-Api-Key"))
+        let lookup = keys()
+        // Every key is compared, in constant time each, so the time taken does not tell which one matched.
+        let matching = presented.map { presented in lookup.keys.filter { $0.key.matches(presented) } } ?? []
+        guard let match = matching.first else {
+            if presented != nil, lookup.unreadable {
+                try? await client.send(Self.error(503, "Lint's API key could not be read.", code: "key_unavailable", extra: cors, retryAfter: 30))
+                return
+            }
             reject("invalid_api_key")
             try? await client.send(Self.error(401, "A valid API key is required.", code: "invalid_api_key", extra: cors + [("WWW-Authenticate", "Bearer")]))
             return
@@ -286,7 +293,7 @@ public final class LocalAPIProxy: @unchecked Sendable {
         let forward = Forward(
             method: head.method, path: head.path, body: Data(body),
             contentType: head.header("Content-Type") ?? "application/json",
-            upstreamPort: settings.upstreamPort, cors: cors
+            upstreamPort: settings.upstreamPort, cors: cors, keyID: match.shortID
         )
         // A client that hangs up stops whatever its request is doing: waiting, or generating.
         let work = Task { await self.serve(forward, to: client) }
@@ -311,6 +318,8 @@ public final class LocalAPIProxy: @unchecked Sendable {
         var contentType: String
         var upstreamPort: Int
         var cors: [(String, String)]
+        /// Which key let the request in, for the log (`LocalAPIKeyRecord.shortID`).
+        var keyID: String
 
         var isModelRequest: Bool { method == "POST" }
     }
@@ -372,7 +381,7 @@ public final class LocalAPIProxy: @unchecked Sendable {
         }
         let milliseconds = Int((ContinuousClock.now - started) / .milliseconds(1))
         let interruptions = preemptions + (final.status == "preempted" ? 1 : 0)
-        log("\(forward.method) \(forward.path) status=\(final.status) ms=\(milliseconds) preempted=\(interruptions) retried=\(preemptions)")
+        log("\(forward.method) \(forward.path) status=\(final.status) ms=\(milliseconds) preempted=\(interruptions) retried=\(preemptions) key=\(forward.keyID)")
     }
 
     private enum Outcome {

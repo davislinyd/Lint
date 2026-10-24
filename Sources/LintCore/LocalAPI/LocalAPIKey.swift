@@ -39,64 +39,169 @@ public struct LocalAPIKey: Sendable, CustomStringConvertible, CustomDebugStringC
     public var customMirror: Mirror { Mirror(self, children: [:]) }
 }
 
-/// The key other apps use, kept in the Keychain. It is made the first time it is needed (the
-/// feature is off by default, so most installs never touch this item) and read once.
-///
-/// A read can block while macOS asks the user whether Lint may use the item (a build signed
-/// differently, an item someone else created), so it is never done on the main thread, and a
-/// read that failed is not tried again until the user regenerates the key: otherwise every request,
-/// or every second, would raise the same prompt.
-public final class LocalAPIKeyStore: @unchecked Sendable {
-    public static let keychainAccount = "localAPI.userKey"
+/// One of the keys other apps use, as Settings lists it. None of this is secret: the key itself is
+/// in the Keychain under `account`.
+public struct LocalAPIKeyRecord: Codable, Equatable, Identifiable, Sendable {
+    public var id: String
+    /// What the user called it, such as the app or page it was given to.
+    public var name: String
+    /// nil for the key from before there could be several.
+    public var created: Date?
+    public var account: String
 
-    private let read: @Sendable () throws -> String?
-    private let write: @Sendable (String) throws -> Void
+    /// What the diagnostic log shows of a key: enough to tell keys apart, nothing the user wrote.
+    public var shortID: String { String(id.prefix(6)) }
+}
+
+/// The keys other apps use: a list of named keys, each kept in the Keychain and read once.
+///
+/// Before there could be several keys there was one, under `legacyAccount`. Without a stored list,
+/// that one is the list, so it keeps working; it is made the first time it is needed (the feature is
+/// off by default, so most installs never touch the Keychain).
+///
+/// A read can block while macOS asks the user whether Lint may use an item (a build signed
+/// differently, an item someone else created), so it is never done on the main thread, and a read
+/// that failed is not tried again for that key: otherwise every request would raise the same prompt.
+public final class LocalAPIKeyring: @unchecked Sendable {
+    public static let legacyAccount = "localAPI.userKey"
+    public static let recordsDefaultsKey = "app.lint.localAPI.keys"
+    public static let maxKeys = 50
+    public static let maxNameLength = 40
+
+    /// The keys a request may present, and whether any key could not be read.
+    public struct Lookup: Sendable {
+        public struct Entry: Sendable {
+            public var id: String
+            public var key: LocalAPIKey
+
+            public var shortID: String { String(id.prefix(6)) }
+        }
+
+        public var keys: [Entry]
+        public var unreadable: Bool
+    }
+
+    public enum KeyringError: Error, Equatable {
+        case invalidName
+        case tooManyKeys
+    }
+
+    private let readSecret: @Sendable (String) throws -> String?
+    private let writeSecret: @Sendable (String, String) throws -> Void
+    private let deleteSecret: @Sendable (String) throws -> Void
+    private let loadRecords: @Sendable () -> Data?
+    private let saveRecords: @Sendable (Data) -> Void
     private let lock = NSLock()
-    private var cached: LocalAPIKey?
-    private var failure: (any Error)?
+    private var cachedRecords: [LocalAPIKeyRecord]?
+    private var cachedKeys: [String: LocalAPIKey] = [:]
+    private var unreadableIDs: Set<String> = []
 
     public convenience init(keychain: KeychainStore = KeychainStore()) {
         self.init(
-            read: { try keychain.get(account: LocalAPIKeyStore.keychainAccount) },
-            write: { try keychain.set($0, account: LocalAPIKeyStore.keychainAccount) }
+            readSecret: { try keychain.get(account: $0) },
+            writeSecret: { try keychain.set($0, account: $1) },
+            deleteSecret: { try keychain.delete(account: $0) },
+            loadRecords: { UserDefaults.standard.data(forKey: LocalAPIKeyring.recordsDefaultsKey) },
+            saveRecords: { UserDefaults.standard.set($0, forKey: LocalAPIKeyring.recordsDefaultsKey) }
         )
     }
 
-    init(read: @escaping @Sendable () throws -> String?, write: @escaping @Sendable (String) throws -> Void) {
-        self.read = read
-        self.write = write
+    init(
+        readSecret: @escaping @Sendable (String) throws -> String?,
+        writeSecret: @escaping @Sendable (_ value: String, _ account: String) throws -> Void,
+        deleteSecret: @escaping @Sendable (String) throws -> Void,
+        loadRecords: @escaping @Sendable () -> Data?,
+        saveRecords: @escaping @Sendable (Data) -> Void
+    ) {
+        self.readSecret = readSecret
+        self.writeSecret = writeSecret
+        self.deleteSecret = deleteSecret
+        self.loadRecords = loadRecords
+        self.saveRecords = saveRecords
     }
 
-    public func current() throws -> LocalAPIKey {
-        lock.lock()
-        defer { lock.unlock() }
-        if let cached { return cached }
-        if let failure { throw failure }
-        do {
-            if let stored = try read().map(LocalAPIKey.init(value:)), stored.isWellFormed {
-                cached = stored
-                return stored
+    public func records() -> [LocalAPIKeyRecord] {
+        lock.withLock { recordsLocked() }
+    }
+
+    /// Every key that can be read, each read from the Keychain (or made, if it is missing) the first time.
+    public func lookup() -> Lookup {
+        lock.withLock {
+            var lookup = Lookup(keys: [], unreadable: false)
+            for record in recordsLocked() {
+                if let key = keyLocked(for: record) {
+                    lookup.keys.append(Lookup.Entry(id: record.id, key: key))
+                } else {
+                    lookup.unreadable = true
+                }
             }
-            return try storeNewKey()
-        } catch {
-            failure = error
-            throw error
+            return lookup
         }
     }
 
-    /// A new key; the old one stops working at once. Also the way out after a failed read.
+    /// A new key, kept in the Keychain before it is listed.
     @discardableResult
-    public func regenerate() throws -> LocalAPIKey {
-        lock.lock()
-        defer { lock.unlock() }
-        failure = nil
-        return try storeNewKey()
+    public func create(name: String) throws -> (LocalAPIKeyRecord, LocalAPIKey) {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, trimmed.count <= Self.maxNameLength else { throw KeyringError.invalidName }
+        return try lock.withLock {
+            var records = recordsLocked()
+            guard records.count < Self.maxKeys else { throw KeyringError.tooManyKeys }
+            let id = UUID().uuidString.lowercased()
+            let record = LocalAPIKeyRecord(id: id, name: trimmed, created: Date(), account: "localAPI.key.\(id)")
+            let key = LocalAPIKey.generate()
+            try writeSecret(key.value, record.account)
+            records.append(record)
+            storeLocked(records)
+            cachedKeys[id] = key
+            return (record, key)
+        }
     }
 
-    private func storeNewKey() throws -> LocalAPIKey {
-        let key = LocalAPIKey.generate()
-        try write(key.value)
-        cached = key
-        return key
+    /// Stops a key working at once (requests already let in finish) and deletes it from the Keychain.
+    public func revoke(id: String) {
+        lock.withLock {
+            var records = recordsLocked()
+            guard let index = records.firstIndex(where: { $0.id == id }) else { return }
+            let record = records.remove(at: index)
+            storeLocked(records)
+            cachedKeys[id] = nil
+            unreadableIDs.remove(id)
+            // A secret that could not be deleted is no longer listed, so nothing accepts it.
+            try? deleteSecret(record.account)
+        }
+    }
+
+    private func recordsLocked() -> [LocalAPIKeyRecord] {
+        if let cachedRecords { return cachedRecords }
+        let stored = loadRecords().flatMap { try? JSONDecoder().decode([LocalAPIKeyRecord].self, from: $0) }
+        let records = stored ?? [LocalAPIKeyRecord(
+            id: "legacy", name: String(localized: "預設"), created: nil, account: Self.legacyAccount
+        )]
+        cachedRecords = records
+        return records
+    }
+
+    private func storeLocked(_ records: [LocalAPIKeyRecord]) {
+        cachedRecords = records
+        if let data = try? JSONEncoder().encode(records) { saveRecords(data) }
+    }
+
+    private func keyLocked(for record: LocalAPIKeyRecord) -> LocalAPIKey? {
+        if let key = cachedKeys[record.id] { return key }
+        if unreadableIDs.contains(record.id) { return nil }
+        do {
+            if let stored = try readSecret(record.account).map(LocalAPIKey.init(value:)), stored.isWellFormed {
+                cachedKeys[record.id] = stored
+                return stored
+            }
+            let key = LocalAPIKey.generate()
+            try writeSecret(key.value, record.account)
+            cachedKeys[record.id] = key
+            return key
+        } catch {
+            unreadableIDs.insert(record.id)
+            return nil
+        }
     }
 }

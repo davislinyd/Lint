@@ -82,6 +82,7 @@ final class SettingsStore {
         static let localAPIEnabled = "app.lint.localAPI.enabled"
         static let localAPIPort = "app.lint.localAPI.port"
         static let localAPIAllowedOrigins = "app.lint.localAPI.allowedOrigins"
+        static let localAPIAllowBrowserExtensions = "app.lint.localAPI.allowBrowserExtensions"
         static let updateMode = "app.lint.update.mode"
         static let updateFrequency = "app.lint.update.frequency"
         static let migratedManagedTuning = "app.lint.localServer.migratedManagedTuning"
@@ -230,6 +231,13 @@ final class SettingsStore {
             onLocalAPIChanged?()
         }
     }
+    /// Browser extensions may use the API port (with a key). Off by default.
+    var localAPIAllowBrowserExtensions: Bool {
+        didSet {
+            defaults.set(localAPIAllowBrowserExtensions, forKey: Keys.localAPIAllowBrowserExtensions)
+            onLocalAPIChanged?()
+        }
+    }
     /// What to do when GitHub has a newer release, and how often to look.
     var updateMode: UpdateMode {
         didSet {
@@ -368,6 +376,7 @@ final class SettingsStore {
         localAPIEnabled = defaults.bool(forKey: Keys.localAPIEnabled)
         localAPIPort = defaults.object(forKey: Keys.localAPIPort) == nil ? 8001 : defaults.integer(forKey: Keys.localAPIPort)
         localAPIAllowedOrigins = defaults.stringArray(forKey: Keys.localAPIAllowedOrigins) ?? AllowedOrigin.defaults
+        localAPIAllowBrowserExtensions = defaults.bool(forKey: Keys.localAPIAllowBrowserExtensions)
         updateMode = UpdateMode(rawValue: defaults.string(forKey: Keys.updateMode) ?? "") ?? .manual
         updateFrequency = UpdateCheckFrequency(rawValue: defaults.string(forKey: Keys.updateFrequency) ?? "") ?? .weekly
         baseURLString = defaults.string(forKey: Keys.url(kind)) ?? kind.defaultBaseURL.absoluteString

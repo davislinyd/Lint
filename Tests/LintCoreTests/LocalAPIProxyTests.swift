@@ -29,7 +29,7 @@ final class LocalAPIProxyTests: XCTestCase {
         let userKey = self.userKey, backend = self.backend, logLines = self.logLines
         proxy = LocalAPIProxy(
             gate: gate, serverKey: serverKey,
-            userKey: { userKey.key },
+            keys: { userKey.lookup },
             ensureBackend: { try backend.check() },
             limits: limits,
             log: { logLines.append($0) }
@@ -234,7 +234,7 @@ final class LocalAPIProxyTests: XCTestCase {
 
     func testANewKeyAndANewWebsiteApplyAtOnce() async throws {
         upstream.script([.json(200, "{}"), .json(200, "{}")])
-        let old = userKey.key
+        let old: LocalAPIKey = userKey.key
         userKey.key = LocalAPIKey.generate()
         let stale = try await send(request("GET", "/v1/models", headers: ["Authorization": "Bearer \(old.value)"], key: false))
         XCTAssertTrue(stale.hasPrefix("HTTP/1.1 401 "), stale)
@@ -244,8 +244,61 @@ final class LocalAPIProxyTests: XCTestCase {
         XCTAssertTrue(site.hasPrefix("HTTP/1.1 200 "), site)
     }
 
+    func testEveryListedKeyWorksAndARevokedOneStopsAtOnce() async throws {
+        upstream.script([.json(200, "{}"), .json(200, "{}"), .json(200, "{}")])
+        let bob = LocalAPIKey.generate()
+        userKey.extra = [LocalAPIKeyring.Lookup.Entry(id: "b0b0b0b0-0000-4000-8000-000000000000", key: bob)]
+        let viaMain = try await send(request("GET", "/v1/models"))
+        XCTAssertTrue(viaMain.hasPrefix("HTTP/1.1 200 "), viaMain)
+        let viaBob = try await send(request("GET", "/v1/models", headers: ["Authorization": "Bearer \(bob.value)"], key: false))
+        XCTAssertTrue(viaBob.hasPrefix("HTTP/1.1 200 "), viaBob)
+
+        userKey.extra = []
+        let revoked = try await send(request("GET", "/v1/models", headers: ["Authorization": "Bearer \(bob.value)"], key: false))
+        XCTAssertTrue(revoked.hasPrefix("HTTP/1.1 401 "), revoked)
+        let stillMain = try await send(request("GET", "/v1/models"))
+        XCTAssertTrue(stillMain.hasPrefix("HTTP/1.1 200 "), stillMain)
+    }
+
+    func testWithoutKeysNothingGetsInAndAnUnreadableKeyIsSaidSo() async throws {
+        let main = try XCTUnwrap(userKey.key)
+        userKey.key = nil
+        let none = try await send(request("GET", "/v1/models", headers: ["Authorization": "Bearer \(main.value)"], key: false))
+        XCTAssertTrue(none.hasPrefix("HTTP/1.1 401 "), none)
+
+        userKey.unreadable = true
+        let unreadable = try await send(request("GET", "/v1/models", headers: ["Authorization": "Bearer \(main.value)"], key: false))
+        XCTAssertTrue(unreadable.hasPrefix("HTTP/1.1 503 "), unreadable)
+        XCTAssertTrue(unreadable.contains("key_unavailable"))
+        XCTAssertTrue(unreadable.contains("Retry-After: 30"))
+        let noKeyAtAll = try await send(request("GET", "/v1/models", key: false))
+        XCTAssertTrue(noKeyAtAll.hasPrefix("HTTP/1.1 401 "), "no key presented is still a 401: \(noKeyAtAll)")
+        XCTAssertEqual(upstream.requests.count, 0)
+    }
+
+    func testBrowserExtensionsNeedTheirOwnSwitch() async throws {
+        upstream.script([.json(200, "{}")])
+        let origin = "chrome-extension://abcdefghijklmnopabcdefghijklmnop"
+        let blocked = try await send(request("GET", "/v1/models", headers: ["Origin": origin]))
+        XCTAssertTrue(blocked.hasPrefix("HTTP/1.1 403 "), "off by default: \(blocked)")
+
+        proxy.update(upstreamPort: upstream.port, allowedOrigins: AllowedOrigin.defaults, allowBrowserExtensions: true)
+        let allowed = try await send(request("GET", "/v1/models", headers: ["Origin": origin]))
+        XCTAssertTrue(allowed.hasPrefix("HTTP/1.1 200 "), allowed)
+        XCTAssertTrue(allowed.contains("Access-Control-Allow-Origin: \(origin)"), allowed)
+        let withoutKey = try await send(request("GET", "/v1/models", headers: ["Origin": origin], key: false))
+        XCTAssertTrue(withoutKey.hasPrefix("HTTP/1.1 401 "), "an extension still needs a key: \(withoutKey)")
+        let website = try await send(request("GET", "/v1/models", headers: ["Origin": "https://evil.example"]))
+        XCTAssertTrue(website.hasPrefix("HTTP/1.1 403 "), "extensions do not open the door to websites: \(website)")
+        let file = try await send(request("GET", "/v1/models", headers: ["Origin": "null"]))
+        XCTAssertTrue(file.hasPrefix("HTTP/1.1 403 "), "nor to local files: \(file)")
+    }
+
     func testABusyPortIsReported() async throws {
-        let other = LocalAPIProxy(gate: ModelPriorityGate(), serverKey: serverKey, userKey: { nil }, ensureBackend: {}, log: { _ in })
+        let other = LocalAPIProxy(
+            gate: ModelPriorityGate(), serverKey: serverKey, keys: { LocalAPIKeyring.Lookup(keys: [], unreadable: false) },
+            ensureBackend: {}, log: { _ in }
+        )
         do {
             try await other.start(port: port, upstreamPort: upstream.port, allowedOrigins: [])
             XCTFail("two listeners on one port")
@@ -262,6 +315,7 @@ final class LocalAPIProxyTests: XCTestCase {
         proxy.stop()
         let log = logLines.all.joined(separator: "\n")
         XCTAssertTrue(log.contains("POST /v1/chat/completions status=200"), log)
+        XCTAssertTrue(log.contains("key=a1b2c3"), "which key was used, by its short id: \(log)")
         XCTAssertTrue(log.contains("origin_not_allowed=1"), log)
         for secret in [userKey.key.value, serverKey.value, "Say OK.", "localhost:3000", "secret-site"] {
             XCTAssertFalse(log.contains(secret), secret)
@@ -279,13 +333,32 @@ final class LocalAPIProxyTests: XCTestCase {
 
 // MARK: - Helpers
 
+/// The keys the proxy accepts: `key` (listed first, as `a1b2c3…`) and any others.
 final class KeyHolder: @unchecked Sendable {
+    static let mainID = "a1b2c3d4-0000-4000-8000-000000000000"
     private let lock = NSLock()
-    private var current: LocalAPIKey
+    private var current: LocalAPIKey?
+    private var others: [LocalAPIKeyring.Lookup.Entry] = []
+    private var cannotRead = false
     init(_ key: LocalAPIKey) { current = key }
-    var key: LocalAPIKey {
+    /// The main key; setting nil revokes it.
+    var key: LocalAPIKey! {
         get { lock.withLock { current } }
         set { lock.withLock { current = newValue } }
+    }
+    var extra: [LocalAPIKeyring.Lookup.Entry] {
+        get { lock.withLock { others } }
+        set { lock.withLock { others = newValue } }
+    }
+    var unreadable: Bool {
+        get { lock.withLock { cannotRead } }
+        set { lock.withLock { cannotRead = newValue } }
+    }
+    var lookup: LocalAPIKeyring.Lookup {
+        lock.withLock {
+            let main = current.map { [LocalAPIKeyring.Lookup.Entry(id: Self.mainID, key: $0)] } ?? []
+            return LocalAPIKeyring.Lookup(keys: main + others, unreadable: cannotRead)
+        }
     }
 }
 

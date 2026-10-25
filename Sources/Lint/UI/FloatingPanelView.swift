@@ -94,7 +94,8 @@ struct FloatingPanelView: View {
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                         .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 8))
                         .focused($originalFocused)
-                        .disabled(viewModel.isStreaming)
+                        // Live output goes on while the text is typed: the answer follows it.
+                        .disabled(viewModel.isStreaming && !viewModel.liveOutputIsOn)
                         .onChange(of: viewModel.originalText) { _, _ in
                             if viewModel.errorMessage?.contains("找不到選取文字") == true {
                                 viewModel.errorMessage = nil
@@ -103,6 +104,7 @@ struct FloatingPanelView: View {
                                !viewModel.originalText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                                 viewModel.statusNote = nil
                             }
+                            viewModel.scheduleLiveGeneration()
                         }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -144,6 +146,12 @@ struct FloatingPanelView: View {
                 .keyboardShortcut(.return, modifiers: [.command, .option])
                 .buttonStyle(.borderedProminent)
 
+                if viewModel.liveOutputIsAvailable {
+                    Toggle("輸入時即時產生", isOn: Bindable(viewModel.settings).livePanelOutput)
+                        .toggleStyle(.checkbox)
+                        .controlSize(.small)
+                }
+
                 Spacer()
             }
         }
@@ -157,6 +165,10 @@ struct FloatingPanelView: View {
         .onChange(of: viewModel.isStreaming) { _, streaming in
             if streaming { isEditingResult = false }
         }
+        .onChange(of: viewModel.mode) { _, _ in viewModel.scheduleLiveGeneration() }
+        .onChange(of: viewModel.tone) { _, _ in viewModel.scheduleLiveGeneration() }
+        .onChange(of: viewModel.settings.translationLanguage) { _, _ in viewModel.scheduleLiveGeneration() }
+        .onChange(of: viewModel.settings.livePanelOutput) { _, _ in viewModel.scheduleLiveGeneration() }
     }
 
     private func shortcutHint(_ keys: String) -> Text {

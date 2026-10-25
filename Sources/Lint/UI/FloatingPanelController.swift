@@ -61,6 +61,7 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
         viewModel.onPrefetchStateChange = { [weak self] in
             self?.refreshChipTitle()
         }
+        viewModel.isPanelVisible = { [weak self] in self?.fullPanel?.isVisible == true }
         // Build every panel while Lint is still an accessory app. Panels first created after Lint turned
         // `.regular` (Settings open) did not show up in another app's fullscreen Space, and they are
         // cached for the process lifetime, so a late first use left the bubble on the wrong desktop.

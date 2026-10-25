@@ -58,9 +58,10 @@ final class TextCaptureService {
         return (info?["NSPrincipalClass"] as? String)?.contains("CrApplication") == true
     }
 
-    /// `allowSelectAll` (⌥⌘K only): when nothing is selected and AX exposes no text, select the whole
-    /// field to read it. The full panel keeps its old behaviour of never touching the source app's selection.
-    func capture(allowSelectAll: Bool = false) async -> CaptureResult? {
+    /// `allowSelectAll`: when nothing is selected and AX exposes no text, select the whole field to read it.
+    /// `focusedField` (the ⌥⌘L panel; ⌥⌘K peeks it itself first): when nothing is selected, the
+    /// paragraph around the caret in the focused field, as ⌥⌘K takes it (`peekAXFocusedSnippet`).
+    func capture(allowSelectAll: Bool = false, focusedField: Bool = false) async -> CaptureResult? {
         let bundle = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
         let app = bundle ?? "?"
         if LiveCheckPolicy.isDenylisted(bundle) {
@@ -84,6 +85,11 @@ final class TextCaptureService {
             DiagnosticLog.shared.log("capture", "ax chars=\(result.text.count) app=\(app)")
             lastCapture = result
             return result
+        }
+        if focusedField, let snippet = peekAXFocusedSnippet() {
+            DiagnosticLog.shared.log("capture", "field chars=\(snippet.text.count) app=\(app)")
+            lastCapture = snippet
+            return snippet
         }
         // Never fall back to whatever was already on the clipboard: only text that ⌘C just copied counts.
         if let selected = await readViaClipboard() {

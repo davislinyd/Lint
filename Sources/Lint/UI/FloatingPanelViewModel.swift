@@ -887,7 +887,8 @@ final class FloatingPanelViewModel {
     }
 
     private func runCaptureAndStream(showPanel: @MainActor () -> Void) async {
-        let captured = await capture.capture()
+        // Without a selection, the text being written in the field, as ⌥⌘K takes it.
+        let captured = await capture.capture(allowSelectAll: true, focusedField: true)
         showPanel()
         do {
             _ = try await prepareEngine(mode: mode, tone: writingTone(for: captured?.text ?? ""))

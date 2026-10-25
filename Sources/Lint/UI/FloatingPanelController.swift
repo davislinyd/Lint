@@ -64,6 +64,9 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
             self?.refreshChipTitle()
         }
         viewModel.isPanelVisible = { [weak self] in self?.fullPanel?.isVisible == true }
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(appDidBecomeActive), name: NSApplication.didBecomeActiveNotification, object: nil
+        )
         // Build every panel while Lint is still an accessory app. Panels first created after Lint turned
         // `.regular` (Settings open) did not show up in another app's fullscreen Space, and they are
         // cached for the process lifetime, so a late first use left the bubble on the wrong desktop.
@@ -634,6 +637,14 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
         }
     }
 
+
+    /// When ⌥⌘L finds Lint an accessory app, the activation lands after the panel was ordered front,
+    /// and AppKit then gives the key to the bubble panel, the last key window: Lint was frontmost with
+    /// the caret nowhere (measured). The panel that is waiting for the caret takes the key back.
+    @objc private func appDidBecomeActive() {
+        guard focusOriginalWhenKey, let panel = fullPanel, panel.isVisible, !panel.isKeyWindow else { return }
+        panel.makeKeyAndOrderFront(nil)
+    }
 
     func windowDidBecomeKey(_ notification: Notification) {
         guard let window = notification.object as? NSWindow, window === fullPanel, focusOriginalWhenKey else { return }

@@ -26,6 +26,8 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
     var onBubbleVisibilityChange: ((Bool) -> Void)?
 
     private var fullPanel: NSPanel?
+    /// The panel was just opened: the caret goes to the original once the panel is key.
+    private var focusOriginalWhenKey = false
     private var bubblePanel: SuggestionBubblePanel?
     private var bubbleChrome: BubbleChromeView?
     private var chipPanel: SuggestionBubblePanel?
@@ -234,8 +236,14 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
         onBubbleVisibilityChange?(true)
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
+        // The focus only takes in a key window, and the panel becomes key when the activation lands,
+        // which can be after this returns (`windowDidBecomeKey`).
+        focusOriginalWhenKey = true
         panel.makeKeyAndOrderFront(nil)
-        viewModel.requestOriginalFocus()
+        if panel.isKeyWindow, focusOriginalWhenKey {
+            focusOriginalWhenKey = false
+            viewModel.requestOriginalFocus()
+        }
         // macOS may turn the activation down (it is cooperative since macOS 14); then what is typed
         // goes to the other app, not the panel. Logged so that case can be told from a lost caret.
         Task { @MainActor in
@@ -626,6 +634,12 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
         }
     }
 
+
+    func windowDidBecomeKey(_ notification: Notification) {
+        guard let window = notification.object as? NSWindow, window === fullPanel, focusOriginalWhenKey else { return }
+        focusOriginalWhenKey = false
+        viewModel.requestOriginalFocus()
+    }
 
     func windowWillClose(_ notification: Notification) {
         guard let window = notification.object as? NSWindow, window === fullPanel else { return }

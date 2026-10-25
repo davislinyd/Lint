@@ -74,6 +74,12 @@ final class FloatingPanelViewModel {
     private var liveTask: Task<Void, Never>?
     /// Set by the controller: live output stays quiet while the ⌥⌘L panel is not on screen.
     var isPanelVisible: () -> Bool = { false }
+    /// Bumped each time the ⌥⌘L panel is shown: the view puts the caret in the original then.
+    private(set) var originalFocusRequest = 0
+
+    func requestOriginalFocus() {
+        originalFocusRequest += 1
+    }
 
     /// A finished suggestion, kept apart from `resultText` (which the user may edit) so feedback can
     /// compare the two. nil while streaming or after a failure, so half-streamed text never counts.

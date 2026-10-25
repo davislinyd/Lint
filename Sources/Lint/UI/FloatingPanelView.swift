@@ -163,12 +163,25 @@ struct FloatingPanelView: View {
             }
         }
         .onChange(of: viewModel.isStreaming) { _, streaming in
-            if streaming { isEditingResult = false }
+            if streaming {
+                isEditingResult = false
+            } else if !viewModel.liveOutputIsOn {
+                // The editor was disabled while it streamed, which took the caret away.
+                focusOriginal()
+            }
         }
+        .onChange(of: viewModel.originalFocusRequest) { _, _ in focusOriginal() }
         .onChange(of: viewModel.mode) { _, _ in viewModel.scheduleLiveGeneration() }
         .onChange(of: viewModel.tone) { _, _ in viewModel.scheduleLiveGeneration() }
         .onChange(of: viewModel.settings.translationLanguage) { _, _ in viewModel.scheduleLiveGeneration() }
         .onChange(of: viewModel.settings.livePanelOutput) { _, _ in viewModel.scheduleLiveGeneration() }
+    }
+
+    /// Set even when `originalFocused` already says so: the panel is reused, and the caret may have
+    /// moved to the result or been lost since, which the focus state does not see.
+    private func focusOriginal() {
+        originalFocused = false
+        DispatchQueue.main.async { originalFocused = true }
     }
 
     private func shortcutHint(_ keys: String) -> Text {

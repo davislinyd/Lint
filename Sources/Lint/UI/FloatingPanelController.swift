@@ -235,6 +235,13 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
         panel.makeKeyAndOrderFront(nil)
+        viewModel.requestOriginalFocus()
+        // macOS may turn the activation down (it is cooperative since macOS 14); then what is typed
+        // goes to the other app, not the panel. Logged so that case can be told from a lost caret.
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(500))
+            DiagnosticLog.shared.log("panel", "shown active=\(NSApp.isActive) key=\(panel.isKeyWindow)")
+        }
     }
 
     func showBubbleNearCapture() {

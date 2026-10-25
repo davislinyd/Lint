@@ -26,6 +26,8 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
     var onBubbleVisibilityChange: ((Bool) -> Void)?
 
     private var fullPanel: NSPanel?
+    /// The panel was just opened: the caret goes to the original once the panel is key.
+    private var focusOriginalWhenKey = false
     private var bubblePanel: SuggestionBubblePanel?
     private var bubbleChrome: BubbleChromeView?
     private var chipPanel: SuggestionBubblePanel?
@@ -61,6 +63,10 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
         viewModel.onPrefetchStateChange = { [weak self] in
             self?.refreshChipTitle()
         }
+        viewModel.isPanelVisible = { [weak self] in self?.fullPanel?.isVisible == true }
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(appDidBecomeActive), name: NSApplication.didBecomeActiveNotification, object: nil
+        )
         // Build every panel while Lint is still an accessory app. Panels first created after Lint turned
         // `.regular` (Settings open) did not show up in another app's fullscreen Space, and they are
         // cached for the process lifetime, so a late first use left the bubble on the wrong desktop.
@@ -233,7 +239,20 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
         onBubbleVisibilityChange?(true)
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
+        // The focus only takes in a key window, and the panel becomes key when the activation lands,
+        // which can be after this returns (`windowDidBecomeKey`).
+        focusOriginalWhenKey = true
         panel.makeKeyAndOrderFront(nil)
+        if panel.isKeyWindow, focusOriginalWhenKey {
+            focusOriginalWhenKey = false
+            viewModel.requestOriginalFocus()
+        }
+        // macOS may turn the activation down (it is cooperative since macOS 14); then what is typed
+        // goes to the other app, not the panel. Logged so that case can be told from a lost caret.
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(500))
+            DiagnosticLog.shared.log("panel", "shown active=\(NSApp.isActive) key=\(panel.isKeyWindow)")
+        }
     }
 
     func showBubbleNearCapture() {
@@ -618,6 +637,20 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
         }
     }
 
+
+    /// When ⌥⌘L finds Lint an accessory app, the activation lands after the panel was ordered front,
+    /// and AppKit then gives the key to the bubble panel, the last key window: Lint was frontmost with
+    /// the caret nowhere (measured). The panel that is waiting for the caret takes the key back.
+    @objc private func appDidBecomeActive() {
+        guard focusOriginalWhenKey, let panel = fullPanel, panel.isVisible, !panel.isKeyWindow else { return }
+        panel.makeKeyAndOrderFront(nil)
+    }
+
+    func windowDidBecomeKey(_ notification: Notification) {
+        guard let window = notification.object as? NSWindow, window === fullPanel, focusOriginalWhenKey else { return }
+        focusOriginalWhenKey = false
+        viewModel.requestOriginalFocus()
+    }
 
     func windowWillClose(_ notification: Notification) {
         guard let window = notification.object as? NSWindow, window === fullPanel else { return }

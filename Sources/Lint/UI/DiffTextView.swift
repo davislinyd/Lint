@@ -1,3 +1,4 @@
+import LintCore
 import SwiftUI
 
 struct DiffTextView: View {
@@ -21,15 +22,8 @@ struct DiffTextView: View {
     }
 
     static func attributed(original: String, result: String) -> AttributedString {
-        let oldWords = original.split(separator: " ", omittingEmptySubsequences: false).map(String.init)
         let newWords = result.split(separator: " ", omittingEmptySubsequences: false).map(String.init)
-        let diff = newWords.difference(from: oldWords)
-        var inserted = Set<Int>()
-        for change in diff {
-            if case .insert(let offset, _, _) = change {
-                inserted.insert(offset)
-            }
-        }
+        let inserted = ChangedWords.inserted(original: original, result: result)
         var output = AttributedString()
         for (index, word) in newWords.enumerated() {
             var piece = AttributedString(word)

@@ -17,7 +17,7 @@ struct WordToken: Equatable, Sendable {
         text.unicodeScalars.contains(where: Script.isCJK)
     }
 
-    private static let typographicApostrophes: Set<Character> = ["\u{2019}", "\u{2018}", "\u{02BC}", "\u{FF07}"]
+    static let typographicApostrophes: Set<Character> = ["\u{2019}", "\u{2018}", "\u{02BC}", "\u{FF07}"]
 
     /// A word lower-cased, with the typographic apostrophes written as the plain one. Editors and
     /// models switch between them on their own; that is not a habit of the user's.

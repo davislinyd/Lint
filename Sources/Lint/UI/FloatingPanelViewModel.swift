@@ -68,6 +68,18 @@ final class FloatingPanelViewModel {
     /// The text `translationText` is a gloss of, once that gloss is complete.
     private var glossSource: String?
     private var streamTask: Task<Void, Never>?
+    /// What the panel last asked the model for, from its own text. Live output sends a request only
+    /// when the panel asks for something else now.
+    private var liveRequested: WritingRequestKey?
+    private var liveTask: Task<Void, Never>?
+    /// Set by the controller: live output stays quiet while the ⌥⌘L panel is not on screen.
+    var isPanelVisible: () -> Bool = { false }
+    /// Bumped each time the ⌥⌘L panel is shown: the view puts the caret in the original then.
+    private(set) var originalFocusRequest = 0
+
+    func requestOriginalFocus() {
+        originalFocusRequest += 1
+    }
 
     /// A finished suggestion, kept apart from `resultText` (which the user may edit) so feedback can
     /// compare the two. nil while streaming or after a failure, so half-streamed text never counts.
@@ -440,13 +452,62 @@ final class FloatingPanelViewModel {
         if let generated, generated.source == originalText, generated.mode == mode, generated.tone.menuTone == tone {
             recordFeedback(.regenerated)
         }
+        startStream(forceLowReasoning: isAutoSuggestSession)
+    }
+
+    private func startStream(forceLowReasoning: Bool, live: Bool = false) {
         streamTask?.cancel()
         cancelPrefetch()
         errorMessage = nil
         if statusNote == Self.noSelectionNote {
             statusNote = nil
         }
-        streamTask = Task { await runStream(forceLowReasoning: isAutoSuggestSession) }
+        streamTask = Task { await runStream(forceLowReasoning: forceLowReasoning, live: live) }
+    }
+
+    /// Live output is switched on and the engine costs nothing per request.
+    var liveOutputIsOn: Bool {
+        LivePanelOutput.isOn(enabled: settings.livePanelOutput, provider: settings.providerKind)
+    }
+
+    /// Whether the panel can offer the switch at all.
+    var liveOutputIsAvailable: Bool {
+        LivePanelOutput.isAvailable(for: settings.providerKind)
+    }
+
+    /// The request the panel's text and settings make now.
+    private var panelRequestKey: WritingRequestKey {
+        WritingRequestKey(
+            source: originalText.trimmingCharacters(in: .whitespacesAndNewlines), mode: mode,
+            tone: writingTone(for: originalText), customPrompt: settings.customPrompt,
+            translationLanguage: settings.translationLanguage
+        )
+    }
+
+    private var shouldGenerateLive: Bool {
+        isPanelVisible() && LivePanelOutput.shouldGenerate(
+            enabled: settings.livePanelOutput, provider: settings.providerKind,
+            requested: liveRequested, current: panelRequestKey
+        )
+    }
+
+    /// Live output: called when the panel's text, task, tone or translation language changes. The
+    /// request goes out once typing pauses; one still running for older text is cancelled then.
+    func scheduleLiveGeneration() {
+        liveTask?.cancel()
+        liveTask = nil
+        guard shouldGenerateLive else { return }
+        liveTask = Task { [weak self] in
+            do { try await Task.sleep(for: LivePanelOutput.pause) } catch { return }
+            self?.generateLive()
+        }
+    }
+
+    /// Unlike `generateFromOriginal`, this is not a rejection of the answer on screen, so it records no
+    /// feedback; the answer stays until the new one starts, instead of the pane going blank at each pause.
+    private func generateLive() {
+        guard shouldGenerateLive else { return }
+        startStream(forceLowReasoning: true, live: true)
     }
 
     func cancelStream() {
@@ -826,7 +887,8 @@ final class FloatingPanelViewModel {
     }
 
     private func runCaptureAndStream(showPanel: @MainActor () -> Void) async {
-        let captured = await capture.capture()
+        // Without a selection, the text being written in the field, as ⌥⌘K takes it.
+        let captured = await capture.capture(allowSelectAll: true, focusedField: true)
         showPanel()
         do {
             _ = try await prepareEngine(mode: mode, tone: writingTone(for: captured?.text ?? ""))
@@ -839,6 +901,7 @@ final class FloatingPanelViewModel {
         errorMessage = nil
         resultText = ""
         generated = nil
+        liveRequested = nil
         originalText = ""
         statusNote = nil
         isAutoSuggestSession = false
@@ -1021,7 +1084,12 @@ final class FloatingPanelViewModel {
         }
     }
 
-    private func runStream(forceLowReasoning: Bool = false) async {
+    /// `live` (the panel answering what is typed): the answer on screen stays until the new one starts
+    /// to arrive, and no gloss is fetched, which only the bubble shows and which would keep the single
+    /// model slot from the next request.
+    private func runStream(forceLowReasoning: Bool = false, live: Bool = false) async {
+        // Set before anything is awaited, so a pause in typing meanwhile does not ask again.
+        liveRequested = panelRequestKey
         if Self.hasNoEnglish(originalText, mode: mode, tone: writingTone(for: originalText)) {
             errorMessage = Self.noEnglishMessage
             isStreaming = false
@@ -1048,14 +1116,18 @@ final class FloatingPanelViewModel {
         let generationMode = mode
         let generationTone = writingTone(for: originalText)
         let generationLanguage: TranslationLanguage? = mode == .translate ? settings.translationLanguage : nil
+        // The text may have been edited while the engine was prepared.
+        liveRequested = panelRequestKey
         let ticket = tickets.issue()
         errorMessage = nil
-        resultText = ""
+        var staleResult = live && !resultText.isEmpty
+        if !staleResult { resultText = "" }
         generated = nil
         clearTranslation()
         lastUsage = nil
         isStreaming = true
-        defer { isStreaming = false }
+        // A newer request (live output starts one while this runs) owns the flag by now.
+        defer { if tickets.isCurrent(ticket) { isStreaming = false } }
         var usedMemoryIDs: [UUID] = []
         var isSuggestion = true
         guard let kind = route.providerKind else { return }
@@ -1113,11 +1185,16 @@ final class FloatingPanelViewModel {
                     if Task.isCancelled { break }
                     switch event {
                     case .text(let token):
+                        if staleResult {
+                            resultText = ""
+                            staleResult = false
+                        }
                         resultText.append(token)
                     case .usage(let usage):
                         lastUsage = usage
                     }
                 }
+                if staleResult, !Task.isCancelled { resultText = "" }
             }
         } catch is CancellationError {
             return
@@ -1140,7 +1217,7 @@ final class FloatingPanelViewModel {
                     usedMemoryIDs: usedMemoryIDs, provider: kind, translationLanguage: generationLanguage
                 )
             }
-            scheduleTranslationOfResult()
+            if !live { scheduleTranslationOfResult() }
         }
     }
 

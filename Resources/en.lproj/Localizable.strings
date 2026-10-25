@@ -547,3 +547,4 @@
 "Chrome、Brave、Edge、Firefox 與 Safari 的擴充功能只要有金鑰就能使用，不必在上面的清單裡。擴充功能看得到你瀏覽的網頁，只把金鑰給你信任的擴充功能。" = "Extensions in Chrome, Brave, Edge, Firefox and Safari can use the model if they have a key, without being on the list above. Extensions can see the pages you browse, so give a key only to extensions you trust.";
 "請輸入 http:// 或 https:// 開頭的網站，例如 https://example.com；*. 代表所有子網域，例如 https://*.example.com。不含路徑。" = "Enter a website that starts with http:// or https://, such as https://example.com, without a path. *. stands for every subdomain, as in https://*.example.com.";
 "只在 Lint 執行、且使用本機模型時可用。模型一次只處理一個請求；Lint 正在用、或你正在打字時，其他請求會等候。範例裡的 $LINT_API_KEY 請換成上面其中一把金鑰。" = "Available only while Lint is running and using its local model. The model handles one request at a time; while Lint is using it or you are typing, other requests wait. Replace $LINT_API_KEY in the example with one of the keys above.";
+"輸入時即時產生" = "Generate as you type";

@@ -59,6 +59,7 @@ final class SettingsStore {
         static let liveWatchWhileTyping = "app.lint.liveWatchWhileTyping"
         static let showReadyChipNearField = "app.lint.showReadyChipNearField"
         static let fastMode = "app.lint.fastMode"
+        static let livePanelOutput = "app.lint.livePanelOutput"
         /// On-disk key. The name stays so a switch that is already on stays on.
         static let memoryEnabled = "app.lint.learning.enabled"
         static let observationEnabled = "app.lint.observation.enabled"
@@ -165,6 +166,10 @@ final class SettingsStore {
     }
     var fastMode: Bool {
         didSet { defaults.set(fastMode, forKey: Keys.fastMode) }
+    }
+    /// The ⌥⌘L panel answers while its text is typed (`LivePanelOutput`).
+    var livePanelOutput: Bool {
+        didSet { defaults.set(livePanelOutput, forKey: Keys.livePanelOutput) }
     }
     /// Memory is opt-in; while off, nothing is recorded and prompts are untouched.
     var memoryEnabled: Bool {
@@ -350,6 +355,9 @@ final class SettingsStore {
         } else {
             fastMode = defaults.bool(forKey: Keys.fastMode)
         }
+        livePanelOutput = defaults.object(forKey: Keys.livePanelOutput) == nil
+            ? true
+            : defaults.bool(forKey: Keys.livePanelOutput)
         memoryEnabled = defaults.bool(forKey: Keys.memoryEnabled)
         observationEnabled = defaults.bool(forKey: Keys.observationEnabled)
         if defaults.object(forKey: Keys.localServerAutoStart) == nil {
